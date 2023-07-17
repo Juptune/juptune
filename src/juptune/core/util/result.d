@@ -121,7 +121,7 @@ struct Result
 
     bool isError(T)(T value)
     {
-        return this.isType!T && this.errorCode == cast(int)value;
+        return this.isErrorType!T && this.errorCode == cast(int)value;
     }
 
     bool isErrorType(T)()

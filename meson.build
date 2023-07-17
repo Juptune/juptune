@@ -1,12 +1,13 @@
 #### Project configuration ####
 
-project('juptune-event', ['d', 'nasm'])
+project('juptune', 'd')
 
 #### Sources ####
 
-core_srcs = [
+core_srcs = files(
     './src/juptune/core/ds/alloc.d',
     './src/juptune/core/ds/array.d',
+    './src/juptune/core/ds/block.d',
     './src/juptune/core/ds/hashmap.d',
     './src/juptune/core/ds/package.d',
     './src/juptune/core/ds/string.d',
@@ -16,9 +17,13 @@ core_srcs = [
     './src/juptune/core/util/package.d',
     './src/juptune/core/util/result.d',
     './src/juptune/core/util/utf.d',
-]
+)
 
-event_srcs = [
+event_asm_srcs = files(
+    './src/juptune/event/fiber.asm',
+    './src/juptune/event/iouring.asm',
+)
+event_srcs = files(
     './src/juptune/event/fiber.d',
     './src/juptune/event/io.d',
     './src/juptune/event/iouring.d',
@@ -26,46 +31,46 @@ event_srcs = [
     './src/juptune/event/package.d',
 
     './src/juptune/event/internal/linux.d',
-]
+)
 
-nasm_srcs = [
-    './src/juptune/event/fiber.asm',
-    './src/juptune/event/iouring.asm',
-]
+#### Asm configuration ####
 
-#### Nasm configuration ####
-
-if host_machine.cpu() == 'x86_64' and host_machine.system() == 'linux'
+if target_machine.cpu() == 'x86_64' and target_machine.system() == 'linux'
+    add_languages('nasm')
     add_project_arguments('-Dlinux_amd64_sysv', language: 'nasm')
 else
     error('Unsupported architecture')
 endif
 
-
 #### Dependencies ####
-
-juptune_nasm_dep = declare_dependency(
-    sources: nasm_srcs,
-)
 
 juptune_core_dep = declare_dependency(
     include_directories: include_directories('src'),
     sources: core_srcs,
-    dependencies: [juptune_nasm_dep],
 )
 
 juptune_event_dep = declare_dependency(
-    include_directories: include_directories('src'),
-    sources: event_srcs,
+    sources: [event_srcs, event_asm_srcs],
     dependencies: [juptune_core_dep],
 )
 
 juptune_all_dep = declare_dependency(
-    include_directories: include_directories('src'),
     dependencies: [juptune_core_dep, juptune_event_dep],
 )
 
 #### Executables ####
+
+examples = {
+    'http-hello-world-hardcoded': ['./examples/http-hello-world-hardcoded/main.d'],
+}
+
+foreach example_name, example_srcs : examples
+    executable(
+        'juptune-'+example_name, 
+        example_srcs,
+        dependencies: [juptune_all_dep],
+    )
+endforeach
 
 juptune_all_unittest_exe = executable(
     'juptune-unittest', 
@@ -74,10 +79,23 @@ juptune_all_unittest_exe = executable(
     d_unittest: true
 )
 
-juptune_http_hello_world_hardcoded_exe = executable(
-    'juptune-http-hello-world-hardcoded',
-    './examples/http-hello-world-hardcoded/main.d',
-    dependencies: [juptune_all_dep]
+#### Install ####
+
+event_asm_lib = library(
+    'juptune-event-asm',
+    event_asm_srcs,
+    install: true,
+)
+
+install_subdir('src/juptune', install_dir: 'include/d/juptune/')
+
+pkgc = import('pkgconfig')
+pkgc.generate(
+    name: 'juptune-dev',
+    description: 'High-performance iouring-based I/O framework for D - development files.',
+    subdirs: 'd/juptune',
+    url: 'https://www.github.com/Juptune/juptune',
+    libraries: [event_asm_lib],
 )
 
 #### Tests ####
