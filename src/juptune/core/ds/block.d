@@ -194,6 +194,7 @@ struct MemoryBlockPool
 
     @nogc nothrow:
 
+    /// Frees all memory allocated by this pool, if any, and reverts the pool back to an initial state.
     ~this() @trusted
     {
         import core.stdc.stdlib : free;
@@ -211,6 +212,42 @@ struct MemoryBlockPool
             bucket = Bucket.init;
     }
 
+    /++ 
+     + Allocates a certain amount of blocks from the pool, at a specific power of two size.
+     +
+     + Notes:
+     +  Despite the name, this function doesn't actually allocate any memory from the system, but instead
+     +  pulls from preallocated memory. In order to preallocate memory, use `preallocateBlocks` beforehand.
+     +
+     +  There's loose protection against buggy double allocations and frees, but it's not perfect.
+     +
+     +  This function does not attempt to clamp the `powerOfTwo` parameter to the nearest valid value. If this value
+     +  is out of range, an assert will fail. Please use `MIN_BLOCK_POWER` and `MAX_BLOCK_POWER` to clamp the value and
+     +  handle user input error cases.
+     +
+     + Performance:
+     +  Where `n` is the `blockCount` parameter, on success this function is always O(n).
+     +
+     +  On failure, this function is at best O(1) if there are no free blocks, and at worst O(n-1) if there are free blocks.
+     +  The latter case could be made O(1) by storing a free block count in each bucket, but I'm too lazy to do that right now.
+     +
+     +  The main time loss culprit on each iteration is likely either the underlying branch for the `while` loop,
+     +  or the repeated gapped memory access. So in otherwords, negligible at the expected small `n` values.
+     +
+     + Params:
+     +  powerOfTwo = The power of two size of each block. e.g. 8 = 256 bytes, 12 = 4096 bytes.
+     +  blockCount = The number of blocks to allocate.
+     +  allocation = The resulting allocation.
+     +
+     + Throws:
+     +  `MemoryBlockPool.Errors.notEnoughBlocks` if there are not enough free blocks to satisfy the request.
+     +
+     + Returns:
+     +  `Result.noError` if the allocation was successful.
+     +
+     + See Also:
+     +  `HomogenousMemoryBlockAllocation`, `MemoryBlockPool.preallocateBlocks`
+     + ++/
     Result allocate(size_t powerOfTwo, size_t blockCount, scope return out HomogenousMemoryBlockAllocation allocation) @trusted // @suppress(dscanner.style.long_line)
     in(blockCount != 0, "block count must be greater than zero")
     {
@@ -229,6 +266,8 @@ struct MemoryBlockPool
 
         if(count < blockCount)
             return Result.make(Errors.notEnoughBlocks, "when allocating memory block");
+        assert(count == blockCount, "count should be equal to blockCount");
+        assert(!allocation._head.isAllocated, "head memory block is already allocated. double alloc?");
 
         allocation._pool = &this;
         allocation._tail = block;
@@ -244,6 +283,34 @@ struct MemoryBlockPool
         return Result.noError;
     }
 
+    /++ 
+     + Preallocates a certain amount of blocks from the system, at a specific power of two size.
+     +
+     + Notes:
+     +  This function does not attempt to clamp the `powerOfTwo` parameter to the nearest valid value. If this value
+     +  is out of range, an assert will fail. Please use `MIN_BLOCK_POWER` and `MAX_BLOCK_POWER` to clamp the value and
+     +  handle user input error cases.
+     +
+     + Performance:
+     +  Performance for this function is a little difficult to simplify, but it's roughly O(n) where `n` is the `blockCount`
+     +  parameter.
+     +
+     +  The logic within this function scales at O(n), however the underlying `calloc` call depends on the libc/malloc-subsitute
+     +  library that gets linked.
+     +
+     + Params:
+     +  powerOfTwo = The power of two size of each block. e.g. 8 = 256 bytes, 12 = 4096 bytes.
+     +  blockCount = The number of blocks to allocate.
+     +
+     + Throws:
+     +  `MemoryBlockPool.Errors.outOfMemory` if there is not enough system memory to satisfy the request.
+     +
+     + Returns:
+     +  `Result.noError` if the allocation was successful.
+     +
+     + See Also:
+     +  `MemoryBlockPool.allocate`
+     + ++/
     Result preallocateBlocks(size_t powerOfTwo, size_t blockCount) @trusted
     in(powerOfTwo >= MIN_BLOCK_POWER, "power is too small")
     in(powerOfTwo <= MAX_BLOCK_POWER, "power is too big")
