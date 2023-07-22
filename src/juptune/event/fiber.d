@@ -545,7 +545,7 @@ package struct FiberAllocator
 @("FiberAllocator - block allocation behaviour")
 unittest
 {
-    auto alloc = FiberAllocator(FiberAllocatorConfig.init.withBlocksPerWall(1));
+    auto alloc = FiberAllocator(FiberAllocatorConfig().withBlocksPerWall(1));
     
     FiberAllocator.Block* b1, b2, b3;
     alloc.allocateBlock(b1).resultAssert;
@@ -604,7 +604,7 @@ unittest
 {
     import std.exception : assertThrown;
 
-    auto alloc = FiberAllocator(FiberAllocatorConfig.init.withBlocksPerWall(1));
+    auto alloc = FiberAllocator(FiberAllocatorConfig().withBlocksPerWall(1));
     
     FiberAllocator.Block* b;
     alloc.allocateBlock(b).resultAssert;
@@ -621,7 +621,7 @@ unittest
     {
         import std.algorithm : all;
 
-        auto alloc = FiberAllocator(FiberAllocatorConfig.init.withBlocksPerWall(1));
+        auto alloc = FiberAllocator(FiberAllocatorConfig().withBlocksPerWall(1));
 
         FiberAllocator.Block* b, bb;
         alloc.allocateBlock(b).resultAssert;
@@ -637,7 +637,7 @@ unittest
         import std.algorithm : all;
 
         auto alloc = FiberAllocator(
-            FiberAllocatorConfig.init
+            FiberAllocatorConfig()
                                 .withBlocksPerWall(1)
                                 .shouldZeroOutBlocksOnFree(false)
         );

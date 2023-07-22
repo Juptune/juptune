@@ -484,13 +484,13 @@ enum JuptuneEventLoopError
  +
  +  Anything that `FiberAllocator.allocateFiber` throws.
  + ++/
-Result async(JuptuneFiber.EntryPointNoGC func, AsyncConfig config = AsyncConfig.init) @nogc nothrow
+Result async(JuptuneFiber.EntryPointNoGC func, AsyncConfig config = AsyncConfig()) @nogc nothrow
 {
     return asyncNoContextImpl(func, config);
 }
 
 /// ditto
-Result async(JuptuneFiber.EntryPointGC func, AsyncConfig config = AsyncConfig.init) @nogc nothrow
+Result async(JuptuneFiber.EntryPointGC func, AsyncConfig config = AsyncConfig()) @nogc nothrow
 {
     if(!juptuneLoopThreadGetThis().isGCThread)
         assert(false, "Attempted to create @gc fiber in @nogc event loop thread. Perhaps mark the fiber function explicitly with @nogc, or use addGCThread instead of addNoGCThread."); // @suppress(dscanner.style.long_line)
@@ -589,7 +589,7 @@ Result async(ContextT)(
     JuptuneFiber.EntryPointNoGC func,
     auto ref ContextT context,
     void function(scope ref ContextT value, scope out ContextT contextValue) @nogc nothrow setter = &asyncDefaultSetter!ContextT,
-    AsyncConfig config = AsyncConfig.init,
+    AsyncConfig config = AsyncConfig(),
 ) @nogc nothrow
 {
     return asyncWithContextImpl!(JuptuneFiber.EntryPointNoGC, ContextT)(func, context, setter, config);
@@ -600,7 +600,7 @@ Result async(ContextT)(
     JuptuneFiber.EntryPointGC func,
     auto ref ContextT context,
     void function(scope ref ContextT value, scope out ContextT contextValue) @nogc nothrow setter = &asyncDefaultSetter!ContextT,
-    AsyncConfig config = AsyncConfig.init,
+    AsyncConfig config = AsyncConfig(),
 ) @nogc nothrow
 {
     if(!juptuneLoopThreadGetThis().isGCThread)
@@ -716,7 +716,7 @@ Result yield() @nogc nothrow
 Result juptuneEventLoopSubmitEvent(Command)(
     Command command,
     out IoUringCompletion cqe,
-    SubmitEventConfig config = SubmitEventConfig.init
+    SubmitEventConfig config = SubmitEventConfig()
 ) @nogc nothrow
 {
     scope loopThread = juptuneLoopThreadGetThis();
@@ -845,7 +845,7 @@ ContextT* juptuneEventLoopGetContext(ContextT)() scope @nogc nothrow
 @("EventLoop - @nogc - simple sanity test")
 unittest
 {
-    auto loop = EventLoop(EventLoopConfig.init);
+    auto loop = EventLoop(EventLoopConfig());
     loop.addNoGCThread(() @nogc nothrow {
         yield().resultAssert;
         juptuneEventLoopCancelThread();
@@ -856,7 +856,7 @@ unittest
 @("EventLoop - @gc - simple sanity test")
 unittest
 {
-    auto loop = EventLoop(EventLoopConfig.init);
+    auto loop = EventLoop(EventLoopConfig());
     loop.addGCThread(() nothrow {
         auto forceGCFiber = new int(); // @suppress(dscanner.suspicious.unused_variable)
         yield().resultAssert;
@@ -868,7 +868,7 @@ unittest
 @("EventLoop - @nogc - simple submit test")
 unittest
 {
-    auto loop = EventLoop(EventLoopConfig.init);
+    auto loop = EventLoop(EventLoopConfig());
     loop.addNoGCThread(() @nogc nothrow {
         juptuneEventLoopSubmitEvent(IoUringNop(), IoUringCompletion.ignore).resultAssert;
         assert(juptuneEventLoopGetStats().cqeTotal == 1);
@@ -880,7 +880,7 @@ unittest
         juptuneEventLoopSubmitEvent(
             IoUringNop(),
             IoUringCompletion.ignore,
-            SubmitEventConfig.init.shouldYieldUntilCompletion(false)
+            SubmitEventConfig().shouldYieldUntilCompletion(false)
         ).resultAssert;
         yield().resultAssert;
         assert(juptuneEventLoopGetStats().cqeTotal == 1);
@@ -894,7 +894,7 @@ unittest
 @("EventLoop - @gc - simple submit test")
 unittest
 {
-    auto loop = EventLoop(EventLoopConfig.init);
+    auto loop = EventLoop(EventLoopConfig());
     loop.addGCThread(() nothrow {
         auto forceGCFiber = new int(); // @suppress(dscanner.suspicious.unused_variable)
         juptuneEventLoopSubmitEvent(IoUringNop(), IoUringCompletion.ignore).resultAssert;
@@ -908,7 +908,7 @@ unittest
         juptuneEventLoopSubmitEvent(
             IoUringNop(),
             IoUringCompletion.ignore,
-            SubmitEventConfig.init.shouldYieldUntilCompletion(false)
+            SubmitEventConfig().shouldYieldUntilCompletion(false)
         ).resultAssert;
         yield().resultAssert;
         assert(juptuneEventLoopGetStats().cqeTotal == 1);
@@ -935,7 +935,7 @@ unittest
     enum EXPECTED_COUNT = THREADS * FIBERS;
     static shared int count;
 
-    auto loop = EventLoop(EventLoopConfig.init);
+    auto loop = EventLoop(EventLoopConfig());
     foreach(_; 0..THREADS)
     {
         loop.addNoGCThread(() @nogc nothrow {
@@ -959,7 +959,7 @@ unittest
 @("EventLoop - @nogc - async with context")
 unittest
 {
-    auto loop = EventLoop(EventLoopConfig.init);
+    auto loop = EventLoop(EventLoopConfig());
     loop.addNoGCThread(() @nogc nothrow {
         int a = 21;
         async((){
@@ -985,7 +985,7 @@ unittest
         }
     }
 
-    auto loop = EventLoop(EventLoopConfig.init);
+    auto loop = EventLoop(EventLoopConfig());
     loop.addNoGCThread(() @nogc nothrow {
         foreach(_; 0..4)
         {
@@ -1015,7 +1015,7 @@ unittest
         }
     }
 
-    auto loop = EventLoop(EventLoopConfig.init);
+    auto loop = EventLoop(EventLoopConfig());
     loop.addNoGCThread(() @nogc nothrow {
         foreach(_; 0..4)
         {

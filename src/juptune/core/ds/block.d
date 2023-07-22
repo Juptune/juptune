@@ -345,9 +345,9 @@ unittest
     assert(bucket.freeTail is bucket.freeHead.next.next);
 
     // Ensure that the blocks are the correct size
-    assert(bucket.freeHead.block.length == (1 << MemoryBlockPool.MIN_BLOCK_POWER));
-    assert(bucket.freeHead.next.block.length == (1 << MemoryBlockPool.MIN_BLOCK_POWER));
-    assert(bucket.freeHead.next.next.block.length == (1 << MemoryBlockPool.MIN_BLOCK_POWER));
+    assert(bucket.freeHead.block.length == MemoryBlockPool.MIN_BLOCK_SIZE);
+    assert(bucket.freeHead.next.block.length == MemoryBlockPool.MIN_BLOCK_SIZE);
+    assert(bucket.freeHead.next.next.block.length == MemoryBlockPool.MIN_BLOCK_SIZE);
 
     // Ensure that we didn't accidentally overlap the data blocks
     assert(bucket.freeHead.block.ptr + bucket.freeHead.block.length == bucket.freeHead.next.block.ptr);
@@ -378,7 +378,7 @@ unittest
     MemoryBlockPool pool;
     scope bucket = pool.bucketByPower(MemoryBlockPool.MIN_BLOCK_POWER);
 
-    auto block = new MemoryBlock(null, new ubyte[1 << MemoryBlockPool.MIN_BLOCK_POWER]);
+    auto block = new MemoryBlock(null, new ubyte[MemoryBlockPool.MIN_BLOCK_SIZE]);
     pool.addFreeBlock(MemoryBlockPool.MIN_BLOCK_POWER, block);
 
     assert(bucket.freeHead is block);
@@ -393,8 +393,8 @@ unittest
     MemoryBlockPool pool;
     scope bucket = pool.bucketByPower(MemoryBlockPool.MIN_BLOCK_POWER);
 
-    auto block1 = new MemoryBlock(null, new ubyte[1 << MemoryBlockPool.MIN_BLOCK_POWER]);
-    auto block2 = new MemoryBlock(null, new ubyte[1 << MemoryBlockPool.MIN_BLOCK_POWER]);
+    auto block1 = new MemoryBlock(null, new ubyte[MemoryBlockPool.MIN_BLOCK_SIZE]);
+    auto block2 = new MemoryBlock(null, new ubyte[MemoryBlockPool.MIN_BLOCK_SIZE]);
     pool.addFreeBlock(MemoryBlockPool.MIN_BLOCK_POWER, block1);
     pool.addFreeBlock(MemoryBlockPool.MIN_BLOCK_POWER, block2);
 
@@ -411,8 +411,8 @@ unittest
     MemoryBlockPool pool;
     scope bucket = pool.bucketByPower(MemoryBlockPool.MIN_BLOCK_POWER);
 
-    auto block1 = new MemoryBlock(null, new ubyte[1 << MemoryBlockPool.MIN_BLOCK_POWER]);
-    auto block2 = new MemoryBlock(null, new ubyte[1 << MemoryBlockPool.MIN_BLOCK_POWER]);
+    auto block1 = new MemoryBlock(null, new ubyte[MemoryBlockPool.MIN_BLOCK_SIZE]);
+    auto block2 = new MemoryBlock(null, new ubyte[MemoryBlockPool.MIN_BLOCK_SIZE]);
     block1.next = block2;
     pool.addFreeBlock(MemoryBlockPool.MIN_BLOCK_POWER, block1);
 
@@ -429,9 +429,9 @@ unittest
     MemoryBlockPool pool;
     scope bucket = pool.bucketByPower(MemoryBlockPool.MIN_BLOCK_POWER);
 
-    auto block1 = new MemoryBlock(null, new ubyte[1 << MemoryBlockPool.MIN_BLOCK_POWER]);
-    auto block2 = new MemoryBlock(null, new ubyte[1 << MemoryBlockPool.MIN_BLOCK_POWER]);
-    auto block3 = new MemoryBlock(null, new ubyte[1 << MemoryBlockPool.MIN_BLOCK_POWER]);
+    auto block1 = new MemoryBlock(null, new ubyte[MemoryBlockPool.MIN_BLOCK_SIZE]);
+    auto block2 = new MemoryBlock(null, new ubyte[MemoryBlockPool.MIN_BLOCK_SIZE]);
+    auto block3 = new MemoryBlock(null, new ubyte[MemoryBlockPool.MIN_BLOCK_SIZE]);
     block2.next = block3;
     pool.addFreeBlock(MemoryBlockPool.MIN_BLOCK_POWER, block1);
     pool.addFreeBlock(MemoryBlockPool.MIN_BLOCK_POWER, block2);

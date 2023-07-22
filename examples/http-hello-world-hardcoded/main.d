@@ -11,7 +11,7 @@ void main(string[] args)
 void nogcServer()
 {
     __gshared TcpSocket server;
-    auto loop = EventLoop(EventLoopConfig.init);
+    auto loop = EventLoop(EventLoopConfig());
     loop.addNoGCThread(() @nogc nothrow {
         server.open().resultAssert;
         server.listen("127.0.0.1:19000", 4000).resultAssert;
@@ -44,7 +44,7 @@ void nogcServer()
 void gcServer()
 {
     __gshared TcpSocket server;
-    auto loop = EventLoop(EventLoopConfig.init);
+    auto loop = EventLoop(EventLoopConfig());
     loop.addGCThread(() @nogc nothrow {
         server.open().resultAssert;
         server.listen("127.0.0.1:19000", 4000).resultAssert;

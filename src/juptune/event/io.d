@@ -901,7 +901,7 @@ private struct PosixGenericIoDriver
         juptuneEventLoopSubmitEvent(
             op,
             IoUringCompletion.ignore,
-            SubmitEventConfig.init.shouldYieldUntilCompletion(false)
+            SubmitEventConfig().shouldYieldUntilCompletion(false)
         ).resultAssert;
         this.fd = 0;
 
@@ -972,7 +972,7 @@ version(Posix):
 @("TcpSocket - simple server")
 unittest
 {
-    auto loop = EventLoop(EventLoopConfig.init);
+    auto loop = EventLoop(EventLoopConfig());
     loop.addNoGCThread(() @nogc nothrow {
         TcpSocket server;
         server.open().resultAssert;
@@ -985,7 +985,7 @@ unittest
 @("TcpSocket - simple client -> server")
 unittest
 {
-    auto loop = EventLoop(EventLoopConfig.init);
+    auto loop = EventLoop(EventLoopConfig());
     loop.addNoGCThread(() @nogc nothrow {
         async((){
             TcpSocket server;

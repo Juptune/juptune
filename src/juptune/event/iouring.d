@@ -704,7 +704,7 @@ private mixin template IoUringTests(IoUringDriver driver)
     @(_t~"init")
     unittest
     {
-        auto uring = IoUring(IoUringConfig.init.withDriver(driver));
+        auto uring = IoUring(IoUringConfig().withDriver(driver));
         uring.__xdtor();
     }
 
@@ -716,7 +716,7 @@ private mixin template IoUringTests(IoUringDriver driver)
         {
             import std.exception : assertThrown;
 
-            auto uring = IoUring(IoUringConfig.init.withDriver(driver));
+            auto uring = IoUring(IoUringConfig().withDriver(driver));
             scope driver = &uring.drivers.native;
 
             assert(driver.sqeInUseMasks.length > 0);
@@ -754,7 +754,7 @@ private mixin template IoUringTests(IoUringDriver driver)
         @(_t~"submit pending check")
         unittest
         {
-            auto uring = IoUring(IoUringConfig.init.withDriver(driver));
+            auto uring = IoUring(IoUringConfig().withDriver(driver));
             scope driver = &uring.drivers.native;
             
             assert(driver.sqeIndexSlice.length == driver.ioUringParams.sq_entries);
@@ -779,7 +779,7 @@ private mixin template IoUringTests(IoUringDriver driver)
         @(_t~"enter")
         unittest
         {
-            auto uring = IoUring(IoUringConfig.init.withDriver(driver));
+            auto uring = IoUring(IoUringConfig().withDriver(driver));
             scope driver = &uring.drivers.native;
 
             assert(driver.cqeSlice.length == driver.ioUringParams.cq_entries);
@@ -817,7 +817,7 @@ private mixin template IoUringTests(IoUringDriver driver)
         @(_t~"enter full CQE queue")
         unittest
         {
-            auto uring = IoUring(IoUringConfig.init.withDriver(driver));
+            auto uring = IoUring(IoUringConfig().withDriver(driver));
             scope driver = &uring.drivers.native;
 
             foreach(_; 0..2)
