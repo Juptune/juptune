@@ -19,19 +19,19 @@ core_srcs = files(
     './src/juptune/core/util/utf.d',
 )
 
-event_asm_srcs = files(
-    './src/juptune/event/fiber.asm',
-    './src/juptune/event/iouring.asm',
-)
+event_asm_srcs = files() # Conditionally set by platform
 event_srcs = files(
     './src/juptune/event/fiber.d',
     './src/juptune/event/io.d',
     './src/juptune/event/iouring.d',
     './src/juptune/event/loop.d',
     './src/juptune/event/package.d',
-    './src/juptune/event/tls.d',
 
     './src/juptune/event/internal/linux.d',
+)
+
+tls_srcs = files(
+    './src/juptune/tls/package.d',
 )
 
 http_srcs = files(
@@ -43,6 +43,10 @@ http_srcs = files(
 if target_machine.cpu() == 'x86_64' and target_machine.system() == 'linux'
     add_languages('nasm')
     add_project_arguments('-Dlinux_amd64_sysv', language: 'nasm')
+    event_asm_srcs = files(
+        './src/juptune/event/asm/amd64/fiber.asm',
+        './src/juptune/event/asm/amd64/iouring.asm',
+    )
 else
     error('Unsupported architecture')
 endif
@@ -59,13 +63,18 @@ juptune_event_dep = declare_dependency(
     dependencies: [juptune_core_dep],
 )
 
-juptune_http_dep = declare_dependency(
-    sources: http_srcs,
+juptune_tls_dep = declare_dependency(
+    sources: tls_srcs,
     dependencies: [juptune_core_dep, juptune_event_dep],
 )
 
+juptune_http_dep = declare_dependency(
+    sources: http_srcs,
+    dependencies: [juptune_core_dep, juptune_event_dep, juptune_tls_dep],
+)
+
 juptune_all_dep = declare_dependency(
-    dependencies: [juptune_core_dep, juptune_event_dep, juptune_http_dep],
+    dependencies: [juptune_core_dep, juptune_event_dep, juptune_http_dep, juptune_tls_dep],
 )
 
 #### Executables ####
