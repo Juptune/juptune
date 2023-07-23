@@ -29,8 +29,13 @@ event_srcs = files(
     './src/juptune/event/iouring.d',
     './src/juptune/event/loop.d',
     './src/juptune/event/package.d',
+    './src/juptune/event/tls.d',
 
     './src/juptune/event/internal/linux.d',
+)
+
+http_srcs = files(
+    './src/juptune/http/package.d',
 )
 
 #### Asm configuration ####
@@ -54,8 +59,13 @@ juptune_event_dep = declare_dependency(
     dependencies: [juptune_core_dep],
 )
 
-juptune_all_dep = declare_dependency(
+juptune_http_dep = declare_dependency(
+    sources: http_srcs,
     dependencies: [juptune_core_dep, juptune_event_dep],
+)
+
+juptune_all_dep = declare_dependency(
+    dependencies: [juptune_core_dep, juptune_event_dep, juptune_http_dep],
 )
 
 #### Executables ####

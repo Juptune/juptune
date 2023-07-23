@@ -10,4 +10,5 @@ public import
     juptune.core.ds.string,
     juptune.core.ds.alloc,
     juptune.core.ds.array,
+    juptune.core.ds.block,
     juptune.core.ds.hashmap;

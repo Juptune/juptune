@@ -1,8 +1,15 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * Author: Bradley Chatha
+ */
 module juptune.core.ds.block;
 
 import juptune.core.util : Result, resultAssert;
 
-private struct MemoryBlock
+// Intentionally undocumented
+struct MemoryBlock
 {
     MemoryBlock* next; // acyclic
     ubyte[] block;
@@ -10,9 +17,10 @@ private struct MemoryBlock
 }
 
 /++ 
- + An allocation of blocks from a `MemoryBlockPool` where each block is the same size.
+ + An allocation of blocks from a `MemoryBlockPool`. All blocks in the allocation are guaranteed
+ + to be same size.
  +/
-struct HomogenousMemoryBlockAllocation
+struct MemoryBlockAllocation
 {
     private
     {
@@ -30,6 +38,18 @@ struct HomogenousMemoryBlockAllocation
     ~this() @safe
     {
         this.free();
+    }
+
+    // Intentionally undocumented
+    MemoryBlock* head() @safe pure
+    {
+        return this._head;
+    }
+
+    // Intentionally undocumented
+    MemoryBlock* tail() @safe pure
+    {
+        return this._tail;
     }
 
     /++
@@ -59,6 +79,24 @@ struct HomogenousMemoryBlockAllocation
     size_t totalBytes() @safe pure const
     {
         return this._blockCount * (1 << this._powerOfTwo);
+    }
+
+    /++ 
+     + Returns:
+     +  The number of blocks in the allocation.
+     +/
+    size_t blockCount() @safe pure const
+    {
+        return this._blockCount;
+    }
+
+    /++ 
+     + Returns:
+     +  The power of two size of each block. e.g. 8 = 256 bytes, 12 = 4096 bytes.
+     +/
+    size_t powerOfTwo() @safe pure const
+    {
+        return this._powerOfTwo;
     }
 }
 
@@ -246,9 +284,9 @@ struct MemoryBlockPool
      +  `Result.noError` if the allocation was successful.
      +
      + See Also:
-     +  `HomogenousMemoryBlockAllocation`, `MemoryBlockPool.preallocateBlocks`
+     +  `MemoryBlockAllocation`, `MemoryBlockPool.preallocateBlocks`
      + ++/
-    Result allocate(size_t powerOfTwo, size_t blockCount, scope return out HomogenousMemoryBlockAllocation allocation) @trusted // @suppress(dscanner.style.long_line)
+    Result allocate(size_t powerOfTwo, size_t blockCount, scope return out MemoryBlockAllocation allocation) @trusted // @suppress(dscanner.style.long_line)
     in(blockCount != 0, "block count must be greater than zero")
     {
         scope bucket = this.bucketByPower(powerOfTwo);
@@ -513,7 +551,7 @@ unittest
 unittest
 {
     MemoryBlockPool pool;
-    HomogenousMemoryBlockAllocation alloc;
+    MemoryBlockAllocation alloc;
 
     auto result = pool.allocate(MemoryBlockPool.MIN_BLOCK_POWER, 1, alloc);
     assert(result.isError(MemoryBlockPool.Errors.notEnoughBlocks));
@@ -523,7 +561,7 @@ unittest
 unittest
 {
     MemoryBlockPool pool;
-    HomogenousMemoryBlockAllocation alloc;
+    MemoryBlockAllocation alloc;
 
     pool.preallocateBlocks(MemoryBlockPool.MIN_BLOCK_POWER, 4).resultAssert;
     auto result = pool.allocate(MemoryBlockPool.MIN_BLOCK_POWER, 5, alloc);
@@ -534,7 +572,7 @@ unittest
 unittest
 {
     MemoryBlockPool pool;
-    HomogenousMemoryBlockAllocation alloc;
+    MemoryBlockAllocation alloc;
     scope bucket = pool.bucketByPower(MemoryBlockPool.MIN_BLOCK_POWER);
 
     pool.preallocateBlocks(MemoryBlockPool.MIN_BLOCK_POWER, 3).resultAssert;
@@ -564,7 +602,7 @@ unittest
 unittest
 {
     MemoryBlockPool pool;
-    HomogenousMemoryBlockAllocation alloc;
+    MemoryBlockAllocation alloc;
     scope bucket = pool.bucketByPower(MemoryBlockPool.MIN_BLOCK_POWER);
 
     pool.preallocateBlocks(MemoryBlockPool.MIN_BLOCK_POWER, 6).resultAssert;

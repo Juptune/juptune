@@ -721,11 +721,7 @@ Result juptuneEventLoopSubmitEvent(Command)(
 {
     scope loopThread = juptuneLoopThreadGetThis();
     auto fiber = juptuneFiberGetThis();
-
-    if(config.yieldUntilComplete)
-        command.userData = fiber;
-    else
-        command.userData = USER_DATA_IGNORE;
+    command.userData = config.yieldUntilComplete ? fiber : USER_DATA_IGNORE;
 
     while(loopThread.ioUring.opDispatch!"submit"(command) == SubmitQueueIsFull.yes)
     {
