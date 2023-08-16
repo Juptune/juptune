@@ -2,6 +2,9 @@
 
 project('juptune', 'd')
 
+# Tl;dr Meson has crappy bugs for its basic functionality that will take 200 years to be addressed:
+# https://github.com/mesonbuild/meson/issues/11999
+
 #### Sources ####
 
 core_srcs = files(
@@ -31,7 +34,9 @@ event_srcs = files(
 )
 
 tls_srcs = files(
+    './src/juptune/tls/libcrypto.d',
     './src/juptune/tls/package.d',
+    './src/juptune/tls/tls13.d',
 )
 
 http_srcs = files(
@@ -88,6 +93,7 @@ foreach example_name, example_srcs : examples
         'juptune-'+example_name, 
         example_srcs,
         dependencies: [juptune_all_dep],
+        link_args: ['-lcrypto']
     )
 endforeach
 
@@ -95,7 +101,8 @@ juptune_all_unittest_exe = executable(
     'juptune-unittest', 
     './src/dummy_main.d',
     dependencies: [juptune_all_dep],
-    d_unittest: true
+    d_unittest: true,
+    link_args: ['-lcrypto']
 )
 
 #### Install ####
@@ -104,6 +111,7 @@ event_asm_lib = library(
     'juptune-event-asm',
     event_asm_srcs,
     install: true,
+    link_args: ['-lcrypto']
 )
 
 install_subdir('src/juptune', install_dir: 'include/d/juptune/')
