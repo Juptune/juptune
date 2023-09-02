@@ -4,8 +4,5 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
-module juptune.http;
+module juptune.http.v1;
 
-public import 
-    juptune.http.v1
-;

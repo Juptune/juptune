@@ -41,6 +41,7 @@ tls_srcs = files(
 
 http_srcs = files(
     './src/juptune/http/package.d',
+    './src/juptune/http/v1.d',
 )
 
 #### Asm configuration ####

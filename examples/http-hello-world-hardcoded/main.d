@@ -2,9 +2,11 @@ import juptune.event, juptune.core.util, juptune.core.ds, juptune.event.fiber;
 
 void main(string[] args)
 {
-    if(args.length < 2 || args[1] == "nogc")
+    const type = args.length < 2 ? "nogc" : args[1];
+
+    if(type == "nogc")
         nogcServer();
-    else
+    else if (type == "gc")
         gcServer();
 }
 

@@ -18,6 +18,7 @@ version(linux) private
     import core.sys.posix.signal        : sigset_t;
     import core.sys.posix.sys.socket    : socklen_t, sockaddr;
     import core.sys.posix.unistd        : close;
+    import core.sys.posix.sys.uio       : iovec;
     import juptune.event.internal.linux;
     
     // Implemented by our ASM since it's literally easier than trying to piss around
@@ -442,6 +443,28 @@ struct IoUringClose
     mixin GenerateDriverFuncs!(IORING_OP_CLOSE);
 
     FileDescriptor fd;
+}
+
+/// Linux `readv` syscall
+struct IoUringReadv
+{
+    mixin GenerateDriverFuncs!(IORING_OP_READV);
+
+    FileDescriptor fd;
+    @MapBuffer iovec[] iovecs;
+
+    @MapField("off") ulong _offset = -1; // Do not change
+}
+
+/// Linux `writev` syscall
+struct IoUringWritev
+{
+    mixin GenerateDriverFuncs!(IORING_OP_WRITEV);
+
+    FileDescriptor fd;
+    @MapBuffer iovec[] iovecs;
+
+    @MapField("off") ulong _offset = -1; // Do not change
 }
 
 version(linux)

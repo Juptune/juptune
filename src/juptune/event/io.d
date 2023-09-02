@@ -384,9 +384,10 @@ struct PosixTcpSocket
 {
     import core.sys.posix.sys.socket 
         : socket, clisten = listen, bind, setsockopt, SO_REUSEADDR, SO_REUSEPORT, SOL_SOCKET,
-            SO_KEEPALIVE, socklen_t, getsockname, caccept = accept, cconnect = connect;
+            SO_KEEPALIVE, socklen_t, getsockname, caccept = accept, cconnect = connect,
+            socketpair;
     import core.sys.posix.arpa.inet 
-        : AF_INET6, SOCK_STREAM, ntohs;
+        : AF_INET6, AF_UNIX, SOCK_STREAM, ntohs;
     import core.sys.posix.netinet.in_ 
         : sockaddr, sockaddr_in, sockaddr_in6, IPPROTO_IPV6, IPV6_V6ONLY;
 
@@ -673,6 +674,25 @@ struct PosixTcpSocket
         return Result.noError;
     }
 
+    static Result makePair(out PosixTcpSocket[2] sockets)
+    {
+        int[2] fds;
+
+        const result = socketpair(AF_UNIX, SOCK_STREAM, 0, fds);
+        if(result < 0)
+        {
+            version(linux)
+                return linuxErrorAsResult("failed to create socket pairs", result);
+            else assert(false);
+        }
+
+        PosixTcpSocket[2] wrapped;
+        sockets[0]._driver.wrap(fds[0]);
+        sockets[1]._driver.wrap(fds[1]);
+
+        return Result.noError;
+    }
+
     /++
      + The IP address of this socket.
      +
@@ -869,7 +889,10 @@ struct GenericIoDriver
 version(Posix)
 private struct PosixGenericIoDriver
 {
+    import core.sys.posix.sys.uio : iovec;
+
     @disable this(this){}
+    enum IOVEC_STATIC_SIZE = 32;
 
     private
     {
@@ -963,6 +986,104 @@ private struct PosixGenericIoDriver
         sliceWithData = buffer[0..cqe.result];
         return Result.noError;
     }
+
+    Result writev(scope ref MemoryBlockAllocation buffers, out size_t bytesRead)
+    {
+        return this.vectorMBAImpl!IoUringWritev(buffers, bytesRead);
+    }
+
+    Result writev(scope void[][] buffers, ref size_t bytesRead)
+    {
+        return this.vectorVoidArrayImpl!IoUringWritev(buffers, bytesRead);
+    }
+
+    Result readv(scope ref MemoryBlockAllocation buffers, out size_t bytesRead)
+    {
+        return this.vectorMBAImpl!IoUringReadv(buffers, bytesRead);
+    }
+
+    Result readv(scope void[][] buffers, ref size_t bytesRead)
+    {
+        return this.vectorVoidArrayImpl!IoUringReadv(buffers, bytesRead);
+    }
+
+    private Result vectorMBAImpl(alias OpT)(scope ref MemoryBlockAllocation buffers, ref size_t bytesRead)
+    {
+        return this.vectorIoImpl!OpT((iovecs) @nogc nothrow {
+            size_t index;
+            auto head = buffers.head;
+            while(head !is null)
+            {
+                iovecs[index].iov_base = head.block.ptr;
+                iovecs[index].iov_len = head.block.length;
+                head = head.next;
+                index++;
+            }
+
+            assert(index == buffers.blockCount);
+        }, buffers.blockCount, bytesRead);
+    }
+
+    private Result vectorVoidArrayImpl(alias OpT)(scope void[][] buffers, ref size_t bytesRead)
+    {
+        return this.vectorIoImpl!OpT((iovecs) @nogc nothrow {
+            foreach(i, buffer; buffers)
+            {
+                iovecs[i].iov_base = buffer.ptr;
+                iovecs[i].iov_len = buffer.length;
+            }
+        }, buffers.length, bytesRead);
+    }
+
+    private Result vectorIoImpl(alias OpT)(
+        scope void delegate(iovec[]) @nogc nothrow setter,
+        size_t bufferCount,
+        ref size_t bytesUsed,
+    )
+    {
+        import core.stdc.stdlib : calloc, free;
+
+        iovec[IOVEC_STATIC_SIZE] iovecsStatic;
+        iovec* iovecsDynamic;
+        iovec[] iovecs;
+
+        scope(exit) if(iovecsDynamic !is null) free(iovecsDynamic);
+
+        if(bufferCount > IOVEC_STATIC_SIZE)
+        {
+            iovecsDynamic = cast(iovec*)calloc(bufferCount, iovec.sizeof);
+            iovecs = iovecsDynamic[0..bufferCount];
+        }
+        else
+            iovecs = iovecsStatic[0..bufferCount];
+
+        setter(iovecs);
+
+        auto op = OpT();
+        op.fd = this.fd;
+        op.iovecs = iovecs;
+
+        IoUringCompletion cqe;
+        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe);
+        if(submitResult.isError)
+            return submitResult;
+
+        if(cqe.result < 0)
+        {
+            static if(is(OpT == IoUringReadv))
+                static immutable message = "failed to recieve data from socket via scatter input";
+            else
+                static immutable message = "failed to send data to socket via gather output";
+
+            version(linux)
+                return linuxErrorAsResult(message, cqe.result);
+            else assert(false);
+        }
+
+        assert(cqe.result >= 0);
+        bytesUsed = cqe.result;
+        return Result.noError;
+    }
 }
 
 /++++ Tests ++++/
@@ -1005,6 +1126,119 @@ unittest
             server.connect("127.0.0.1:15000", lookupWasPerformed).resultAssert;
             assert(!lookupWasPerformed);
         }).resultAssert;
+    });
+    loop.join();
+}
+
+@("TcpSocket - readv single buffer test")
+unittest
+{
+    auto loop = EventLoop(EventLoopConfig());
+    loop.addNoGCThread(() @nogc nothrow {
+        TcpSocket[2] pairs;
+        TcpSocket.makePair(pairs).resultAssert;
+
+        async((){
+            auto socket = juptuneEventLoopGetContext!TcpSocket;
+            
+            ubyte[128] buffer;
+            foreach(i; 0..buffer.length)
+                buffer[i] = cast(ubyte)i;
+
+            socket.put(buffer).resultAssert;
+        }, pairs[0], &asyncMoveSetter!TcpSocket).resultAssert;
+
+        async((){
+            auto socket = juptuneEventLoopGetContext!TcpSocket;
+            ubyte[128] buffer;
+            size_t bytesRead;
+
+            socket.readv([buffer[]], bytesRead).resultAssert;
+
+            assert(bytesRead == buffer.length);
+            foreach(i; 0..buffer.length)
+                assert(buffer[i] == cast(ubyte)i);
+        }, pairs[1], &asyncMoveSetter!TcpSocket).resultAssert;
+    });
+    loop.join();
+}
+
+@("TcpSocket - readv multi buffer test")
+unittest
+{
+    auto loop = EventLoop(EventLoopConfig());
+    loop.addNoGCThread(() @nogc nothrow {
+        TcpSocket[2] pairs;
+        TcpSocket.makePair(pairs).resultAssert;
+
+        async((){
+            auto socket = juptuneEventLoopGetContext!TcpSocket;
+            
+            ubyte[128] buffer;
+            foreach(i; 0..buffer.length)
+                buffer[i] = cast(ubyte)i;
+
+            socket.put(buffer).resultAssert;
+        }, pairs[0], &asyncMoveSetter!TcpSocket).resultAssert;
+
+        async((){
+            auto socket = juptuneEventLoopGetContext!TcpSocket;
+            ubyte[64] buf1;
+            ubyte[36] buf2;
+            ubyte[28] buf3;
+            size_t bytesRead;
+
+            socket.readv([buf1[], buf2[], buf3[]], bytesRead).resultAssert;
+            assert(bytesRead == buf1.length + buf2.length + buf3.length);
+
+            foreach(i; 0..buf1.length)
+                assert(buf1[i] == cast(ubyte)i);
+            foreach(i; 0..buf2.length)
+                assert(buf2[i] == cast(ubyte)(i + buf1.length));
+            foreach(i; 0..buf3.length)
+                assert(buf3[i] == cast(ubyte)(i + buf1.length + buf2.length));
+        }, pairs[1], &asyncMoveSetter!TcpSocket).resultAssert;
+    });
+    loop.join();
+}
+
+@("TcpSocket - writev multi buffer test")
+unittest
+{
+    auto loop = EventLoop(EventLoopConfig());
+    loop.addNoGCThread(() @nogc nothrow {
+        TcpSocket[2] pairs;
+        TcpSocket.makePair(pairs).resultAssert;
+
+        async((){
+            auto socket = juptuneEventLoopGetContext!TcpSocket;
+            ubyte[64] buf1;
+            ubyte[36] buf2;
+            ubyte[28] buf3;
+            size_t bytesSent;
+
+            foreach(i; 0..buf1.length)
+                buf1[i] = cast(ubyte)i;
+            foreach(i; 0..buf2.length)
+                buf2[i] = cast(ubyte)(i + buf1.length);
+            foreach(i; 0..buf3.length)
+                buf3[i] = cast(ubyte)(i + buf1.length + buf2.length);
+
+            socket.writev([buf1[], buf2[], buf3[]], bytesSent).resultAssert;
+            assert(bytesSent == buf1.length + buf2.length + buf3.length);
+        }, pairs[0], &asyncMoveSetter!TcpSocket).resultAssert;
+
+        async((){
+            auto socket = juptuneEventLoopGetContext!TcpSocket;
+            ubyte[128] buffer;
+            void[] got;
+
+            socket.recieve(buffer[], got).resultAssert;
+
+            assert(got.length == buffer.length);
+            foreach(i; 0..buffer.length)
+                assert(buffer[i] == cast(ubyte)i);
+        }, pairs[1], &asyncMoveSetter!TcpSocket).resultAssert;
     });
     loop.join();
 }

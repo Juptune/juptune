@@ -127,6 +127,10 @@ struct MemoryBlockAllocation
  +  Due to the nature of the pool's memory model, it may be more efficient to allocate a larger number of blocks at once
  +  rather than allocating them one at a time.
  +
+ +  Currently there's not really any way to free data once preallocated beyond calling the destructor
+ +  but this of course frees the entire set of data. This is a TODO since it hurts my brain when thinking about
+ +  the overall flow of a program.
+ +
  + Memory model:
  +  "Preallocation" of blocks simply means that the pool will allocate a large chunk of memory from the system,
  +  where the size is dependent on the amount of blocks requested, and then split that memory up to form the resulting
@@ -186,6 +190,7 @@ struct MemoryBlockPool
         {
             MemoryBlock* freeHead;
             MemoryBlock* freeTail;
+            size_t totalBlocks; // Total allocated, not total free/in use.
 
             debug void printChain(string context) @safe
             {
@@ -381,6 +386,7 @@ struct MemoryBlockPool
                 memoryBlockList[i-1].next = &memoryBlockList[i];
         }
 
+        this.bucketByPower(powerOfTwo).totalBlocks += blockCount;
         this.addFreeBlock(powerOfTwo, &memoryBlockList[0]);
         return Result.noError;
     }
@@ -433,6 +439,150 @@ struct MemoryBlockPool
     }
 }
 
+struct MemoryBlockPoolAllocatorConfig
+{
+    static struct PowerOfTwo
+    {
+        size_t maxBlockCount;
+        size_t blocksPerAllocation;
+        bool preallocOnFailure;
+        size_t powerOfTwo;
+
+        enum DefaultArray = (){
+            PowerOfTwo[MemoryBlockPool.BLOCK_BUCKETS] ret;
+
+            const max = MemoryBlockPool.MAX_BLOCK_POWER;
+            const min = MemoryBlockPool.MIN_BLOCK_POWER;
+
+            foreach(i; min..max + 1)
+                ret[i - min] = PowerOfTwo(size_t.max, 16, true, i);
+
+            return ret;
+        }();
+    }
+
+    PowerOfTwo[MemoryBlockPool.BLOCK_BUCKETS] powerConfig = PowerOfTwo.DefaultArray;
+
+    @safe @nogc nothrow pure:
+
+    MemoryBlockPoolAllocatorConfig withPowerConfig(size_t powerOfTwo, PowerOfTwo config) return 
+    in(powerOfTwo >= MemoryBlockPool.MIN_BLOCK_POWER, "power is too small")
+    in(powerOfTwo <= MemoryBlockPool.MAX_BLOCK_POWER, "power is too big")
+    {
+        if(config.powerOfTwo == 0)
+            config.powerOfTwo = powerOfTwo;
+        assert(config.powerOfTwo == powerOfTwo, "Just leave powerOfTwo as 0. You don't need to set it manually really.");
+        this.powerConfig[powerOfTwo - MemoryBlockPool.MIN_BLOCK_POWER] = config;
+        return this;
+    }
+}
+
+/++ 
+ + This is a convenience wrapper around `MemoryBlockPool` that will handle preallocating blocks for you
+ + on allocation failure. It's intended as a more configurable, plug-and-play interface to `MemoryBlockPool`
+ + with more wider reaching concerns.
+ +
+ + This struct does not contain any important state itself, so can be copied around freely. Its total lifetime is
+ + directly tied to the lifetime of the underlying pool, so please be careful...
+ +
+ + This struct does not contain a destructor, so memory is only freed once the underlying pool is destroyed.
+ +
+ + This struct does not prevent other `MemoryBlockPoolAllocator`s from being created for the same pool, so please
+ + ensure that all created allocators contain the same configuration to avoid unexpected surprises in allocation behaviour.
+ +/
+struct MemoryBlockPoolAllocator
+{
+    private
+    {
+        MemoryBlockPool* _pool;
+        MemoryBlockPoolAllocatorConfig _config;
+    }
+
+    @nogc nothrow:
+
+    /++ 
+     + Ctor.
+     +
+     + Throws:
+     +  Asserts that `pool` is not null.
+     +
+     + Params:
+     +   pool = The pool to allocate from.
+     +   config = The configuration to use for this allocator. A (hopefully) sane config is provided by default.
+     +/
+    this(MemoryBlockPool* pool, MemoryBlockPoolAllocatorConfig config = MemoryBlockPoolAllocatorConfig.init) @safe
+    in(pool !is null)
+    {
+        this._pool = pool;
+        this._config = config;
+    }
+
+    /++
+     + This is mainly a wrapper that ties together `MemoryBlockPool.allocate` and `MemoryBlockPool.preallocateBlocks`.
+     + So please see those functions for the bulk of information.
+     +
+     + This function will automatically preallocate blocks if the underlying pool returns `notEnoughBlocks` on allocation,
+     + but only up to the `maxBlockCount` specified in this config for the given power of two.
+     +
+     + Behaviour:
+     +  Allocate `blockCount` blocks for `powerOfTwo`.
+     +
+     +  If the underlying pool returns `notEnoughBlocks`, then preallocate blocks for `powerOfTwo` up to `maxBlockCount`
+     +  at a step of `blocksPerAllocation` specified within the allocator's config for the given power of two.
+     +
+     +  If `preallocOnFailure` fails, then give up, otherwise recursively call this function again.
+     +
+     + Issue - Impossible allocations:
+     +  Currently there isn't really any short circuit path for detecting an impossible allocation.
+     +
+     +  For example if you have a max block count of 16 but allocate 32 blocks, then this function will
+     +  just keep allocating blocks until it hits the max block count, then fail.
+     +
+     + Issue - Slow, large preallocations:
+     +  This is particularly an issue with the default config as it only allocates 16 blocks at a time for each
+     +  power of two (currently).
+     +
+     +  So if you want 1024 blocks of 256 bytes, then this function will preallocate 16 blocks of 256 bytes over
+     +  and over and over until it finally reaches 1024 blocks.
+     +
+     +  Ultimately this comes down to right-sizing your config for your application.
+     +
+     + Throws:
+     +  Anything that `MemoryBlockPool.preallocateBlocks` can throw.
+     +
+     +  Anything that `MemoryBlockPool.allocate` can throw. `notEnoughBlocks` is only thrown
+     +  if the `maxBlockCount` has been reached, otherwise it's handled by this function.
+     +
+     + Params:
+     +  powerOfTwo = The power of two to allocate for.
+     +  blockCount = The number of blocks to allocate.
+     +  allocation = The allocation that was made.
+     +
+     + Returns:
+     +  `Result.noError` if the allocation succeeded.
+     + ++/
+    Result allocate(size_t powerOfTwo, size_t blockCount, scope return out MemoryBlockAllocation allocation) @trusted // @suppress(dscanner.style.long_line)
+    {
+        auto result = this._pool.allocate(powerOfTwo, blockCount, allocation);
+        if(!result.isError(MemoryBlockPool.Errors.notEnoughBlocks))
+            return Result.noError;
+        
+        auto config = this._config.powerConfig[powerOfTwo - MemoryBlockPool.MIN_BLOCK_POWER];
+        scope bucket = this._pool.bucketByPower(powerOfTwo);
+        if(!config.preallocOnFailure || bucket.totalBlocks >= config.maxBlockCount)
+            return result;
+
+        assert(config.blocksPerAllocation > 0, "blocksPerAllocation must be greater than 0");
+        result = this._pool.preallocateBlocks(powerOfTwo, config.blocksPerAllocation);
+        if(result.isError)
+            return result;
+
+        return this.allocate(powerOfTwo, blockCount, allocation);
+    }
+}
+
+/**** Tests ****/
+
 @("MemoryBlockPool - preallocateBlocks & ~this()")
 @trusted
 unittest
@@ -448,6 +598,7 @@ unittest
     assert(bucket.freeHead.next.next !is null);
     assert(bucket.freeHead.next.next.next is null);
     assert(bucket.freeTail is bucket.freeHead.next.next);
+    assert(bucket.totalBlocks == 3);
 
     // Ensure that the blocks are the correct size
     assert(bucket.freeHead.block.length == MemoryBlockPool.MIN_BLOCK_SIZE);
@@ -618,4 +769,52 @@ unittest
     assert(bucket.freeHead is newHead);
     assert(bucket.freeHead.next.next.next is oldHead);
     assert(bucket.freeTail is oldHead.next.next);
+}
+
+@("MemoryBlockPoolAllocator - allocate - no free blocks, no preallocated blocks, simple success & failure")
+unittest
+{
+    MemoryBlockPool pool;
+    auto allocator = MemoryBlockPoolAllocator(
+        &pool,
+        MemoryBlockPoolAllocatorConfig()
+        .withPowerConfig(MemoryBlockPool.MIN_BLOCK_POWER, MemoryBlockPoolAllocatorConfig.PowerOfTwo(1, 1, true))
+    );
+
+    MemoryBlockAllocation successAlloc, failAlloc;
+
+    allocator.allocate(MemoryBlockPool.MIN_BLOCK_POWER, 1, successAlloc).resultAssert;
+    assert(successAlloc.head !is null);
+
+    auto result = allocator.allocate(MemoryBlockPool.MIN_BLOCK_POWER, 1, failAlloc);
+    assert(result.isError(MemoryBlockPool.Errors.notEnoughBlocks));
+    assert(failAlloc.head is null);
+}
+
+@("MemoryBlockPoolAllocator - allocate - half preallocated blocks, simple success")
+unittest
+{
+    MemoryBlockPool pool;
+    auto allocator = MemoryBlockPoolAllocator(
+        &pool,
+        MemoryBlockPoolAllocatorConfig()
+        .withPowerConfig(MemoryBlockPool.MIN_BLOCK_POWER, MemoryBlockPoolAllocatorConfig.PowerOfTwo(2, 1, true))
+    );
+
+    MemoryBlockAllocation alloc;
+
+    allocator.allocate(MemoryBlockPool.MIN_BLOCK_POWER, 1, alloc).resultAssert;
+    assert(alloc.head !is null);
+    alloc.free(); // 1 free block in pool
+
+    // Check that we're definitely using an already preallocated block
+    allocator.allocate(MemoryBlockPool.MIN_BLOCK_POWER, 1, alloc).resultAssert;
+    assert(alloc.head !is null);
+    assert(pool.bucketByPower(MemoryBlockPool.MIN_BLOCK_POWER).totalBlocks == 1);
+    alloc.free();
+
+    // Mix of preallocated and new blocks
+    allocator.allocate(MemoryBlockPool.MIN_BLOCK_POWER, 2, alloc).resultAssert;
+    assert(alloc.head !is null);
+    assert(pool.bucketByPower(MemoryBlockPool.MIN_BLOCK_POWER).totalBlocks == 2);
 }
