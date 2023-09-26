@@ -6,6 +6,7 @@
  */
 module juptune.event.iouring;
 
+import core.time         : Duration, seconds;
 import std.typecons      : Flag;
 import juptune.core.util : Result, resultAssert;
 
@@ -14,11 +15,12 @@ version(linux) private
     // Strangely the io_uring module is both outdated and also missing functions;
     // so we'll fill in the gaps.
     import core.sys.linux.errno;
-    import core.sys.linux.io_uring      : io_uring_params, io_uring_cqe, io_uring_sqe;
+    import core.sys.linux.io_uring      : io_uring_params, io_uring_cqe, io_uring_sqe, IOSQE_IO_LINK;
     import core.sys.posix.signal        : sigset_t;
     import core.sys.posix.sys.socket    : socklen_t, sockaddr;
     import core.sys.posix.unistd        : close;
     import core.sys.posix.sys.uio       : iovec;
+    import core.stdc.config             : c_long, cpp_longlong;
     import juptune.event.internal.linux;
     
     // Implemented by our ASM since it's literally easier than trying to piss around
@@ -33,6 +35,12 @@ version(linux) private
     alias IoUringNativeDriver   = IoUringNativeLinuxDriver;
     alias IoUringEmulatedDriver = IoUringEmulatedPosixDriver;
     mixin IoUringTests!(IoUringDriver.native);
+
+    struct timespec64 // @suppress(dscanner.style.phobos_naming_convention)
+    {
+        c_long tv_sec;
+        c_long tv_nsec;
+    }
 
     enum
     {
@@ -199,6 +207,8 @@ private mixin template GenerateDriverFuncs(alias Opcode)
 
     version(linux) void toSqe(scope out io_uring_sqe sqe) @nogc nothrow
     {
+        import std.traits : isPointer;
+
         sqe.opcode = Opcode;
 
         static if(__traits(hasMember, typeof(this), "fd"))
@@ -216,9 +226,17 @@ private mixin template GenerateDriverFuncs(alias Opcode)
                     mixin("sqe."~Udas[0].sqeFieldName~" |= this."~memberName~" ? Udas[0].mask : 0;");
                 else static if(is(Udas[0] : MapBuffer))
                 {
-                    sqe.addr = mixin("cast(ulong)&this."~memberName~"[0]");
-                    mixin("assert(this."~memberName~".length <= uint.max, \"Buffer length is too large\");");
-                    sqe.len = mixin("cast(uint)this."~memberName~".length");
+                    static if(isPointer!(typeof(Member)))
+                    {
+                        sqe.addr = mixin("cast(ulong)this."~memberName);
+                        sqe.len = 1;
+                    }
+                    else
+                    {
+                        sqe.addr = mixin("cast(ulong)&this."~memberName~"[0]");
+                        mixin("assert(this."~memberName~".length <= uint.max, \"Buffer length is too large\");");
+                        sqe.len = mixin("cast(uint)this."~memberName~".length");
+                    }
                 }
             }
         }}
@@ -376,21 +394,18 @@ package struct IoUring
             enum DriverType     = __traits(getAttributes, Member)[0];
 
             if(DriverType == this.driver)
-            {
-                static if(is(ReturnType!MemberFunc) || is(ReturnType!(MemberFunc!Params)))
-                {
-                    return mixin("this.drivers."~memberName~"."~name~"(params)");
-                }
-                else
-                {
-                    mixin("this.drivers."~memberName~"."~name~"(params);");
-                    return;
-                }
-            }
+                return mixin("this.drivers."~memberName~"."~name~"(params)");
         }}
 
         assert(false, "No implementation for the selected driver is available");
     }
+}
+
+package struct IoUringLinkTimeout
+{
+    mixin GenerateDriverFuncs!(IORING_OP_LINK_TIMEOUT);
+
+    @MapBuffer timespec64* timeout;
 }
 
 /// Performs no operation. Mostly useful just for testing, or I guess forcing the
@@ -467,6 +482,11 @@ struct IoUringWritev
     @MapField("off") ulong _offset = -1; // Do not change
 }
 
+package struct IoUringTimeoutUserData
+{
+    timespec64 timeout;
+}
+
 version(linux)
 private struct IoUringNativeLinuxDriver
 {
@@ -485,6 +505,7 @@ private struct IoUringNativeLinuxDriver
     // Other data
     uint pendingSubmits;
     ulong[] sqeInUseMasks; // allocated with malloc
+    IoUringTimeoutUserData[] timeoutUserData; // allocated with malloc
 
     @nogc nothrow:
 
@@ -561,6 +582,14 @@ private struct IoUringNativeLinuxDriver
         this.sqeInUseMasks = maskPtr[0..maskCount];
         this.sqeInUseMasks[] = ulong.max;
 
+        auto timeoutPtr = cast(IoUringTimeoutUserData*)malloc(IoUringTimeoutUserData.sizeof * this.ioUringParams.sq_entries);
+        if(timeoutPtr is null)
+        {
+            this.uninitDriver();
+            return Result.make(IoUringError.outOfMemory, "Unable to allocate timeout user data array");
+        }
+        this.timeoutUserData = timeoutPtr[0..this.ioUringParams.sq_entries];
+
         return Result.noError;
     }
 
@@ -579,31 +608,45 @@ private struct IoUringNativeLinuxDriver
             free(this.sqeInUseMasks.ptr);
             this.sqeInUseMasks = null;
         }
+
+        if(this.timeoutUserData !is null)
+        {
+            free(this.timeoutUserData.ptr);
+            this.timeoutUserData = null;
+        }
     }
 
+    private alias _submitTest = submit!IoUringNop;
     SubmitQueueIsFull submit(Command)(Command command)
     {
-        import core.atomic : atomicStore, MemoryOrder;
+        return this.submitImpl(command, (_, __){});
+    }
 
-        if(this.pendingSubmits >= this.ioUringParams.sq_entries)
+    private alias _submitTimeoutTest = submitTimeout!IoUringNop;
+    SubmitQueueIsFull submitTimeout(Command)(Command command, Duration timeout)
+    {
+        if(timeout == Duration.zero)
+            return this.submitImpl(command, (_, __){});
+
+        if(this.ioUringParams.sq_entries - this.pendingSubmits < 2)
             return SubmitQueueIsFull.yes;
 
-        const sqeIndex = this.allocateNextSqe();
-        assert(sqeIndex < this.ioUringParams.sq_entries);
+        const result = this.submitImpl(command, (sqe, sqeIndex){
+            sqe.flags |= IOSQE_IO_LINK;
+        });
+        assert(result == SubmitQueueIsFull.no, "Bug: submitImpl should never return SubmitQueueIsFull.yes here");
 
-        scope sqe = &this.sqeSlice[sqeIndex];
-        command.toSqe(*sqe);
-        
-        const sqOff  = this.ioUringParams.sq_off;
-        auto sqTail  = *cast(uint*)(sqPtr + sqOff.tail);
-        auto sqMask  = *cast(uint*)(sqPtr + sqOff.ring_mask);
-        auto index   = sqTail & sqMask;
-        
-        this.sqeIndexSlice[index] = sqeIndex;
-        atomicStore!(MemoryOrder.rel)(*cast(uint*)(sqPtr + sqOff.tail), sqTail + 1);
-        this.pendingSubmits++;
+        return this.submitImpl(IoUringLinkTimeout(), (sqe, sqeIndex){
+            const totalSeconds = timeout.total!"seconds";
+            const totalNanos   = (timeout - totalSeconds.seconds).total!"nsecs";
+            scope userData     = &this.timeoutUserData[sqeIndex];
 
-        return SubmitQueueIsFull.no;
+            userData.timeout.tv_sec   = totalSeconds;
+            userData.timeout.tv_nsec  = totalNanos;
+
+            sqe.addr = cast(ulong)&userData.timeout;
+            sqe.len  = 1;
+        });
     }
 
     void processCompletions(scope void delegate(IoUringCompletion) nothrow @nogc handler) nothrow @nogc
@@ -668,6 +711,35 @@ private struct IoUringNativeLinuxDriver
         }
     }
 
+    alias _submitImplTest = submitImpl!(IoUringNop);
+    private SubmitQueueIsFull submitImpl(Command)(Command command, scope void delegate(io_uring_sqe*, uint) @nogc nothrow modifyFunc)
+    in(this.pendingSubmits <= this.ioUringParams.sq_entries, "Bug: pendingSubmits is larger than the SQE count")
+    {
+        import core.atomic : atomicStore, MemoryOrder;
+
+        if(this.pendingSubmits >= this.ioUringParams.sq_entries)
+            return SubmitQueueIsFull.yes;
+
+        const sqeIndex = this.allocateNextSqe();
+        assert(sqeIndex < this.ioUringParams.sq_entries);
+
+        scope sqe = &this.sqeSlice[sqeIndex];
+        command.toSqe(*sqe);
+        
+        const sqOff  = this.ioUringParams.sq_off;
+        auto sqTail  = *cast(uint*)(sqPtr + sqOff.tail);
+        auto sqMask  = *cast(uint*)(sqPtr + sqOff.ring_mask);
+        auto index   = sqTail & sqMask;
+        
+        modifyFunc(sqe, sqeIndex);
+        
+        this.sqeIndexSlice[index] = sqeIndex;
+        atomicStore!(MemoryOrder.rel)(*cast(uint*)(sqPtr + sqOff.tail), sqTail + 1);
+        this.pendingSubmits++;
+
+        return SubmitQueueIsFull.no;
+    }
+
     private uint allocateNextSqe()
     {
         import core.bitop : bsf;
@@ -716,6 +788,7 @@ private struct IoUringEmulatedPosixDriver
     void uninitDriver(){ assert(false, "Not implemented"); }
     void enter(uint minCompletes = 0){ assert(false, "Not implemented"); }
     SubmitQueueIsFull submit(Command)(Command command){ assert(false, "Not implemented"); }
+    SubmitQueueIsFull submitTimeout(Command)(Command command, Duration timeout = Duration.zero){ assert(false, "Not implemented"); }
     void processCompletions(scope void delegate(IoUringCompletion) nothrow @nogc handler) nothrow @nogc{ assert(false, "Not implemented"); }
 }
 
@@ -866,6 +939,31 @@ private mixin template IoUringTests(IoUringDriver driver)
             // driver.enter();
             // driver.processCompletions((_){ completed++; });
             // assert(completed == driver.ioUringParams.cq_entries + 1);
+        }
+
+        @(_t~"basic timeout behaviour")
+        unittest
+        {
+            auto uring = IoUring(IoUringConfig().withDriver(driver));
+            scope driver = &uring.drivers.native;
+
+            // NOTE: NOP completes instantly, so the timeout shouldn't take affect.
+            auto op = IoUringNop();
+            op.userData = cast(void*)1;
+            
+            assert(driver.submitTimeout(op, 10.seconds) == SubmitQueueIsFull.no);
+            assert(driver.pendingSubmits == 2);
+            driver.enter();
+            assert(driver.pendingSubmits == 0);
+
+            IoUringCompletion[2] completions;
+            size_t completed;
+            driver.processCompletions((cqe){ 
+                completions[completed++] = cqe;
+            });
+            assert(completed == 2);
+            assert(completions[0].result == 0);
+            assert(completions[1].result == -ECANCELED);
         }
     }
 }

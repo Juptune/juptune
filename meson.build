@@ -41,6 +41,7 @@ tls_srcs = files(
 
 http_srcs = files(
     './src/juptune/http/package.d',
+    './src/juptune/http/uri.d',
     './src/juptune/http/v1.d',
 )
 
@@ -115,12 +116,13 @@ event_asm_lib = library(
     link_args: ['-lcrypto']
 )
 
-install_subdir('src/juptune', install_dir: 'include/d/juptune/')
+install_subdir('src/juptune', install_dir: 'include/d/')
 
 pkgc = import('pkgconfig')
 pkgc.generate(
     name: 'juptune-dev',
     description: 'High-performance iouring-based I/O framework for D - development files.',
+    version: meson.project_version(),
     subdirs: 'd/juptune',
     url: 'https://www.github.com/Juptune/juptune',
     libraries: [event_asm_lib],

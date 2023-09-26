@@ -6,6 +6,7 @@
  */
 module juptune.event.io;
 
+import core.time : Duration;
 import std.range : ElementEncodingType;
 import juptune.core.ds, juptune.core.util;
 import juptune.event.loop, juptune.event.iouring;
@@ -899,6 +900,8 @@ private struct PosixGenericIoDriver
         int fd;
     }
 
+    Duration timeout = Duration.zero;
+
     nothrow @nogc:
 
     void wrap(int fd) pure
@@ -938,7 +941,7 @@ private struct PosixGenericIoDriver
         op.buffer = cast(void[])buffer;
 
         IoUringCompletion cqe;
-        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe);
+        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, this.submitConfig());
         if(submitResult.isError)
             return submitResult;
 
@@ -966,7 +969,7 @@ private struct PosixGenericIoDriver
         op.buffer = buffer;
 
         IoUringCompletion cqe;
-        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe);
+        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, this.submitConfig());
         if(submitResult.isError)
             return submitResult;
 
@@ -1064,7 +1067,7 @@ private struct PosixGenericIoDriver
         op.iovecs = iovecs;
 
         IoUringCompletion cqe;
-        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe);
+        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, this.submitConfig());
         if(submitResult.isError)
             return submitResult;
 
@@ -1083,6 +1086,11 @@ private struct PosixGenericIoDriver
         assert(cqe.result >= 0);
         bytesUsed = cqe.result;
         return Result.noError;
+    }
+
+    private SubmitEventConfig submitConfig() pure
+    {
+        return SubmitEventConfig().withTimeout(this.timeout);
     }
 }
 
@@ -1239,6 +1247,37 @@ unittest
             foreach(i; 0..buffer.length)
                 assert(buffer[i] == cast(ubyte)i);
         }, pairs[1], &asyncMoveSetter!TcpSocket).resultAssert;
+    });
+    loop.join();
+}
+
+@("TcpSocket - timeout test")
+unittest
+{
+    import core.time : msecs;
+    import juptune.event.internal.linux : LinuxError;
+
+    static void testResult(Result r)
+    {
+        assert(r.isError);
+        version(linux)
+            assert(r.isError(LinuxError.cancelled));
+    }
+
+    auto loop = EventLoop(EventLoopConfig());
+    loop.addNoGCThread(() @nogc nothrow {
+        TcpSocket[2] pairs;
+        ubyte[128] buffer;
+        void[] slice;
+        size_t bytes;
+
+        TcpSocket.makePair(pairs).resultAssert;
+        pairs[0].timeout = 1.msecs;
+        assert(pairs[0].submitConfig().timeout == 1.msecs);
+
+        testResult(pairs[0].readv([buffer[]], bytes));
+        testResult(pairs[0].recieve(buffer[], slice));
+        // Hard to tests writes currently, as I have no idea how to consistently block the write call.
     });
     loop.join();
 }

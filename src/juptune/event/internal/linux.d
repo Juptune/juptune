@@ -34,11 +34,16 @@ shared static this()
     sscanf(&kernalInfo.release[0], "%d.%d.%d", &g_linuxKernal.major, &g_linuxKernal.minor, &g_linuxKernal.patch);
 }
 
+import core.sys.linux.errno : ECANCELED;
 /// Result.make requires an enum type for strong typing,
 /// however I'm not going to make let alone maintain a list of all
 /// linux errors, so we'll get by with just `cast(LinuxError)` and `cast(int)` shennanigans if
 /// the error code is truly needed directly from a Result - which chances are unlikely to be the case.
-enum LinuxError { none = 0 }
+enum LinuxError 
+{ 
+    none = 0,
+    cancelled = ECANCELED, // Useful to detect in user code, so given a direct enum value.
+}
 
 alias SignalHandler = void delegate() nothrow shared;
 void linuxSetSignalHandler(int SignalNum)(SignalHandler handler) @nogc nothrow
@@ -90,9 +95,16 @@ Result linuxErrorAsResult(string staticMessage, int errnum) @nogc nothrow
     result.context[0..$] = '\0';
 
     scope mutablePtr = cast(char*)result.context.ptr; // Breaks the type system; but is safe to do this.
+    const staticMsg = strerror_r(errnum, mutablePtr, result.context.length-1); // - 1 so we can ensure a null terminator
 
-    strerror_r(errnum, mutablePtr, result.context.length-1); // - 1 so we can ensure a null terminator
-    result.context.length = strlen(result.context.ptr);
+    // Sometimes strerror_r returns a static string, sometimes it stores it in the buffer. What beautiful API design...
+    if(staticMsg !is null && staticMsg !is mutablePtr)
+    {
+        result.context.length = strlen(staticMsg);
+        mutablePtr[0..result.context.length] = staticMsg[0..result.context.length];
+    }
+    else
+        result.context.length = strlen(result.context.ptr);
 
     return result;
 }

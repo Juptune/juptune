@@ -388,11 +388,11 @@ private void juptuneLoopThreadAsyncYield() @nogc nothrow
 {
     scope loopThread = juptuneLoopThreadGetThis();
     loopThread.stats.fibersWaitingOnIo++;
+    scope(exit) loopThread.stats.fibersWaitingOnIo--;
 
     scope fiber = juptuneFiberGetThis();
     fiber.state = JuptuneFiber.State.waitingForCompletionEvent;
     juptuneFiberSwap(juptuneFiberGetRoot());
-    loopThread.stats.fibersWaitingOnIo--;
 }
 
 private IoUringCompletion juptuneEventLoopGetLastCompletion() @nogc nothrow
@@ -416,10 +416,24 @@ alias YieldUntilCompletion = Flag!"yieldUntilCompletion";
 struct SubmitEventConfig
 {
     YieldUntilCompletion yieldUntilComplete = YieldUntilCompletion.yes; /// Whether the fiber should yield until a CQE is generated
+    
+    /++
+     + The timeout for the event. 
+     +
+     + If this is exceeded then the underlying operation will attempt to be canceled, 
+     + likely causing a canceled error to be thrown.
+     +
+     + If this is set to `Duration.zero` then no timeout will be used.
+     +
+     + Please note that currently a very minor side effect of using a timeout is that the
+     + ignored CQE count will be incremented by 1 due to an implementation detail.
+     + ++/
+    Duration timeout = Duration.zero; 
 
     @nogc nothrow pure:
 
     SubmitEventConfig shouldYieldUntilCompletion(bool value) return { this.yieldUntilComplete = cast(YieldUntilCompletion)value; return this; }
+    SubmitEventConfig withTimeout(Duration value) return { this.timeout = value; return this; }
 }
 
 /// Configuration for creating an async fiber
@@ -539,9 +553,6 @@ void asyncDefaultSetter(ContextT)(scope ref ContextT a, scope out ContextT b) @n
  + having its dtor called.
  +
  + Please note that as with any move operation, be very careful if your context contains an internal pointer.
- +
- + Throws:
- +  Asserts that `ContextT` is a copyable type.
  + ++/
 void asyncMoveSetter(ContextT)(scope ref ContextT a, scope out ContextT b) @nogc nothrow
 {
@@ -695,8 +706,12 @@ Result yield() @nogc nothrow
  + will continue directly after calling this function, however there is currently
  + no mechanism to observe the completion, or if a completion is even generated.
  +
- + You can use `IoUringCompletion.ignore` for the `cqe` parameter if you don't yield, or if
- + you don't care about the completion.
+ + You can use `IoUringCompletion.ignore` for the `cqe` parameter if you disable yielding, or if
+ + you don't care about the completion at all.
+ +
+ + You can specify a timeout via `SubmitEventConfig.timeout`. If the timeout is exceeded then
+ + the operation will attempt to be canceled, likely causing an error result to be returned. This can be
+ + detected by calling `Result.isError(LinuxError.cancelled)` on the returned result object.
  +
  + Definitely a lot of work left around this area, but for now this should be useable.
  +
@@ -709,6 +724,7 @@ Result yield() @nogc nothrow
  + Params:
  +  command = The command to submit to io_uring
  +  cqe = The resulting completion. This is only set if the fiber waits for completion.
+ +  config = The configuration for submitting the event.
  +
  + Throws:
  +  Anything that `yield` throws.
@@ -723,7 +739,7 @@ Result juptuneEventLoopSubmitEvent(Command)(
     auto fiber = juptuneFiberGetThis();
     command.userData = config.yieldUntilComplete ? fiber : USER_DATA_IGNORE;
 
-    while(loopThread.ioUring.opDispatch!"submit"(command) == SubmitQueueIsFull.yes)
+    while(loopThread.ioUring.opDispatch!"submitTimeout"(command, config.timeout) == SubmitQueueIsFull.yes)
     {
         auto yieldResult = yield();
         if(yieldResult.isError)
