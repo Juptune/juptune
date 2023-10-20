@@ -81,7 +81,7 @@ struct IpAddress
      +  ipv4 = The raw IPv4 address. Expected to be in network order already.
      +  port = The port. Expected to be in host order.
      + ++/
-    this(uint ipv4, ushort port) pure
+    this(uint ipv4, ushort port) @safe pure
     {
         this._kind = Kind.ipv4;
         this._ipv4 = ipv4;
@@ -95,7 +95,7 @@ struct IpAddress
      +  ipv6 = The raw IPv6 address. Expected to be in network order already.
      +  port = The port. Expected to be in host order.
      + ++/
-    this(ubyte[16] ipv6, ushort port) pure
+    this(ubyte[16] ipv6, ushort port) @safe pure
     {
         this._kind = Kind.ipv6;
         this._ipv6 = ipv6;
@@ -106,7 +106,7 @@ struct IpAddress
      + Returns:
      +  The `Kind` of IP stored.
      + ++/
-    Kind kind() const pure
+    Kind kind() @safe const pure
     {
         return this._kind;
     }
@@ -120,7 +120,7 @@ struct IpAddress
      + Returns:
      +  The raw IPv4 address in network order.
      + ++/
-    uint asIpv4() const pure
+    uint asIpv4() @safe const pure
     {
         assert(this.kind == Kind.ipv4, "This is not an IPv4 address");
         return this._ipv4;
@@ -138,7 +138,7 @@ struct IpAddress
      + Returns:
      +  The raw IPv6 address in network order.
      + ++/
-    ubyte[16] asIpv6() const pure
+    ubyte[16] asIpv6() @safe const pure
     {
         assert(this._kind == Kind.ipv6, "This is not an IPv6 address");
         return this._ipv6;
@@ -154,7 +154,7 @@ struct IpAddress
      + Returns:
      +  A new `IpAddress` containing an IPv6 address.
      + ++/
-    IpAddress toIpv6() const pure
+    IpAddress toIpv6() @trusted const pure
     {
         assert(this.kind != Kind.FAILSAFE, "This IpAddress hasn't been initialised yet.");
 
@@ -180,6 +180,22 @@ struct IpAddress
 
         return ip;
     }
+    
+    /++ 
+     + Creates a copy of this `IpAddress` with the given port.
+     +
+     + Params:
+     +   port = The port to set.
+     +
+     + Returns: 
+     +   A copy of this `IpAddress` with the given port.
+     +/
+    IpAddress withPort(ushort port) @safe pure
+    {
+        IpAddress copy = this;
+        copy.port = port;
+        return copy;
+    }
 
     version(Posix)
     void asSocketAddr(
@@ -187,7 +203,7 @@ struct IpAddress
         ref size_t usedLength, 
         ref sockaddr_in ipv4, 
         ref sockaddr_in6 ipv6
-    )
+    ) @trusted
     {
         assert(this.kind != Kind.FAILSAFE, "This IpAddress hasn't been initialised yet.");
 
@@ -305,11 +321,11 @@ struct IpAddress
         scope out IpAddress ip,
         scope const char[] address,
         ushort defaultPort = 0
-    )
+    ) @trusted
     {
         char[129] buffer;
         
-        if(address.length >= 128)
+        if(address.length > buffer.length - 1) // @suppress(dscanner.suspicious.length_subtraction)
             return Result.make(IpAddress.Error.invalidAddress, "Address is too large");
         buffer[0..address.length] = address[0..$];
         buffer[address.length] = '\0';
@@ -364,6 +380,16 @@ struct IpAddress
         }
 
         return Result.make(IpAddress.Error.invalidAddress, "Address is invalid");
+    }
+
+    static IpAddress mustParse(
+        scope const char[] address, 
+        ushort defaultPort = 0
+    )
+    {
+        IpAddress ip;
+        IpAddress.parse(ip, address, defaultPort).resultAssert;
+        return ip;
     }
 }
 

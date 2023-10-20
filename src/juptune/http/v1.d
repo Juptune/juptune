@@ -9,7 +9,7 @@ module juptune.http.v1;
 import juptune.core.ds   : MemoryBlockPoolAllocator, MemoryBlockAllocation;
 import juptune.core.util : Result;
 import juptune.event.io  : TcpSocket;
-import juptune.http.uri  : Http1RawPath;
+import juptune.http.uri  : ScopeUri, uriParseNoCopy, UriParseHints;
 
 private enum INVALID_HEADER_CHAR = 0xFF;
 private immutable ubyte[256] g_headerNormaliseTable = (){
@@ -67,30 +67,20 @@ struct Http1PinnedSlice
     }
 }
 
-struct Http1RawPath
-{
-    private
-    {
-        const(char)[] _path;
-        const(char)[] _query;
-        const(char)[] _fragment;
-    }
-}
-
 struct Http1RequestLine
 {
     Http1PinnedSlice entireLine;
     Http1Version httpVersion;
     private const(char)[] method;
-    private Http1RawPath path;
+    private ScopeUri path;
 
-    void access(scope void delegate(scope const char[] method, scope Http1RawPath path) @safe func) @safe
+    void access(scope void delegate(scope const char[] method, scope ScopeUri path) @safe func) @safe
     in(this.entireLine._pinned !is null, "entireLine must be pinned")
     {
         func(this.method, this.path);
     }
 
-    void access(scope void delegate(scope const char[] method, scope Http1RawPath path) @safe @nogc nothrow func) @safe @nogc nothrow // @suppress(dscanner.style.long_line)
+    void access(scope void delegate(scope const char[] method, scope ScopeUri path) @safe @nogc nothrow func) @safe @nogc nothrow // @suppress(dscanner.style.long_line)
     in(this.entireLine._pinned !is null, "entireLine must be pinned")
     {
         func(this.method, this.path);
@@ -243,14 +233,23 @@ struct Http1Reader
             return result;
         else if(slice.length == 0)
             return Result.make(Http1Error.badRequest, "Client sent an empty path in request line. A minimum of a / is required"); // @suppress(dscanner.style.long_line)
-        // TODO: parseUri
+        
+        UriParseHints hints;
+        result = uriParseNoCopy(cast(char[])slice, requestLine.path, hints);
+        if(result.isError)
+            return result;
+        else if(
+            (hints & (UriParseHints.isAbsolute | UriParseHints.isNetworkReference))
+            || !(hints & UriParseHints.pathIsAbsolute)
+        )
+            return Result.make(Http1Error.badRequest, "Client sent an invalid path in request line. A minimum of a / is required"); // @suppress(dscanner.style.long_line)
 
         // Version
         result = this.readUntil!'\n'(slice);
         if(result.isError)
             return result;
         else if(slice.length != 8)
-            return Result.make(Http1Error.badRequest, "Client sent an invalid/unsupported http version in request line");
+            return Result.make(Http1Error.badRequest, "Client sent an invalid/unsupported http version in request line"); // @suppress(dscanner.style.long_line)
         else if(slice[0..8] == "HTTP/1.0")
             this._message.httpVersion = Http1Version.http10;
         else if(slice[0..8] == "HTTP/1.1")
@@ -593,6 +592,16 @@ bool http1CanonicalHeaderNameInPlace(ref scope ubyte[] headerName) @nogc nothrow
 
 /**** Unit tests ****/
 
+version(unittest) private ScopeUri makePath(string path, string query, string fragment)
+{
+    import juptune.event.io : IpAddress;
+    import std.typecons : Nullable;
+    return ScopeUri(
+        null, null, null, Nullable!IpAddress.init, Nullable!ushort.init,
+        path, query, fragment
+    );
+}
+
 @("http1CanonicalHeaderNameInPlace")
 unittest
 {
@@ -638,13 +647,17 @@ unittest
     {
         string request;
         string expectedMethod;
-        Http1RawPath expectedPath;
+        ScopeUri expectedPath;
         Http1Version expectedVersion;
     }
 
     static T[] cases = [
-        T("GET / HTTP/1.0\r\n", "GET", Http1RawPath(), Http1Version.http10),
-        T("A / HTTP/1.1\r\n", "A", Http1RawPath(), Http1Version.http11),
+        T("GET / HTTP/1.0\r\n", "GET", makePath("/", null, null), Http1Version.http10),
+        T("A / HTTP/1.1\r\n", "A", makePath("/", null, null), Http1Version.http11),
+        T("A /abc HTTP/1.1\r\n", "A", makePath("/abc", null, null), Http1Version.http11),
+        T("A /?a=b HTTP/1.1\r\n", "A", makePath("/", "a=b", null), Http1Version.http11),
+        T("A /#a HTTP/1.1\r\n", "A", makePath("/", null, "a"), Http1Version.http11),
+        T("A /a?b#c HTTP/1.1\r\n", "A", makePath("/a", "b", "c"), Http1Version.http11),
     ];
 
     auto loop = EventLoop(EventLoopConfig());
@@ -659,7 +672,7 @@ unittest
         }, pairs[0], &asyncMoveSetter!TcpSocket).resultAssert;
 
         async((){
-            ubyte[16] buffer;
+            ubyte[32] buffer;
             auto socket = juptuneEventLoopGetContext!TcpSocket;
             auto reader = Http1Reader(socket, buffer[], Http1Config());
 
@@ -673,7 +686,7 @@ unittest
                 assert(requestLine.httpVersion == test.expectedVersion);
                 requestLine.access((method, path) {
                     assert(method == test.expectedMethod);
-                    // TODO: assert(path.path == "/");
+                    assert(path == test.expectedPath);
                 });
 
                 reader._state = Http1Reader.State.startLine;
@@ -923,7 +936,7 @@ unittest
     {
         string request;
         string expectedMethod;
-        Http1RawPath expectedPath;
+        ScopeUri expectedPath;
         Http1Version expectedVersion;
         H[] expectedHeaders;
         string expectedBody;
@@ -936,7 +949,7 @@ Host: localhost
 Content-Length: 4
 
 1234`,
-            "GET", Http1RawPath(), Http1Version.http11,
+            "GET", makePath("/", null, null), Http1Version.http11,
             [
                 H("host", "localhost"),
                 H("content-length", "4"),
@@ -954,7 +967,7 @@ Transfer-Encoding: chunked
 56789
 0
 `,
-            "POST", Http1RawPath(), Http1Version.http11,
+            "POST", makePath("/", null, null), Http1Version.http11,
             [
                 H("transfer-encoding", "chunked"),
             ], 
@@ -985,7 +998,7 @@ Transfer-Encoding: chunked
                 assert(requestLine.httpVersion == test.expectedVersion);
                 requestLine.access((method, path) {
                     assert(method == test.expectedMethod);
-                    // assert(path == test.expectedPath);
+                    assert(path == test.expectedPath);
                 });
                 requestLine = Http1RequestLine.init;
 
