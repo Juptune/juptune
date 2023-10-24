@@ -13,6 +13,8 @@ import juptune.event.io : IpAddress;
 
 private
 {
+    // To simplify the parsing logic, we precompute a table of character types
+    // instead of having a massive list of if/switch statements everywhere.
     enum Rfc3986CharType : ulong
     {
         RESERVED_NONE               = 1 << 1,
@@ -130,13 +132,23 @@ private
     }();
 }
 
+/++
+ + A bitmask of hints that can be used to determine the structure of a URI.
+ +
+ + Users should not set these values themselves as it may cause incorrect behaviour during parsing.
+ + Only parsing functions should set these values.
+ +
+ + Since the end result of a URI is essentially a set of strings, certain aspects of the URI
+ + are lost or ambiguous, so the parser returns these hints to help the caller determine the
+ + exact nature of the URI.
+ + ++/
 enum UriParseHints
 {
     none = 0,
 
     isAbsolute              = 1 << 0, /// e.g. "scheme://authority/path?query#fragment"
     isNetworkReference      = 1 << 1, /// e.g. "//authority/path?query#fragment"
-    isUriSuffix             = 1 << 2, /// e.g. "authority/path?query#fragment"
+    isUriSuffix             = 1 << 2, /// e.g. "authority/path?query#fragment", see `UriParseRules.allowUriSuffix`
 
     authorityHasPort        = 1 << 3, /// e.g. "host:port"
     authorityHasUserInfo    = 1 << 4, /// e.g. "user:info@host"
@@ -161,19 +173,25 @@ enum UriParseHints
     percentEncodedFragment  = 1 << 18, /// e.g. "#some%23fragment"
 }
 
+/// `Result` error enum
 enum UriError
 {
     none,
-    schemeIsInvalid,
-    authorityRequired,
-    authorityUserInfoIsInvalid,
-    authorityPortIsInvalid,
-    authorityHostIsInvalid,
-    pathIsInvalid,
-    queryIsInvalid,
-    fragmentIsInvalid,
+    schemeIsInvalid,            /// Scheme exists, but is invalid
+    authorityRequired,          /// URI is absolute (has a scheme), but has no authority component
+    authorityUserInfoIsInvalid, /// User info exists, but is invalid
+    authorityPortIsInvalid,     /// Port exists, but is invalid
+    authorityHostIsInvalid,     /// Host exists, but is invalid
+    pathIsInvalid,              /// Path exists, but is invalid
+    queryIsInvalid,             /// Query exists, but is invalid
+    fragmentIsInvalid,          /// Fragment exists, but is invalid
 }
 
+/++
+ + A set of rules that can be used to control the behaviour of the URI parser.
+ +
+ + This is typically because typical use cases are slightly different than the strict parsing rules defined in RFC 3986.
+ + ++/
 enum UriParseRules
 {
     /// Strict parsing rules as defined in RFC 3986, may be too strict for common use cases.
@@ -201,29 +219,110 @@ enum UriParseRules
 
 
 /++
- + TODO: This one does not own the data, it is just a view into the data
+ + A fairly featureless POD struct that represents a URI that specifically does *not* own
+ + the data it points to.
+ +
+ + This means this struct is only valid for as long as the data it points to is valid, but it has
+ + other interesting implications such as using data from multiple non-contigous memory blocks if
+ + suitable.
  + ++/
 struct ScopeUri
 {
-    const(char)[] scheme;
-    const(char)[] userInfo;
-    const(char)[] host;
+    const(char)[] scheme; /// The scheme of the URI, e.g. "http", if one exists
+    const(char)[] userInfo; /// The user info of the URI, e.g. "user:info", if one exists
+    const(char)[] host; /// The host of the URI, e.g. "localhost", if one exists
+    
+    /++
+     + The host of the URI as an IP address, if one exists.
+     +
+     + If this field is set by a parsing function, then `host` should also be set to the string representation.
+     +
+     + This field is set to `null` if the host is not an IP address.
+     +
+     + IPs need to be fully parsed for validation purposes, so naturally the parser will save the caller some effort
+     + by storing it into this field.
+     +
+     + If there is also a port in a parsed URI, then the port field within the `IpAddress` struct will
+     + also be set.
+     + ++/
     Nullable!IpAddress hostAsIp;
+
+    /++
+     + The port of the URI, if one exists.
+     +
+     + If this field is set by a parsing function, and `hostAsIp` is also set, 
+     + then the port field within the `IpAddress` struct will also be set to the same value.
+     +
+     + This field is set to `null` if the port is not present.
+     + ++/
     Nullable!ushort port;
-    const(char)[] path;
-    const(char)[] query;
-    const(char)[] fragment;
+
+    const(char)[] path; /// The path of the URI, e.g. "/some/path", if one exists
+    const(char)[] query; /// The query of the URI, e.g. "?some=query", if one exists
+    const(char)[] fragment; /// The fragment of the URI, e.g. "#some-fragment", if one exists
 }
 
 /**** Higher level Uri parsing functions ****/
 
+/++
+ + Parses a URI from a string into a `ScopeUri`, which specifically does not contain any copy of the input
+ + data, but instead slices from the original `input` slice.
+ +
+ + This means the returned `ScopeUri` is only valid for as long as the `input` slice is valid and unmodified.
+ +
+ + This function is intended to be used when the caller wants to avoid copying the input data, and is willing
+ + to accept the limitations and risks of a `ScopeUri`.
+ +
+ + Please report any non-compliance with RFC 3986 as a bug.
+ +
+ + Valid Formats:
+ +  isAbsolute 
+ +      -> scheme://user:info@host:port/path?query#fragment, e.g. "http://user:info@localhost:8080/some/path?some=query#some-fragment"
+ +
+ +  isNetworkReference 
+ +      -> //user:info@host:port/path?query#fragment, e.g. "//user:info@localhost:8080/some/path?some=query#some-fragment"
+ +
+ +  !isAbsolute && !isNetworkReference && pathIsAbsolute 
+ +      -> /path?query#fragment, e.g. "/some/path?some=query#some-fragment"
+ +
+ +  pathIsRootless
+ +   only if `UriParseRules.allowUriSuffix` IS NOT set.
+ +      -> path?query#fragment, e.g. "some/path?some=query#some-fragment"
+ +
+ +  isUriSuffix 
+ +    only the host component is supported within the authority - port and user info are not supported
+ +       due to their colons causing the URI to be seen as an absolute URI, which will likely generate an error.
+ +    only if `UriParseRules.allowUriSuffix` IS set.
+ +       -> host/path?query#fragment, e.g. "localhost/some/path?some=query#some-fragment"
+ +
+ + Please see the individual, lower level parsing functions for the exact details of each component.
+ +
+ + Notes:
+ +  The output of all `out` parameters is undefined if the function returns an error.
+ +
+ +  This parser will attempt to heuristically determine whether the start of the URI
+ +  is a scheme or an authority. Please note that errors in a scheme may manifest as an error in the
+ +  authority component.
+ +
+ + Params:
+ +  input = The input string to parse
+ +  uri   = The `ScopeUri` to write the parsed URI to
+ +  hints = A set of hints, set by this parser, that can be used to determine the structure of the URI
+ +  rules = A set of rules that can be used to control the behaviour of the URI parser
+ +
+ + Throws:
+ +  Anything that `uriParseScheme`, `uriParseAuthority`, `uriParsePath`, `uriParseQuery`, or `uriParseFragment` can throw.
+ +
+ + Returns:
+ +  A `Result` indicating whether the parsing was successful or not.
+ + ++/
 Result uriParseNoCopy(
     const(char)[] input,
     out scope ScopeUri uri,
     out scope UriParseHints hints,
     UriParseRules rules = UriParseRules.strict
 ) @nogc @safe nothrow
-in(input.length > 0, "Attempting to parse an empty string seems like incorrect logic")
+in(input.length > 0, "Attempting to parse an empty string is likely incorrect logic. Null checks, people!")
 {
     const(char)[] next;
 
@@ -257,6 +356,35 @@ in(input.length > 0, "Attempting to parse an empty string seems like incorrect l
 
 /**** "Low level" Uri parsing functions ****/
 
+/++
+ + Parses the scheme of a URI.
+ +
+ + Notes:
+ +  Given the string "https://abc.com", the `scheme` parameter will be set to "https" 
+ +  and the `next` parameter will be set to "//abc.com". The colon is dropped.
+ +
+ +  The output of all `out` parameters is undefined if the function returns an error.
+ +
+ +  The hint `UriParseHints.isAbsolute` is always set.
+ +
+ + Params:
+ +  chars  = The input string to parse
+ +  scheme = The slice of `chars` that contains the scheme
+ +  next   = The slice of `chars` that contains the next component of the URI
+ +  hints  = A set of hints, set by this parser, that can be used to determine the structure of the URI
+ +
+ + Throws:
+ +  `UriError.schemeIsInvalid` if the scheme does not start with an alpha character
+ +
+ +  `UriError.schemeIsInvalid` if the scheme is empty
+ +
+ +  `UriError.schemeIsInvalid` if the scheme contains an invalid character after the first
+ +
+ +  `UriError.schemeIsInvalid` if `chars` does not contain a ':' to terminate the scheme
+ +
+ + Returns:
+ +  A `Result` indicating whether the parsing was successful or not.
+ + ++/
 Result uriParseScheme(
     const(char)[] chars, 
     out scope const(char)[] scheme,
@@ -294,6 +422,92 @@ in(chars.length > 0, "URI must not be empty")
     return Result.make(UriError.schemeIsInvalid, "Unable to find ':' in URI scheme");
 }
 
+/++
+ + Parses the authority of a URI.
+ +
+ + Valid Formats:
+ +  isAbsolute
+ +      when `UriParseHints.isAbsolute` is set
+ +          -> //authority/path?query#fragment, e.g. "//authority/some/path?some=query#some-fragment"
+ +
+ +  isNetworkReference
+ +      when `UriParseHints.isAbsolute` is not set
+ +          -> //authority/path?query#fragment, e.g. "//authority/some/path?some=query#some-fragment"
+ +
+ +  isUriSuffix
+ +      when `UriParseHints.isAbsolute` is not set
+ +      and when the input is not a network reference
+ +          -> host/path?query#fragment, e.g. "localhost/some/path?some=query#some-fragment"
+ +
+ +  empty, yet successful result
+ +      when none of the above can be determined, the entire input
+ +      string is returned in `next` and the function returns `Result.noError`.
+ +          -> e.g. /some/absolute/path
+ +
+ +  percentEncodedUserInfo
+ +      mixes with any of the above
+ +          -> user%40info@host/path?query#fragment, e.g. "user%40info@localhost/some/path?some=query#some-fragment"
+ +
+ +  percentEncodedHost
+ +      mixes with any of the above
+ +      -> ho%20st/path?query#fragment, e.g. "ho%20st/some/path?some=query#some-fragment"
+ +
+ +  (The following hints are capable of being mixed and matched. Listing all permutations is not useful.) 
+ +
+ +  authorityHasUserInfo
+ +      -> user:info@host/path?query#fragment, e.g. "user:info@localhost/some/path?some=query#some-fragment"
+ +
+ +  authorityHasPort
+ +      -> host:port/path?query#fragment, e.g. "localhost:8080/some/path?some=query#some-fragment"
+ +
+ +  authorityHostIsIpv6
+ +      -> [::1]/path?query#fragment, e.g. "[::1]/some/path?some=query#some-fragment"
+ +
+ +  authorityHostIsIpv4
+ +      -> 0.0.0.0/path?query#fragment, e.g. "127.0.0.1/some/path?some=query#some-fragment"
+ +
+ +  authorityHostIsDomain
+ +      -> localhost/path?query#fragment, e.g. "localhost/some/path?some=query#some-fragment"
+ +      -> abc.com/path?query#fragment, e.g. "abc.com/some/path?some=query#some-fragment"
+ +      -> 0.0.0.0.abc.com/path?query#fragment, e.g. "127.0.0.1.domain/some/path?some=query#some-fragment"
+ +
+ + Notes:
+ +  Given the string "//user:info@localhost:8080/abc", the `userInfo` parameter will be set to "user:info",
+ +  the `host` parameter will be set to "localhost", the `port` parameter will be set to 8080,
+ +  and the `next` parameter will be set to "/abc".
+ +
+ +  The output of all `out` parameters is undefined if the function returns an error.
+ +
+ +  If the host is intended to be an IPv4 address, but is for some reason invalid, it will be
+ +  interpreted as a domain name instead without an error being generated.
+ +
+ +  If the host is an IP address, then the `hostAsIp` parameter will be set to the parsed IP address.
+ +  Additionally if there is a port, then the `port` field within the `IpAddress` struct will also be set.
+ +
+ +  While percent encoding is validated, it is not decoded.
+ +
+ + Params:
+ +  chars       = The input string to parse
+ +  userInfo    = The slice of `chars` that contains the user info, if one exists
+ +  host        = The slice of `chars` that contains the host
+ +  hostAsIp    = The IPv4 or IPv6 address of the host, if one exists
+ +  port        = The port of the host, if one exists
+ +  next        = The slice of `chars` that contains the next component of the URI
+ +  hints       = A set of hints, set by this parser, that can be used to determine the structure of the URI
+ +  rules       = A set of rules that can be used to control the behaviour of the URI parser
+ +
+ + Throws:
+ +  `UriError.authorityRequired` if the URI is absolute (has a scheme), but has no authority component.
+ +
+ +  `UriError.authorityUserInfoIsInvalid` if the user info exists, but is invalid.
+ +
+ +  `UriError.authorityPortIsInvalid` if the port exists, but is invalid.
+ +
+ +  `UriError.authorityHostIsInvalid` if the host exists, but is invalid.
+ +
+ + Returns:
+ +  A `Result` indicating whether the parsing was successful or not.
+ + ++/
 Result uriParseAuthority(
     const(char)[] chars, 
     out scope const(char)[] userInfo,
@@ -354,6 +568,16 @@ Result uriParseAuthority(
     return Result.noError;
 }
 
+/++
+ + Looks ahead in the URI to determine whether the authority component has a user info and/or port component.
+ +
+ + Notes:
+ +  O(n) worst case. Terminate on first character that terminates the authority component.
+ +
+ +  Sets the `UriParseHints.authorityHasUserInfo` and `UriParseHints.authorityHasPort` hints where appropriate.
+ +
+ +  IPv6 style addresses are handled correctly.
+ + ++/
 void uriAuthorityLookahead(const(char)[] chars, ref scope UriParseHints hints) @safe @nogc nothrow pure // @suppress(dscanner.style.long_line)
 {
     bool probablyInIpv6 = false;
@@ -383,6 +607,8 @@ void uriAuthorityLookahead(const(char)[] chars, ref scope UriParseHints hints) @
     }
 }
 
+/// Provides parsing logic for `uriParseAuthority`, not really
+/// intended for direct use, but is made available for edge cases users may have.
 Result uriParseAuthorityUserInfo(
     const(char)[] chars,
     ref scope size_t cursor,
@@ -420,6 +646,8 @@ Result uriParseAuthorityUserInfo(
     return Result.make(UriError.authorityUserInfoIsInvalid, "Unable to find '@' in URI authority user info");
 }
 
+/// Provides parsing logic for `uriParseAuthority`, not really
+/// intended for direct use, but is made available for edge cases users may have.
 Result uriParseAuthorityHost(
     const(char)[] chars,
     ref scope size_t cursor,
@@ -436,6 +664,8 @@ Result uriParseAuthorityHost(
         : uriParseAuthorityHostAsIpv4OrDomain(chars, cursor, host, hostAsIp, hints);
 }
 
+/// Provides parsing logic for `uriParseAuthority`, not really
+/// intended for direct use, but is made available for edge cases users may have.
 Result uriParseAuthorityHostAsIpv6(
     const(char)[] chars,
     ref scope size_t cursor,
@@ -465,6 +695,8 @@ Result uriParseAuthorityHostAsIpv6(
     return Result.noError;
 }
 
+/// Provides parsing logic for `uriParseAuthority`, not really
+/// intended for direct use, but is made available for edge cases users may have.
 Result uriParseAuthorityHostAsIpv4OrDomain(
     const(char)[] chars,
     ref scope size_t cursor,
@@ -513,6 +745,8 @@ Result uriParseAuthorityHostAsIpv4OrDomain(
     return Result.noError;
 }
 
+/// Provides parsing logic for `uriParseAuthority`, not really
+/// intended for direct use, but is made available for edge cases users may have.
 Result uriParseAuthorityPort(
     const(char)[] chars,
     ref scope size_t cursor,
@@ -539,6 +773,53 @@ Result uriParseAuthorityPort(
     return Result.noError;
 }
 
+/++
+ + Parses the path of a URI.
+ +
+ + Valid Formats:
+ +  pathIsAbsolute
+ +      -> /path?query#fragment, e.g. "/some/path?some=query#some-fragment"
+ +
+ +  pathIsRootless
+ +      -> path?query#fragment, e.g. "some/path?some=query#some-fragment"
+ +
+ +  pathIsEmpty
+ +      -> ?query#fragment, e.g. "?some=query#some-fragment"
+ +
+ +  pathHasStartColon
+ +      mixes with pathIsAbsolute
+ +          -> /pa:th?query#fragment, e.g. "/some:path/yada/yada?some=query#some-fragment"
+ +
+ +  percentEncodedPath
+ +      mixes with pathIsAbsolute and pathIsRootless
+ +          -> pa%20th?query#fragment, e.g. "some%20path/yada/yada?some=query#some-fragment"
+ +
+ + Notes:
+ +  Given the string "/some/path/?some=query#some-fragment", the `path` parameter will be set to "/some/path/",
+ +  and the `next` parameter will be set to "?some=query#some-fragment".
+ +
+ +  The output of all `out` parameters is undefined if the function returns an error.
+ +
+ +  While percent encoding is validated, it is not decoded.
+ +
+ + Params:
+ +  chars  = The input string to parse
+ +  path   = The slice of `chars` that contains the path
+ +  next   = The slice of `chars` that contains the next component of the URI
+ +  hints  = A set of hints, set by this parser, that can be used to determine the structure of the URI
+ +
+ + Throws:
+ +  `UriError.pathIsInvalid` if the path is absolute and starts with "//"
+ +
+ +  `UriError.pathIsInvalid` if the path is rootless and contains a ':' in the first segment
+ +
+ +  `UriError.pathIsInvalid` if the path contains an invalid character
+ +
+ +  `UriError.pathIsInvalid` if the path contains an invalid percent encoded character
+ +
+ + Returns:
+ +  A `Result` indicating whether the parsing was successful or not.
+ + ++/
 Result uriParsePath(
     const(char)[] chars,
     out scope const(char)[] path,
@@ -609,6 +890,43 @@ Result uriParsePath(
     return Result.noError;
 }
 
+/++ 
+ + Parses the query of a URI.
+ +
+ + Valid Formats:
+ +  queryIsEmpty
+ +      -> <empty-input>
+ +
+ +  percentEncodedQuery
+ +      -> ?que%20ry#fragment, e.g. "?some%20query#some-fragment"
+ +
+ +  !queryIsEmpty
+ +      -> ?query#fragment, e.g. "?some=query#some-fragment"
+ +
+ + Notes:
+ +  Given the string "?some=query#some-fragment", the `query` parameter will be set to "some=query",
+ +  and the `next` parameter will be set to "#some-fragment".
+ +
+ +  The output of all `out` parameters is undefined if the function returns an error.
+ +
+ +  While percent encoding is validated, it is not decoded.
+ +
+ + Params:
+ +  chars  = The input string to parse
+ +  query  = The slice of `chars` that contains the query
+ +  next   = The slice of `chars` that contains the next component of the URI
+ +  hints  = A set of hints, set by this parser, that can be used to determine the structure of the URI
+ +
+ + Throws:
+ +  `UriError.queryIsInvalid` if the query contains an invalid character
+ +
+ +  `UriError.queryIsInvalid` if the query contains an invalid percent encoded character
+ +
+ +  `UriError.queryIsInvalid` if the first character is not '?'
+ +
+ + Returns:
+ +   A `Result` indicating whether the parsing was successful or not.
+ +/
 Result uriParseQuery(
     const(char)[] chars,
     out scope const(char)[] query,
@@ -656,6 +974,43 @@ Result uriParseQuery(
     return Result.noError;
 }
 
+/++
+ + Parses the fragment of a URI.
+ +
+ + Valid Formats:
+ +  fragmentIsEmpty
+ +      -> <empty-input>
+ +
+ +  percentEncodedFragment
+ +      -> #frag%20ment, e.g. "#some%20fragment"
+ +
+ +  !fragmentIsEmpty
+ +      -> #fragment, e.g. "#some-fragment"
+ +
+ + Notes:
+ +  Given the string "#some-fragment", the `fragment` parameter will be set to "some-fragment",
+ +  and the `next` parameter will be set to the empty string.
+ +
+ +  The output of all `out` parameters is undefined if the function returns an error.
+ +
+ +  While percent encoding is validated, it is not decoded.
+ +
+ + Params:
+ +  chars     = The input string to parse
+ +  fragment  = The slice of `chars` that contains the fragment
+ +  next      = The slice of `chars` that contains the next component of the URI
+ +  hints     = A set of hints, set by this parser, that can be used to determine the structure of the URI
+ +
+ + Throws:
+ +  `UriError.fragmentIsInvalid` if the fragment contains an invalid character
+ +
+ +  `UriError.fragmentIsInvalid` if the fragment contains an invalid percent encoded character
+ +
+ +  `UriError.fragmentIsInvalid` if the first character is not '#'
+ +
+ + Returns:
+ +  A `Result` indicating whether the parsing was successful or not.
+ + ++/
 Result uriParseFragment(
     const(char)[] chars,
     out scope const(char)[] fragment,
@@ -703,6 +1058,20 @@ Result uriParseFragment(
 
 /**** Helpers ****/
 
+/++
+ + An input range that iterates over the characters of a URI, replacing any 
+ + percent encoded characters with their decoded values.
+ +
+ + Notes:
+ +  This range assumes the input string has been validated/parsed already, so makes no attempt to
+ +  validate anything besides the percent encoded characters.
+ +
+ +  This also means that the range will not throw any errors, and will instead assert if it encounters
+ +  an invalid percent encoded character.
+ +
+ + See_Also:
+ +  `uriDecoder`
+ + ++/
 struct UriDecoder
 {
     private
@@ -753,7 +1122,6 @@ struct UriDecoder
             import juptune.core.util.conv : to;
             Result result = Result.noError;
             this._front = cast(char)to!ubyte(hex, result, 16);
-
             if(result.isError)
                 assert(false, "Invalid percent encoded character when decoding URI - invalid hex - this should've been detected at an earlier stage"); // @suppress(dscanner.style.long_line)
         }
@@ -762,6 +1130,7 @@ struct UriDecoder
     }
 }
 
+/// Functional style wrapper around `UriDecoder`.
 UriDecoder uriDecoder(const(char)[] input) @safe @nogc nothrow
 {
     return UriDecoder(input);
