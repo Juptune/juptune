@@ -88,6 +88,7 @@ juptune_all_dep = declare_dependency(
 
 examples = {
     'http-hello-world-hardcoded': ['./examples/http-hello-world-hardcoded/main.d'],
+    'http-echo-manual': ['./examples/http-echo-manual/main.d'],
 }
 
 foreach example_name, example_srcs : examples

@@ -1,3 +1,7 @@
+// Purpose: A very simple "HTTP Server" (it's not even that) that can be easily placed under load.
+//          This is mainly to place stress on the core event loop and fiber scheduler, as well as
+//          place the system into an unordered state to ensure fiber reentrancy is handled correctly.
+
 import juptune.event, juptune.core.util, juptune.core.ds, juptune.event.fiber;
 
 void main(string[] args)

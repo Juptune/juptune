@@ -227,7 +227,7 @@ if(is(StructT == struct) && isOutputRange!(OutputT, const(char)[]))
     }
 }
 
-private string enumToString(EnumT)(EnumT value)
+string enumToString(EnumT)(EnumT value)
 {
     final switch(value)
     {
@@ -247,7 +247,7 @@ unittest
     assert(E.b.enumToString == "b");
 }
 
-private String toBase10(NumT)(NumT num)
+String toBase10(NumT)(NumT num)
 {
     // Fun fact, because of SSO, this will always be small enough to go onto the stack.
     // MAX_SIZE_T_STRING_LEN is 20, small strings are up to 22 chars.
@@ -262,7 +262,7 @@ unittest
     assert((cast(byte)-128).toBase10!byte == "-128");
 }
 
-private String toBase16(NumT)(NumT num)
+String toBase16(NumT)(NumT num)
 {
     IntToHexCharBuffer buffer;
     return String(toBase16(num, buffer));
@@ -275,7 +275,7 @@ unittest
     assert((cast(byte)-128).toBase16!byte == "-0x80");
 }
 
-private char[] toBase10(NumT)(NumT num_, scope ref return IntToCharBuffer buffer)
+char[] toBase10(NumT)(NumT num_, scope ref return IntToCharBuffer buffer)
 {
     Unqual!NumT num = num_;
     size_t cursor = buffer.length-1; // @suppress(dscanner.suspicious.length_subtraction)
@@ -336,7 +336,7 @@ unittest
     assert(toBase10!ulong(ulong.min, buffer) == "0");
 }
 
-private char[] toBase16(NumT)(NumT num_, scope ref return IntToHexCharBuffer buffer)
+char[] toBase16(NumT)(NumT num_, scope ref return IntToHexCharBuffer buffer)
 {
     Unqual!NumT num = num_;
     size_t cursor = buffer.length-1; // @suppress(dscanner.suspicious.length_subtraction)
@@ -392,7 +392,7 @@ unittest
     assert(toBase16!ulong(ulong.min, buffer) == "0x0");
 }
 
-private NumT fromBase10(NumT)(const(char)[] str, out string error)
+NumT fromBase10(NumT)(const(char)[] str, out string error)
 {
     if(str.length == 0)
     {
@@ -464,7 +464,7 @@ unittest
     assert(fromBase10!int("-231", err) == -231 && !err);
 }
 
-private NumT fromBase16(NumT)(const(char)[] str, out string error)
+NumT fromBase16(NumT)(const(char)[] str, out string error)
 {
     import std.traits : isUnsigned;
 

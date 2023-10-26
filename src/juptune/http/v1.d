@@ -53,7 +53,6 @@ enum Http1Error
     badHeaderName,      /// Issue with header name
     badLengthHeader,    /// Issue with content-length and transfer-encoding headers
 
-    bodyRequiresLength, /// Body requires a content-length or transfer-encoding header
     badBodyChunk,       /// Issue with a chunk in a chunked body
     badBodyChunkSize,   /// Issue with a chunk size in a chunked body
 }
@@ -330,6 +329,10 @@ struct Http1Config
  +
  +  This reader will never close the socket as it does not "own" the socket resource, it is up to the
  +  user to handle this. No side effects beyond reading data from the socket will occur.
+ +
+ +  You should ensure that messages are read in their entirety before responding to the client, as application
+ +  errors are not the same as protocol errors, so the rest of the messages within the HTTP pipeline may be
+ +  valid and should still be processed.
  +
  + Issues:
  +  The reader is currently in a very early state, and is not yet ready for production use.
@@ -725,8 +728,6 @@ struct Http1Reader
      +  Anything the underlying I/O functions can throw. An attempt is made to map common errors to
      +  a standardised `Http1Error` value, but this is not guaranteed for every response.
      +
-     +  `Http1Error.bodyRequiresLength` if the body is not chunked and does not have a content-length header.
-     +
      +  `Http1Error.badBodyChunk` if the body is chunked and the client sent an invalid chunk.
      +
      +  `Http1Error.badBodyChunkSize` if the body is chunked and the client sent an invalid chunk size.
@@ -747,7 +748,12 @@ struct Http1Reader
         else if(this._message.bodyEncoding & BodyEncoding.isChunked)
             return this.readBodyChunked(bodyChunk);
         else
-            return Result.make(Http1Error.bodyRequiresLength, response!("411", "Request has a body, but has no content-length or transfer-encoding header")); // @suppress(dscanner.style.long_line)
+        {
+            bodyChunk.dataLeft = false;
+            bodyChunk.entireChunk = Http1PinnedSlice(&this._pinnedSliceIsAlive);
+            this._state = State.finalise;
+            return Result.noError;
+        }
     }
 
     /++
