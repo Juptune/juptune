@@ -24,12 +24,34 @@ version(linux)
             void* r13;
             void* r14;
             void* r15;
+            ubyte[] stack; // Sure it adds another 16 bytes, but it allows us to do bounds checking.
 
             private this(void* entryPoint, ubyte[] stack) @nogc nothrow pure
             {
+                this.stack = stack;
                 this.ret = entryPoint;
-                this.rsp = cast(void*)((cast(ulong)stack.ptr + stack.length - 8) & ~0x0F); // align to 16 bytes
+                this.setTopOfStack(stack.ptr + stack.length);
+            }
+
+            void setTopOfStack(void* top) @nogc nothrow pure
+            in(top >= this.stack.ptr && top <= this.stack.ptr + this.stack.length, "top is not within the stack bounds")
+            {
+                this.rsp = cast(void*)((cast(ulong)top - 8) & ~0x0F); // align to 16 bytes
                 this.rsp -= 8; // Annoying to explain; but basically once we end up in usercode this keeps 16 byte alignment.
+
+                assert(
+                    this.rsp >= this.stack.ptr 
+                    && this.rsp <= this.stack.ptr + this.stack.length, 
+                    "rsp is not within the stack bounds"
+                );
+            }
+
+            T* makeRoomFor(T)()
+            {
+                this.rsp -= T.sizeof;
+                auto ptr = cast(T*)this.rsp;
+                this.setTopOfStack(ptr);
+                return ptr;
             }
         }
     }

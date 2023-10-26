@@ -439,34 +439,7 @@ struct SubmitEventConfig
 /// Configuration for creating an async fiber
 struct AsyncConfig
 {
-    /// Configures where a fiber's user context is placed in memory.
-    enum ContextMethod
-    {
-        /++
-         + Automatically decides which method to use based on the user context's size.
-         +
-         + Otherwise `endOfStack` is chosen as the main fallback.
-         + ++/
-        defaultBySize,
-
-        /++
-         + Places the user context at the very end of the fiber's stack.
-         +
-         + This is fast in the sense the memory is already allocated.
-         +
-         + This is unsafe in the sense that, if the fiber manages to reach the end the stack, the
-         + context is at risk of being overwritten.
-         +
-         + On the other hand if the fiber is that far into its stack, chances are it will crash anyway
-         + from bleeding over into a guard page.
-         + ++/
-        endOfStack,
-    }
-    ContextMethod contextMethod; /// Where to place the user context in memory.
-
     @nogc nothrow pure:
-
-    AsyncConfig withContextMethod(ContextMethod value) return { this.contextMethod = value; return this; }
 }
 
 /// A `Result` error enum
@@ -568,7 +541,8 @@ void asyncMoveSetter(ContextT)(scope ref ContextT a, scope out ContextT b) @nogc
  +
  + This overload creates a user context, allowing you to make additional data available to the fiber.
  +
- + Please see `AsyncConfig.ContextMethod` to see how to configure the memory location for the user context.
+ + As a technical side note: the user context is stored at the very top of the fiber's stack
+ + which shouldn't cause issues.
  +
  + The `setter` function is responsible for setting up the user context memory to best reflect
  + the given `context`.
@@ -641,22 +615,9 @@ private Result asyncWithContextImpl(EntryPointT, ContextT)(
             (cast(ContextT*)fiberPtr.contextPtr).__xdtor();
     };
 
-    if(config.contextMethod == AsyncConfig.ContextMethod.defaultBySize)
-    {
-        config.contextMethod = AsyncConfig.ContextMethod.endOfStack;
-    }
-
-    final switch(config.contextMethod) with(AsyncConfig.ContextMethod)
-    {
-        case defaultBySize: assert(false);
-
-        case endOfStack:
-            auto slice = fiber.block.fiberStack[0..ContextT.sizeof];
-            auto ptr = &(cast(ContextT[])slice)[0];
-            fiber.contextPtr = ptr;
-            setter(context, *ptr);
-            break;
-    }
+    auto ptr = fiber.rawFiber.makeRoomFor!ContextT();
+    fiber.contextPtr = ptr;
+    setter(context, *ptr);
 
     return Result.noError;
 }

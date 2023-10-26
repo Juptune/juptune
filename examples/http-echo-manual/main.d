@@ -22,7 +22,7 @@ void nogcServer()
         EventLoopConfig()
         .withFiberAllocatorConfig(
             FiberAllocatorConfig()
-            .withBlockStackSize(1024 * 16)
+            .withBlockStackSize(1024 * 9)
         )
     );
     loop.addNoGCThread(() @nogc nothrow {
