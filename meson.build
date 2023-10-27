@@ -33,12 +33,6 @@ event_srcs = files(
     './src/juptune/event/internal/linux.d',
 )
 
-tls_srcs = files(
-    './src/juptune/tls/libcrypto.d',
-    './src/juptune/tls/package.d',
-    './src/juptune/tls/tls13.d',
-)
-
 http_srcs = files(
     './src/juptune/http/package.d',
     './src/juptune/http/uri.d',
@@ -70,18 +64,13 @@ juptune_event_dep = declare_dependency(
     dependencies: [juptune_core_dep],
 )
 
-juptune_tls_dep = declare_dependency(
-    sources: tls_srcs,
+juptune_http_dep = declare_dependency(
+    sources: http_srcs,
     dependencies: [juptune_core_dep, juptune_event_dep],
 )
 
-juptune_http_dep = declare_dependency(
-    sources: http_srcs,
-    dependencies: [juptune_core_dep, juptune_event_dep, juptune_tls_dep],
-)
-
 juptune_all_dep = declare_dependency(
-    dependencies: [juptune_core_dep, juptune_event_dep, juptune_http_dep, juptune_tls_dep],
+    dependencies: [juptune_core_dep, juptune_event_dep, juptune_http_dep],
 )
 
 #### Executables ####
@@ -96,7 +85,6 @@ foreach example_name, example_srcs : examples
         'juptune-'+example_name, 
         example_srcs,
         dependencies: [juptune_all_dep],
-        link_args: ['-lcrypto']
     )
 endforeach
 
@@ -105,7 +93,6 @@ juptune_all_unittest_exe = executable(
     './src/dummy_main.d',
     dependencies: [juptune_all_dep],
     d_unittest: true,
-    link_args: ['-lcrypto']
 )
 
 #### Install ####
@@ -114,10 +101,9 @@ event_asm_lib = library(
     'juptune-event-asm',
     event_asm_srcs,
     install: true,
-    link_args: ['-lcrypto']
 )
 
-install_subdir('src/juptune', install_dir: 'include/d/')
+install_subdir('src/juptune', install_dir: 'include/d/juptune/')
 
 pkgc = import('pkgconfig')
 pkgc.generate(
