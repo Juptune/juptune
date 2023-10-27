@@ -10,7 +10,7 @@ srcs = files(
 
 #### Dependencies ####
 
-juptune_dep = dependency('juptune-dev')
+juptune_dep = dependency('juptune')
 
 dep = declare_dependency(
     include_directories: include_directories('src'),

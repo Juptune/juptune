@@ -1,6 +1,11 @@
 #### Project configuration ####
 
-project('juptune', 'd')
+project(
+    'juptune', 
+    'd',
+    license: 'MPL-2.0',
+    version: '0.0.1'
+)
 
 # Tl;dr Meson has crappy bugs for its basic functionality that will take 200 years to be addressed:
 # https://github.com/mesonbuild/meson/issues/11999
@@ -97,22 +102,15 @@ juptune_all_unittest_exe = executable(
 
 #### Install ####
 
-event_asm_lib = library(
-    'juptune-event-asm',
-    event_asm_srcs,
-    install: true,
-)
-
 install_subdir('src/juptune', install_dir: 'include/d/juptune/')
 
 pkgc = import('pkgconfig')
 pkgc.generate(
-    name: 'juptune-dev',
+    name: meson.project_name(),
     description: 'High-performance iouring-based I/O framework for D - development files.',
     version: meson.project_version(),
     subdirs: 'd/juptune',
     url: 'https://www.github.com/Juptune/juptune',
-    libraries: [event_asm_lib],
 )
 
 #### Tests ####
