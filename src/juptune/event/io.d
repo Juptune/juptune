@@ -926,8 +926,6 @@ private struct PosixGenericIoDriver
         int fd;
     }
 
-    Duration timeout = Duration.zero;
-
     nothrow @nogc:
 
     void wrap(int fd) pure
@@ -960,14 +958,14 @@ private struct PosixGenericIoDriver
         return Result.noError;
     }
 
-    Result send(const(void)[] buffer, scope out size_t bytesSent)
+    Result send(const(void)[] buffer, scope out size_t bytesSent, Duration timeout = Duration.zero)
     {
         auto op = IoUringSend();
         op.fd = this.fd;
         op.buffer = cast(void[])buffer;
 
         IoUringCompletion cqe;
-        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, this.submitConfig());
+        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, SubmitEventConfig().withTimeout(timeout));
         if(submitResult.isError)
             return submitResult;
 
@@ -988,14 +986,14 @@ private struct PosixGenericIoDriver
         return Result.noError;
     }
 
-    Result recieve(void[] buffer, out void[] sliceWithData)
+    Result recieve(void[] buffer, out void[] sliceWithData, Duration timeout = Duration.zero)
     {
         auto op = IoUringRecv();
         op.fd = this.fd;
         op.buffer = buffer;
 
         IoUringCompletion cqe;
-        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, this.submitConfig());
+        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, SubmitEventConfig().withTimeout(timeout));
         if(submitResult.isError)
             return submitResult;
 
@@ -1016,27 +1014,31 @@ private struct PosixGenericIoDriver
         return Result.noError;
     }
 
-    Result writev(scope ref MemoryBlockAllocation buffers, out size_t bytesRead)
+    Result writev(scope ref MemoryBlockAllocation buffers, out size_t bytesRead, Duration timeout = Duration.zero)
     {
-        return this.vectorMBAImpl!IoUringWritev(buffers, bytesRead);
+        return this.vectorMBAImpl!IoUringWritev(buffers, bytesRead, timeout);
     }
 
-    Result writev(scope void[][] buffers, ref size_t bytesRead)
+    Result writev(scope void[][] buffers, ref size_t bytesRead, Duration timeout = Duration.zero)
     {
-        return this.vectorVoidArrayImpl!IoUringWritev(buffers, bytesRead);
+        return this.vectorVoidArrayImpl!IoUringWritev(buffers, bytesRead, timeout);
     }
 
-    Result readv(scope ref MemoryBlockAllocation buffers, out size_t bytesRead)
+    Result readv(scope ref MemoryBlockAllocation buffers, out size_t bytesRead, Duration timeout = Duration.zero)
     {
-        return this.vectorMBAImpl!IoUringReadv(buffers, bytesRead);
+        return this.vectorMBAImpl!IoUringReadv(buffers, bytesRead, timeout);
     }
 
-    Result readv(scope void[][] buffers, ref size_t bytesRead)
+    Result readv(scope void[][] buffers, ref size_t bytesRead, Duration timeout = Duration.zero)
     {
-        return this.vectorVoidArrayImpl!IoUringReadv(buffers, bytesRead);
+        return this.vectorVoidArrayImpl!IoUringReadv(buffers, bytesRead, timeout);
     }
 
-    private Result vectorMBAImpl(alias OpT)(scope ref MemoryBlockAllocation buffers, ref size_t bytesRead)
+    private Result vectorMBAImpl(alias OpT)(
+        scope ref MemoryBlockAllocation buffers, 
+        ref size_t bytesRead, 
+        Duration timeout = Duration.zero
+    )
     {
         return this.vectorIoImpl!OpT((iovecs) @nogc nothrow {
             size_t index;
@@ -1050,10 +1052,14 @@ private struct PosixGenericIoDriver
             }
 
             assert(index == buffers.blockCount);
-        }, buffers.blockCount, bytesRead);
+        }, buffers.blockCount, bytesRead, timeout);
     }
 
-    private Result vectorVoidArrayImpl(alias OpT)(scope void[][] buffers, ref size_t bytesRead)
+    private Result vectorVoidArrayImpl(alias OpT)(
+        scope void[][] buffers, 
+        ref size_t bytesRead, 
+        Duration timeout = Duration.zero
+    )
     {
         return this.vectorIoImpl!OpT((iovecs) @nogc nothrow {
             foreach(i, buffer; buffers)
@@ -1061,13 +1067,14 @@ private struct PosixGenericIoDriver
                 iovecs[i].iov_base = buffer.ptr;
                 iovecs[i].iov_len = buffer.length;
             }
-        }, buffers.length, bytesRead);
+        }, buffers.length, bytesRead, timeout);
     }
 
     private Result vectorIoImpl(alias OpT)(
         scope void delegate(iovec[]) @nogc nothrow setter,
         size_t bufferCount,
         ref size_t bytesUsed,
+        Duration timeout = Duration.zero
     )
     {
         import core.stdc.stdlib : calloc, free;
@@ -1093,7 +1100,7 @@ private struct PosixGenericIoDriver
         op.iovecs = iovecs;
 
         IoUringCompletion cqe;
-        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, this.submitConfig());
+        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, SubmitEventConfig().withTimeout(timeout));
         if(submitResult.isError)
             return submitResult;
 
@@ -1112,11 +1119,6 @@ private struct PosixGenericIoDriver
         assert(cqe.result >= 0);
         bytesUsed = cqe.result;
         return Result.noError;
-    }
-
-    private SubmitEventConfig submitConfig() pure
-    {
-        return SubmitEventConfig().withTimeout(this.timeout);
     }
 }
 
@@ -1298,11 +1300,9 @@ unittest
         size_t bytes;
 
         TcpSocket.makePair(pairs).resultAssert;
-        pairs[0].timeout = 1.msecs;
-        assert(pairs[0].submitConfig().timeout == 1.msecs);
 
-        testResult(pairs[0].readv([buffer[]], bytes));
-        testResult(pairs[0].recieve(buffer[], slice));
+        testResult(pairs[0].readv([buffer[]], bytes, 1.msecs));
+        testResult(pairs[0].recieve(buffer[], slice, 1.msecs));
         // Hard to tests writes currently, as I have no idea how to consistently block the write call.
     });
     loop.join();

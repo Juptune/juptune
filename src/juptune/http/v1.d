@@ -45,6 +45,7 @@ enum Http1Error
     none,
     dataExceedsBuffer,  /// Not enough room in provided buffer to process request
     badTransport,       /// Transport layer error
+    timeout,            /// Timeout during read
 
     badRequestMethod,   /// Issue with request method
     badRequestPath,     /// Issue with request path
@@ -235,10 +236,18 @@ struct Http1MessageSummary
 }
 
 /++
- + Configuration for the Http1Reader.
+ + Configuration for the Http1Reader and Http1Writer.
+ +
+ + The main reason the config is combined is for simplicity, as the reader and writer
+ + are intended to be used together, and thus it makes sense to have a single config struct.
+ +
+ + This is especially apparent for higher level APIs that may not display the distinction between
+ + the reader and writer, and thus would benefit from a unified configuration object.
  + ++/
 struct Http1Config
 {
+    import core.time : Duration;
+
     /++
      + The maximum number of times the reader will attempt to read data from the socket
      + before giving up and returning an error (in certain circumstances).
@@ -253,12 +262,18 @@ struct Http1Config
      +
      + Body data is not included in this check currently, as a better method/heuristic is needed for
      + large bodies.
+     +
+     + This also does not apply to transport layer errors, such as the socket being closed by the client
+     + and I/O timeouts.
      + ++/
     size_t maxReadAttempts = 5;
+
+    Duration readTimeout = Duration.zero; /// The timeout for reading data
 
     @safe @nogc nothrow pure:
 
     Http1Config withMaxReadAttempts(size_t v) return { this.maxReadAttempts = v; return this; }
+    Http1Config withReadTimeout(Duration v) return { this.readTimeout = v; return this; }
 }
 
 /++ 
@@ -910,7 +925,7 @@ struct Http1Reader
             return Result.make(Http1Error.dataExceedsBuffer, response!("422", "when fetching next set of data, the buffer was full")); // @suppress(dscanner.style.long_line)
 
         void[] got;
-        auto result = this._socket.recieve(this._buffer[this._writeCursor..$], got);
+        auto result = this._socket.recieve(this._buffer[this._writeCursor..$], got, this._config.readTimeout);
         if(result.isError)
             return result;
 
@@ -945,7 +960,10 @@ struct Http1Reader
             size_t bytesFetched;
             auto result = this.fetchData(bytesFetched, startCursor);
             if(result.isError)
+            {
+                this.translateReadError(result);
                 return result;
+            }
             if(bytesFetched == 0)
                 return Result.make(Http1Error.dataExceedsBuffer, response!("500", "when reading until a delimiter, 0 bytes were read?")); // @suppress(dscanner.style.long_line)
 
@@ -1000,6 +1018,28 @@ struct Http1Reader
 
             default:
                 return Result.noError;
+        }
+    }
+
+    private void translateReadError(scope ref return Result result)
+    {
+        // TODO: I really think io.d needs to translate some errors instead of relying on this madness.
+        import core.sys.linux.errno : ECANCELED, ETIME;
+        import juptune.event.internal.linux : LinuxError;
+
+        version(linux)
+        if(result.isErrorType!LinuxError)
+        {
+            switch(result.errorCode)
+            {
+                case ECANCELED:
+                case ETIME:
+                    result.changeErrorType(Http1Error.timeout);
+                    result.error = response!("408", "Request timed out during read operation");
+                    return;
+
+                default: break;
+            }
         }
     }
 }
@@ -1542,6 +1582,19 @@ Transfer-Encoding: chunked
             ], 
             "0123456789"
         ),
+
+        T(
+`POST / HTTP/1.1
+Transfer-Encoding: chunked
+
+0
+`,
+            "POST", makePath("/", null, null), Http1Version.http11,
+            [
+                H("transfer-encoding", "chunked"),
+            ], 
+            ""
+        ),
     ];
 
     auto loop = EventLoop(EventLoopConfig());
@@ -1617,6 +1670,27 @@ Transfer-Encoding: chunked
                     assert(summary.connectionClosed);
             }
         }, pairs[1], &asyncMoveSetter!TcpSocket).resultAssert;
+    });
+    loop.join();
+}
+
+@("Http1Reader - timeout")
+unittest
+{
+    import core.time;
+    import juptune.core.util, juptune.event;
+
+    auto loop = EventLoop(EventLoopConfig());
+    loop.addNoGCThread(() @nogc nothrow {
+        TcpSocket[2] pairs;
+        TcpSocket.makePair(pairs).resultAssert;
+
+        ubyte[1] buffer;
+        auto reader = Http1Reader(&pairs[0], buffer[], Http1Config().withReadTimeout(1.msecs));
+
+        Http1RequestLine requestLine;
+        auto result = reader.readRequestLine(requestLine);
+        assert(result.isError(Http1Error.timeout));
     });
     loop.join();
 }

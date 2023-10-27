@@ -48,7 +48,7 @@ enum LinuxError
 alias SignalHandler = void delegate() nothrow shared;
 void linuxSetSignalHandler(int SignalNum)(SignalHandler handler) @nogc nothrow
 {
-    static SignalHandler g_handleForNum;
+    static shared SignalHandler g_handleForNum;
     g_handleForNum = handler; // Ensure we keep a GC-accessible ref to the delegate.
 
     sigaction_t act;

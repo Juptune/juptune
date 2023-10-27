@@ -52,8 +52,7 @@ void nogcServer()
                     auto client = juptuneEventLoopGetContext!TcpSocket;
                     auto block = allocation.head.block;
                     auto outBuffer = allocation.head.next.block; // TODO: This is a hack until the HTTP writer is implemented.
-                    auto reader = Http1Reader(client, block, Http1Config());
-                    client.timeout = 1000.msecs;
+                    auto reader = Http1Reader(client, block, Http1Config().withReadTimeout(1000.msecs));
 
                     size_t cursor;
                     void put(T)(T[] data) @safe @nogc nothrow // TODO: This is a hack until the HTTP writer is implemented.

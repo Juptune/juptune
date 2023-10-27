@@ -128,6 +128,12 @@ struct Result
     {
         return this.errorType == __traits(identifier, T);
     }
+
+    void changeErrorType(T)(T errorCode)
+    {
+        this.errorCode = errorCode;
+        this.errorType = __traits(identifier, T); 
+    }
 }
 
 template then(Funcs...)
