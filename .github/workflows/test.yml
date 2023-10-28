@@ -1,0 +1,32 @@
+name: Test
+
+on:
+  pull_request: 
+  push:
+
+jobs:
+  linux_test:
+    name: Build and Test (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Install Tooling (apt)
+        run: apt update && apt install -y python3-pip yasm
+
+      - name: Install Tooling (pip)
+        run: pip3 install meson ninja
+
+      - name: Install Dlang
+        uses: dlang-community/setup-dlang@v1
+        with:
+          compiler: ldc-latest
+
+      - name: Configure Meson
+        run: meson setup build
+
+      - name: Build
+        run: meson compile -C build
+
+      - name: Test
+        run: meson test -C build
