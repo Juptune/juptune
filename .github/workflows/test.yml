@@ -30,3 +30,11 @@ jobs:
 
       - name: Test
         run: meson test -C build
+
+      - name: Test Install can be used, and generates a working executable
+        run: |
+          meson install -C build
+          cd examples/basic-meson-project
+          meson setup build
+          meson compile -C build
+          ./build/basic-meson-project
