@@ -33,7 +33,8 @@ jobs:
 
       - name: Test Install can be used, and generates a working executable
         run: |
-          sudo /usr/local/bin/meson install -C build
+          mkdir -p /usr/local/include/d/juptune
+          meson install -C build
           cd examples/basic-meson-project
           meson setup build
           meson compile -C build
