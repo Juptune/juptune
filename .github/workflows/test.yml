@@ -33,7 +33,7 @@ jobs:
 
       - name: Test Install can be used, and generates a working executable
         run: |
-          meson install -C build
+          sudo meson install -C build
           cd examples/basic-meson-project
           meson setup build
           meson compile -C build
