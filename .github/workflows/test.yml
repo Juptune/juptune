@@ -23,7 +23,7 @@ jobs:
           compiler: ldc-latest
 
       - name: Configure Meson
-        run: meson setup build --prefix ./install
+        run: meson setup build --prefix $(pwd)/install
 
       - name: Build
         run: meson compile -C build
