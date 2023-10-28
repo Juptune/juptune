@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v2
       
       - name: Install Tooling (apt)
-        run: apt update && apt install -y python3-pip yasm
+        run: sudo apt update && sudo apt install -y python3-pip yasm
 
       - name: Install Tooling (pip)
         run: pip3 install meson ninja
