@@ -34,8 +34,10 @@ jobs:
       - name: Test Install can be used, and generates a working executable
         run: |
           meson install -C build
-          cat ./build/meson-uninstalled/juptune-uninstalled.pc
-          export PKG_CONFIG_PATH=$(pwd)/build/meson-uninstalled
+          cat ./build/meson-private/juptune.pc
+          mkdir tmp
+          mv ./build/meson-private/juptune.pc tmp/
+          export PKG_CONFIG_PATH=$(pwd)/tmp
 
           cd examples/basic-meson-project
           meson setup build
