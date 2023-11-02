@@ -236,7 +236,7 @@ struct RobinHoodHashMapBase(
                 }
 
                 while(this.cursor < this.map.array.length && !this.map.array[this.cursor++].isSet) {}
-                if(this.cursor > this.map.array.length)
+                if(this.cursor >= this.map.array.length)
                 {
                     this.empty = true;
                     return;
@@ -530,13 +530,20 @@ unittest
 }
 
 @("byKeyValue")
-@nogc nothrow
 unittest
 {
+    import std.array : array;
+
     HashMap!(string, int) map;
     map.put("abc", 123);
+    map.put("doe", 456);
 
-    assert(map.byKeyValue.front.key == "abc");
+    auto kvp = map.byKeyValue.array;
+    assert(kvp.length == 2);
+    assert(kvp[0].key == "abc");
+    assert(kvp[0].value == 123);
+    assert(kvp[1].key == "doe");
+    assert(kvp[1].value == 456);
 }
 
 @("String key and value")

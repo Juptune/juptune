@@ -9,7 +9,7 @@ jobs:
     name: Build and Test (Linux)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       
       - name: Install Tooling (apt)
         run: sudo apt update && sudo apt install -y python3-pip yasm
