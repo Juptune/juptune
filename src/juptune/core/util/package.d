@@ -10,4 +10,5 @@ public import
     juptune.core.util.conv,
     juptune.core.util.utf,
     juptune.core.util.result,
+    juptune.core.util.statemachine,
     juptune.core.util.ansi;

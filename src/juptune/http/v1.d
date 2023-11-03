@@ -7,7 +7,7 @@
 module juptune.http.v1;
 
 import juptune.core.ds   : MemoryBlockPoolAllocator, MemoryBlockAllocation;
-import juptune.core.util : Result;
+import juptune.core.util : Result, StateMachineTypes;
 import juptune.event.io  : TcpSocket;
 import juptune.http.uri  : ScopeUri, uriParseNoCopy, UriParseHints;
 
@@ -349,6 +349,12 @@ struct Http1Config
  +  errors are not the same as protocol errors, so the rest of the messages within the HTTP pipeline may be
  +  valid and should still be processed.
  +
+ + Security:
+ +  The reader internally makes use of a type-system-based state machine to help ensure that
+ +  bad state transitions can't occur.
+ +
+ +  See `Http1Config.maxReadAttempts` for a description of a potential DoS vector.
+ +
  + Issues:
  +  The reader is currently in a very early state, and is not yet ready for production use.
  +
@@ -373,6 +379,16 @@ struct Http1Config
  + ++/
 struct Http1Reader 
 {
+    private alias Machine = StateMachineTypes!(State, MessageState);
+    private alias StateMachine = Machine.Static!([
+        Machine.Transition(State.startLine,          State.maybeEndOfHeaders),
+        Machine.Transition(State.headers,            State.maybeEndOfHeaders),
+        Machine.Transition(State.maybeEndOfHeaders,  State.headers),
+        Machine.Transition(State.maybeEndOfHeaders,  State.body),
+        Machine.Transition(State.body,               State.finalise),
+        Machine.Transition(State.finalise,           State.startLine),
+    ]);
+
     private enum State
     {
         FAILSAFE,
@@ -411,7 +427,7 @@ struct Http1Reader
 
         // Current state
         MessageState _message;
-        State _state;
+        StateMachine _state;
 
         // I/O state
         size_t _writeCursor;
@@ -454,7 +470,7 @@ struct Http1Reader
         this._socket = socket;
         this._buffer = buffer;
         this._config = config;
-        this._state  = State.startLine;
+        this._state  = StateMachine(State.startLine);
     }
 
     /// Enforces that all pinned slices have been released.
@@ -497,7 +513,7 @@ struct Http1Reader
      +  that can be sent to the client as-is.
      + ++/
     Result readRequestLine(out scope Http1RequestLine requestLine)
-    in(this._state == State.startLine, "cannot read request line when not in startLine state")
+    in(this._state.mustBeIn(State.startLine))
     {
         ubyte[] slice;
         this._message = MessageState.init;
@@ -546,7 +562,7 @@ struct Http1Reader
 
         requestLine.httpVersion = this._message.httpVersion;
         requestLine.entireLine = Http1PinnedSlice(&this._pinnedSliceIsAlive);
-        this._state = State.maybeEndOfHeaders;
+        this._state.mustTransition!(State.startLine, State.maybeEndOfHeaders)(this._message);
         this._pinCursor = this._readCursor;
         return Result.noError;
     }
@@ -605,7 +621,7 @@ struct Http1Reader
      +  that can be sent to the client as-is.
      + ++/
     Result readHeader(out scope Http1Header header)
-    in(this._state == State.headers, "cannot read header when not in headers state")
+    in(this._state.mustBeIn(State.headers))
     {
         ubyte[] slice;
 
@@ -640,7 +656,7 @@ struct Http1Reader
             return result;
 
         header.entireLine = Http1PinnedSlice(&this._pinnedSliceIsAlive);
-        this._state = State.maybeEndOfHeaders;
+        this._state.mustTransition!(State.headers, State.maybeEndOfHeaders)(this._message);
         this._pinCursor = this._readCursor;
         return Result.noError;
     }
@@ -673,7 +689,7 @@ struct Http1Reader
     alias checkEndOfHeaders = checkEndOfHeadersImpl!false;
     private Result checkEndOfHeadersImpl(bool internal)(out scope bool isEnd)
     in(this._pinCursor == this._readCursor, "pin cursor must be at the read cursor")
-    in(this._state == State.maybeEndOfHeaders || internal, "cannot check end of headers when not in maybeEndOfHeaders state") // @suppress(dscanner.style.long_line)
+    in(internal || this._state.mustBeIn(State.maybeEndOfHeaders))
     {
         // Fast path: if we already have enough data in the buffer we can
         //            skip the readUntil call.
@@ -684,7 +700,7 @@ struct Http1Reader
         {
             this._readCursor += 2;
             this._pinCursor = this._readCursor;
-            this._state = State.body;
+            this._state.mustTransition!(State.maybeEndOfHeaders, State.body)(this._message);
             isEnd = true;
             return Result.noError;
         }
@@ -697,12 +713,12 @@ struct Http1Reader
         if(slice.length == 0) // Reminder: readUntil auto trims \r\n
         {
             this._pinCursor = this._readCursor;
-            this._state = State.body;
+            this._state.mustTransition!(State.maybeEndOfHeaders, State.body)(this._message);
             isEnd = true;
         }
         else
         {
-            this._state = State.headers;
+            this._state.mustTransition!(State.maybeEndOfHeaders, State.headers)(this._message);
             this._readCursor = this._pinCursor;
         }
 
@@ -755,7 +771,7 @@ struct Http1Reader
      +  that can be sent to the client as-is.
      + ++/
     Result readBody(out scope Http1BodyChunk bodyChunk)
-    in(this._state == State.body, "cannot read body when not in body state")
+    in(this._state.mustBeIn(State.body))
     in(this._pinCursor == this._readCursor, "pin cursor must be at the read cursor")
     {
         if(this._message.bodyEncoding & BodyEncoding.hasContentLength)
@@ -766,7 +782,7 @@ struct Http1Reader
         {
             bodyChunk.dataLeft = false;
             bodyChunk.entireChunk = Http1PinnedSlice(&this._pinnedSliceIsAlive);
-            this._state = State.finalise;
+            this._state.mustTransition!(State.body, State.finalise)(this._message);
             return Result.noError;
         }
     }
@@ -790,10 +806,10 @@ struct Http1Reader
      +  that can be sent to the client as-is.
      + ++/
     Result finishMessage(out scope Http1MessageSummary summary)
-    in(this._state == State.finalise, "cannot finish message when not in finalise state")
+    in(this._state.mustBeIn(State.finalise))
     {
         summary = this._message.summary;
-        this._state = State.startLine;
+        this._state.mustTransition!(State.finalise, State.startLine)(this._message);
         return Result.noError;
     }
 
@@ -803,7 +819,7 @@ struct Http1Reader
         if(result.isError)
             return result;
         else if(!chunk.hasDataLeft)
-            this._state = State.finalise;
+            this._state.mustTransition!(State.body, State.finalise)(this._message);
         
         return Result.noError;
     }
@@ -833,7 +849,7 @@ struct Http1Reader
             {
                 chunk.dataLeft = false;
                 chunk.entireChunk = Http1PinnedSlice(&this._pinnedSliceIsAlive);
-                this._state = State.finalise; // TODO: Trailer headers
+                this._state.mustTransition!(State.body, State.finalise)(this._message); // TODO: Trailer headers
                 this._pinCursor = this._readCursor;
                 return Result.noError;
             }
@@ -1165,7 +1181,7 @@ unittest
                 Http1RequestLine requestLine;
                 reader.readRequestLine(requestLine).resultAssert;
 
-                assert(reader._state == Http1Reader.State.maybeEndOfHeaders);
+                reader._state.mustBeIn(Http1Reader.State.maybeEndOfHeaders);
                 assert(reader._message.httpVersion == test.expectedVersion);
                 assert(requestLine.httpVersion == test.expectedVersion);
                 requestLine.access((method, path) {
@@ -1173,7 +1189,7 @@ unittest
                     assert(path == test.expectedPath);
                 });
 
-                reader._state = Http1Reader.State.startLine;
+                reader._state.forceState(Http1Reader.State.startLine);
             }
         }, pairs[1], &asyncMoveSetter!TcpSocket).resultAssert;
     });
@@ -1280,12 +1296,12 @@ unittest
 
             foreach(test; cases)
             {
-                reader._state = Http1Reader.State.headers;
+                reader._state.forceState(Http1Reader.State.headers);
 
                 Http1Header header;
                 reader.readHeader(header).resultAssert;
 
-                assert(reader._state == Http1Reader.State.maybeEndOfHeaders);
+                reader._state.mustBeIn(Http1Reader.State.maybeEndOfHeaders);
                 header.access((name, value) {
                     assert(name == test.expectedName);
                     assert(value == test.expectedValue);
@@ -1344,7 +1360,7 @@ unittest
                 ubyte[64] buffer;
                 Http1Header requestLine;
                 scope reader = Http1Reader(&pair.socket, buffer[], Http1Config());
-                reader._state = Http1Reader.State.headers;
+                reader._state.forceState(Http1Reader.State.headers);
                 auto result = reader.readHeader(requestLine);
                 assert(result.isError(pair.test.expectedError), pair.name);
             }, casePairs[1], &asyncMoveSetter!CasePair).resultAssert;
@@ -1382,7 +1398,7 @@ unittest
             foreach(_; 0..2)
             {
                 bool isEnd;
-                reader._state = Http1Reader.State.maybeEndOfHeaders;
+                reader._state.forceState(Http1Reader.State.maybeEndOfHeaders);
                 reader.checkEndOfHeaders(isEnd).resultAssert;
                 assert(isEnd);
             }
@@ -1411,7 +1427,7 @@ unittest
             auto socket = juptuneEventLoopGetContext!TcpSocket;
             auto reader = Http1Reader(socket, buffer[], Http1Config());
 
-            reader._state = Http1Reader.State.body;
+            reader._state.forceState(Http1Reader.State.body);
             reader._message.bodyEncoding |= Http1Reader.BodyEncoding.hasContentLength;
             reader._message.contentLength = 4;
 
@@ -1446,7 +1462,7 @@ unittest
             auto socket = juptuneEventLoopGetContext!TcpSocket;
             auto reader = Http1Reader(socket, buffer[], Http1Config());
 
-            reader._state = Http1Reader.State.body;
+            reader._state.forceState(Http1Reader.State.body);
             reader._message.bodyEncoding |= Http1Reader.BodyEncoding.hasContentLength;
             reader._message.contentLength = 4;
 
@@ -1503,7 +1519,7 @@ unittest
 
             foreach(test; cases)
             {
-                reader._state = Http1Reader.State.body;
+                reader._state.forceState(Http1Reader.State.body);
                 reader._message = Http1Reader.MessageState.init;
                 reader._message.bodyEncoding |= Http1Reader.BodyEncoding.hasTransferEncoding;
                 reader._message.bodyEncoding |= Http1Reader.BodyEncoding.isChunked;

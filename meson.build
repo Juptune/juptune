@@ -24,6 +24,7 @@ core_srcs = files(
     './src/juptune/core/util/conv.d',
     './src/juptune/core/util/package.d',
     './src/juptune/core/util/result.d',
+    './src/juptune/core/util/statemachine.d',
     './src/juptune/core/util/utf.d',
 )
 
