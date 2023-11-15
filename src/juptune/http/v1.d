@@ -355,6 +355,30 @@ struct Http1Config
     Http1Config withWriteTimeout(Duration v) return { this.writeTimeout = v; return this; }
 }
 
+/++
+ + Configuration for reading a response.
+ +
+ + This is neccessary as the reader does not have context of the overall state of the request/response pipeline,
+ + so certain things must be configured by the user code.
+ + ++/
+struct Http1ReadResponseConfig
+{
+    /++
+     + If set to true, then the response will be forced to be interpreted as a bodyless response,
+     + regardless of what the headers say.
+     +
+     + This is defined in RFC 9112 section 6.3.1. to apply to HEAD requests; 1xx, 204, and 304 responses.
+     +
+     + As the reader lacks context of the overall state of the request/response pipeline, it is up to the
+     + user code to determine if the response is a HEAD response, and to set this flag accordingly.
+     + ++/
+    bool isBodyless = false;
+
+    @safe @nogc nothrow pure:
+
+    Http1ReadResponseConfig withIsBodyless(bool v) return { this.isBodyless = v; return this; }
+}
+
 /++ 
  + A low-level reader for the HTTP/1.0 and HTTP/1.1 protocols, operating
  + directly on a socket.
@@ -440,8 +464,6 @@ struct Http1Config
  +  The current API is especially volatile and has no stability guarantees, as quite a lot of functionality
  +  is still missing or not yet exposed.
  +
- +  Only request parsing is currently implemented. Responses are not yet implemented.
- +
  +  The reader currently does not support any form of compression.
  +
  +  The reader is not very extenstively tested.
@@ -464,7 +486,11 @@ struct Http1Reader
         Machine.Transition(State.headers,            State.maybeEndOfHeaders),
         Machine.Transition(State.maybeEndOfHeaders,  State.headers),
         Machine.Transition(State.maybeEndOfHeaders,  State.body),
-        Machine.Transition(State.body,               State.finalise),
+        Machine.Transition(State.body,               State.maybeEndOfTrailers, (ref state) => !state.isRequest),
+        Machine.Transition(State.body,               State.finalise, (ref state) => state.isRequest),
+        Machine.Transition(State.trailers,           State.maybeEndOfTrailers),
+        Machine.Transition(State.maybeEndOfTrailers, State.trailers),
+        Machine.Transition(State.maybeEndOfTrailers, State.finalise),
         Machine.Transition(State.finalise,           State.startLine),
     ]);
 
@@ -475,6 +501,8 @@ struct Http1Reader
         headers,
         maybeEndOfHeaders,
         body,
+        trailers,
+        maybeEndOfTrailers,
         finalise,
     }
 
@@ -660,14 +688,13 @@ struct Http1Reader
      +  After this function is called, the reader will be in the `maybeEndOfHeaders` state.
      +
      + Notes:
-     +  Under certain circumstances (such as `isBodyless` being `true`) the reader will act as if
+     +  Under certain circumstances (such as `config.isBodyless` being `true`) the reader will act as if
      +  the response has no body, regardless of whatever the headers may suggest. You must still
      +  call `readBody` to follow the correct state transitions.
      +
      + Params:
      +  responseLine = Stores the response line data.
-     +  isBodyless   = Force that the response is bodyless. This is must be set if reading a response
-     +                 to a HEAD request.
+     +  config       = The configuration for reading in this response.
      +
      + Throws:
      +  If an error occurs, the reader will be in an invalid state and should not be used again.
@@ -689,7 +716,10 @@ struct Http1Reader
      + Returns:
      +  A `Result` describing if an error ocurred. Any `Http1Error` will contain a valid HTTP error response
      + ++/
-    Result readResponseLine(out scope Http1ResponseLine responseLine, bool isBodyless = false)
+    Result readResponseLine(
+        out scope Http1ResponseLine responseLine, 
+        Http1ReadResponseConfig responseConfig = Http1ReadResponseConfig.init
+    )
     {
         ubyte[] slice;
         this._message = MessageState.init;
@@ -729,7 +759,7 @@ struct Http1Reader
             (responseLine.statusCode >= 100 && responseLine.statusCode <= 199)
             || responseLine.statusCode == 204
             || responseLine.statusCode == 304
-            || isBodyless
+            || responseConfig.isBodyless
         )
         {
             this._message.isBodyless = true;
@@ -805,8 +835,13 @@ struct Http1Reader
      +  A `Result` describing if an error ocurred. Any `Http1Error` will contain a valid HTTP error response
      +  that can be sent to the client as-is.
      + ++/
-    Result readHeader(out scope Http1Header header)
-    in(this._state.mustBeIn(State.headers))
+    alias readHeader = readHeaderImpl!false;
+
+    /// Ditto.
+    alias readTrailer = readHeaderImpl!true;
+
+    private Result readHeaderImpl(bool trailers)(out scope Http1Header header)
+    in((!trailers && this._state.mustBeIn(State.headers)) || (trailers && this._state.mustBeIn(State.trailers)))
     {
         ubyte[] slice;
 
@@ -839,13 +874,21 @@ struct Http1Reader
             return Result.make(Http1Error.badHeaderValue, response!("400", "Invalid header value"));
         
         // Handle special headers
-        result = this.processHeader(header);
-        if(result.isError)
-            return result;
+        static if(!trailers) // TODO: Should really do some special trailers-only validation here, but I cba right now.
+        {
+            result = this.processHeader(header);
+            if(result.isError)
+                return result;
+        }
 
         header.entireLine = Http1PinnedSlice(&this._pinnedSliceIsAlive);
-        this._state.mustTransition!(State.headers, State.maybeEndOfHeaders)(this._message);
         this._pinCursor = this._readCursor;
+
+        static if(trailers)
+            this._state.mustTransition!(State.trailers, State.maybeEndOfTrailers)(this._message);
+        else
+            this._state.mustTransition!(State.headers, State.maybeEndOfHeaders)(this._message);
+        
         return Result.noError;
     }
 
@@ -874,18 +917,49 @@ struct Http1Reader
      +  A `Result` describing if an error ocurred. Any `Http1Error` will contain a valid HTTP error response
      +  that can be sent to the client as-is.
      + ++/
-    alias checkEndOfHeaders = checkEndOfHeadersImpl!false;
-    private Result checkEndOfHeadersImpl(bool internal)(out scope bool isEnd)
+    alias checkEndOfHeaders = checkEndOfHeadersImpl!(false, false);
+
+    /// ditto.
+    alias checkEndOfTrailers = checkEndOfHeadersImpl!(false, true);
+
+    private Result checkEndOfHeadersImpl(bool internal, bool trailers)(out scope bool isEnd)
     in(this._pinCursor == this._readCursor, "pin cursor must be at the read cursor")
-    in(internal || this._state.mustBeIn(State.maybeEndOfHeaders))
+    in(internal || (!trailers && this._state.mustBeIn(State.maybeEndOfHeaders)) || (trailers && this._state.mustBeIn(State.maybeEndOfTrailers))) // @suppress(dscanner.style.long_line)
     {
-        scope(exit)
+        static if(trailers)
         {
-            // RFC 9112 section 6.3.1
-            if(this._state.isIn(State.body) && this._message.isBodyless)
+            enum FROM     = State.maybeEndOfTrailers;
+            enum TO       = State.finalise;
+            enum CONTINUE = State.trailers;
+        }
+        else
+        {
+            enum FROM     = State.maybeEndOfHeaders;
+            enum TO       = State.body;
+            enum CONTINUE = State.headers;
+        }
+
+        static if(!internal)
+        {
+            static if(!trailers) scope(exit)
             {
-                this._message.bodyEncoding = BodyEncoding.hasContentLength;
-                this._message.contentLength = 0;
+                // RFC 9112 section 6.3.1
+                if(this._state.isIn(State.body) && this._message.isBodyless)
+                {
+                    this._message.bodyEncoding = BodyEncoding.hasContentLength;
+                    this._message.contentLength = 0;
+                }
+            }
+            else
+            {
+                // Since we always transition into this state for responses, even when it's not
+                // a chunked response, we need to check if we're actually in a chunked response otherwise emulate things.
+                if(!(this._message.bodyEncoding & BodyEncoding.isChunked))
+                {
+                    isEnd = true;
+                    this._state.mustTransition!(FROM, TO)(this._message);
+                    return Result.noError;
+                }
             }
         }
 
@@ -898,7 +972,7 @@ struct Http1Reader
         {
             this._readCursor += 2;
             this._pinCursor = this._readCursor;
-            this._state.mustTransition!(State.maybeEndOfHeaders, State.body)(this._message);
+            static if(!internal) this._state.mustTransition!(FROM, TO)(this._message);
             isEnd = true;
             return Result.noError;
         }
@@ -911,12 +985,12 @@ struct Http1Reader
         if(slice.length == 0) // Reminder: readUntil auto trims \r\n
         {
             this._pinCursor = this._readCursor;
-            this._state.mustTransition!(State.maybeEndOfHeaders, State.body)(this._message);
+            static if(!internal) this._state.mustTransition!(FROM, TO)(this._message);
             isEnd = true;
         }
         else
         {
-            this._state.mustTransition!(State.maybeEndOfHeaders, State.headers)(this._message);
+            static if(!internal) this._state.mustTransition!(FROM, CONTINUE)(this._message);
             this._readCursor = this._pinCursor;
         }
 
@@ -929,8 +1003,13 @@ struct Http1Reader
      + State:
      +  This function must be called when the reader is in the `body` state.
      +
+     +  [Requests Only]
      +  After this function is called, the reader will be in the `body` state if there's more data to read,
      +  or the `finalise` state if there's no more data to read.
+     +
+     +  [Responses Only]
+     +  After this function is called, the reader will be in the `body` state if there's more data to read,
+     +  or the `maybeEndOfTrailers` state if there's no more data to read.
      +
      + Notes:
      +  This is intended to be a helper function used to read body data in a unified way, 
@@ -947,6 +1026,9 @@ struct Http1Reader
      +
      +  If the body is chunked, a small quirk is that the reader will return an empty data slice
      +  when the "empty marker" chunk is reached, and only the next read will return `false` for `hasDataLeft`.
+     +
+     +  In order to simplify the user code, the reader will always transition responses to the `maybeEndOfTrailers`
+     +  state, even if the response is not using chunked transfer-encoding.
      +
      + Params:
      +  bodyChunk = Stores the body chunk data.
@@ -980,7 +1062,10 @@ struct Http1Reader
         {
             bodyChunk.dataLeft = false;
             bodyChunk.entireChunk = Http1PinnedSlice(&this._pinnedSliceIsAlive);
-            this._state.mustTransition!(State.body, State.finalise)(this._message);
+            if(this._message.isRequest)
+                this._state.mustTransition!(State.body, State.finalise)(this._message);
+            else
+                this._state.mustTransition!(State.body, State.maybeEndOfTrailers)(this._message);
             return Result.noError;
         }
     }
@@ -1017,7 +1102,12 @@ struct Http1Reader
         if(result.isError)
             return result;
         else if(!chunk.hasDataLeft)
-            this._state.mustTransition!(State.body, State.finalise)(this._message);
+        {
+            if(this._message.isRequest)
+                this._state.mustTransition!(State.body, State.finalise)(this._message);
+            else
+                this._state.mustTransition!(State.body, State.maybeEndOfTrailers)(this._message);
+        }
         
         return Result.noError;
     }
@@ -1032,7 +1122,7 @@ struct Http1Reader
             if(this._message.hasReadFirstChunk)
             {
                 bool isEnd;
-                auto result = this.checkEndOfHeadersImpl!true(isEnd);
+                auto result = this.checkEndOfHeadersImpl!(true, false)(isEnd);
                 if(result.isError)
                     return result;
                 else if(!isEnd)
@@ -1045,9 +1135,24 @@ struct Http1Reader
 
             if(this._message.contentLength == 0)
             {
+                if(this._message.isRequest)
+                {
+                    // Requests can't have trailers, so we can just look for the final CRLF here.
+                    bool isEnd;
+                    result = this.checkEndOfHeadersImpl!(true, false)(isEnd);
+                    if(result.isError)
+                        return result;
+                    else if(!isEnd)
+                        return Result.make(Http1Error.badBodyChunk, response!("400", "Client sent an invalid terminator chunk - expected additional CRLF due to lack of trailers")); // @suppress(dscanner.style.long_line)
+                    
+                    this._state.mustTransition!(State.body, State.finalise)(this._message);
+                }
+                else
+                {
+                    this._state.mustTransition!(State.body, State.maybeEndOfTrailers)(this._message);
+                }
                 chunk.dataLeft = false;
                 chunk.entireChunk = Http1PinnedSlice(&this._pinnedSliceIsAlive);
-                this._state.mustTransition!(State.body, State.finalise)(this._message); // TODO: Trailer headers
                 this._pinCursor = this._readCursor;
                 return Result.noError;
             }
@@ -2246,9 +2351,9 @@ unittest
     }
 
     static T[] cases = [
-        T("0\r\n", ""),
-        T("8\r\n01234567\r\n0\r\n", "01234567"),
-        T("10\r\n0123456789\r\n10\r\nabcdefghij\r\n0\r\n", "0123456789abcdefghij"),
+        T("0\r\n\r\n", ""),
+        T("8\r\n01234567\r\n0\r\n\r\n", "01234567"),
+        T("10\r\n0123456789\r\n10\r\nabcdefghij\r\n0\r\n\r\n", "0123456789abcdefghij"),
     ];
 
     auto loop = EventLoop(EventLoopConfig());
@@ -2271,6 +2376,7 @@ unittest
             {
                 reader._state.forceState(Http1Reader.State.body);
                 reader._message = Http1Reader.MessageState.init;
+                reader._message.isRequest = true;
                 reader._message.bodyEncoding |= Http1Reader.BodyEncoding.hasTransferEncoding;
                 reader._message.bodyEncoding |= Http1Reader.BodyEncoding.isChunked;
 
@@ -2341,6 +2447,7 @@ Transfer-Encoding: chunked
 5
 56789
 0
+
 `,
             "POST", makePath("/", null, null), Http1Version.http10,
             [
@@ -2354,6 +2461,7 @@ Transfer-Encoding: chunked
 Transfer-Encoding: chunked
 
 0
+
 `,
             "POST", makePath("/", null, null), Http1Version.http11,
             [
@@ -2459,6 +2567,7 @@ unittest
         string expectedReasonPhrase;
         H[] expectedHeaders;
         string expectedBody;
+        H[] expectedTrailers;
     }
 
     static T[] cases = [
@@ -2473,7 +2582,61 @@ Content-Type: text/plain
                 H("content-length", "4"),
                 H("content-type", "text/plain"),
             ], 
-            "1234"
+            "1234",
+            []
+        ),
+
+        T(
+`HTTP/1.1 200 OK
+Transfer-Encoding: chunked
+
+0
+
+`,
+            Http1Version.http11, 200, "OK",
+            [
+                H("transfer-encoding", "chunked"),
+            ], 
+            "",
+            []
+        ),
+
+        T(
+`HTTP/1.1 200 OK
+Transfer-Encoding: chunked
+
+0
+X-Some-Trailer: yes
+
+`,
+            Http1Version.http11, 200, "OK",
+            [
+                H("transfer-encoding", "chunked"),
+            ], 
+            "",
+            [
+                H("x-some-trailer", "yes"),
+            ]
+        ),
+
+        T(
+`HTTP/1.1 200 OK
+Transfer-Encoding: chunked
+
+0
+X-Some-Trailer: yes
+X-Please: don't crash
+
+`,
+            Http1Version.http11, 200, "OK",
+            [
+                H("transfer-encoding", "chunked"),
+            ], 
+            "",
+            [
+                H("x-some-trailer", "yes"),
+                H("x-please", "don't crash"),
+            ]
         ),
 
         // Keep last - it leaves data in the socket we currently don't skip past.
@@ -2486,7 +2649,8 @@ Because this is a 1xx response, the reader should force treat this as bodyless`,
             [
                 H("content-length", "512"),
             ],
-            ""
+            "",
+            []
         ),
     ];
 
@@ -2553,6 +2717,27 @@ Because this is a 1xx response, the reader should force treat this as bodyless`,
                 }
                 assert(totalRead == test.expectedBody.length);
                 assert(!bodyChunk.hasDataLeft);
+
+                bool endOfTrailers;
+                reader.checkEndOfTrailers(endOfTrailers).resultAssert;
+                while(!endOfTrailers)
+                {
+                    Http1Header header;
+                    reader.readTrailer(header).resultAssert;
+                    header.access((name, value) {
+                        foreach(expected; test.expectedTrailers)
+                        {
+                            if(name == expected.name)
+                            {
+                                assert(value == expected.value);
+                                return;
+                            }
+                        }
+                        assert(false, "trailer not found");
+                    });
+                    header = Http1Header.init;
+                    reader.checkEndOfTrailers(endOfTrailers).resultAssert;
+                }
 
                 Http1MessageSummary summary;
                 reader.finishMessage(summary).resultAssert;
