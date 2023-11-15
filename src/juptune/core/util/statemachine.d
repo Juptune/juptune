@@ -135,6 +135,11 @@ struct StateMachineStatic(
         return true;
     }
 
+    bool isIn(StateEnum state)
+    {
+        return this.state == state;
+    }
+
     version(unittest) void forceState(StateEnum state)
     {
         this.state = state;

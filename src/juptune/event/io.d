@@ -764,12 +764,12 @@ struct GenericIoDriver
      + Returns:
      +  A `Result`
      + ++/
-    Result put(const(void)[] buffer) @nogc
+    Result put(const(void)[] buffer, Duration timeout = Duration.zero) @nogc
     {
         while(buffer.length > 0)
         {
             size_t bytesSent;
-            auto result = this._driver.send(buffer, bytesSent);
+            auto result = this._driver.send(buffer, bytesSent, timeout);
             if(result.isError)
                 return result;
             buffer = buffer[bytesSent..$];
@@ -794,12 +794,12 @@ struct GenericIoDriver
      + Returns:
      +  A `Result`
      + ++/
-    Result put(RangeT)(scope RangeT range)
+    Result put(RangeT)(scope RangeT range, Duration timeout = Duration.zero)
     if(is(ElementEncodingType!RangeT : const(T)[], T) && !is(RangeT : const(void)[]))
     {
         while(!range.empty)
         {
-            auto result = this.put(range.front);
+            auto result = this.put(range.front, timeout);
             if(result.isError)
                 return result;
             range.popFront();
@@ -869,7 +869,8 @@ struct GenericIoDriver
     private Result readAllImpl(BufferT, GrowFuncT)(
         scope ref BufferT buffer,
         size_t cursor = 0,
-        scope GrowFuncT growFunc = null
+        scope GrowFuncT growFunc = null,
+        Duration timeout = Duration.zero
     )
     {
         if(growFunc is null)
@@ -896,7 +897,7 @@ struct GenericIoDriver
             }
 
             void[] inSlice;
-            auto result = this._driver.recieve(buffer[cursor..$], inSlice);
+            auto result = this._driver.recieve(buffer[cursor..$], inSlice, timeout);
             if(result.isError)
                 return result;
             else if(inSlice.length == 0 || inSlice.length < (buffer.length - cursor))

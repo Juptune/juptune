@@ -83,7 +83,7 @@ juptune_all_dep = declare_dependency(
 
 examples = {
     'http-hello-world-hardcoded': ['./examples/http-hello-world-hardcoded/main.d'],
-    'http-echo-manual': ['./examples/http-echo-manual/main.d'],
+    'http-echo-low-level': ['./examples/http-echo-low-level/main.d'],
 }
 
 foreach example_name, example_srcs : examples
@@ -104,14 +104,21 @@ juptune_all_unittest_exe = executable(
 #### Install ####
 
 install_subdir('src/juptune', install_dir: 'include/d/juptune/')
+juptune_lib = library(
+    meson.project_name(), 
+    dependencies: juptune_all_dep,
+    install: true,
+    version: meson.project_version(),
+)
 
 pkgc = import('pkgconfig')
 pkgc.generate(
     name: meson.project_name(),
-    description: 'High-performance iouring-based I/O framework for D - development files.',
+    description: 'High-performance iouring-based I/O framework for D.',
     version: meson.project_version(),
     subdirs: 'd/juptune',
     url: 'https://www.github.com/Juptune/juptune',
+    libraries: [juptune_lib],
 )
 
 #### Tests ####

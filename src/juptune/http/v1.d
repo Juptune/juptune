@@ -9,25 +9,63 @@ module juptune.http.v1;
 import juptune.core.ds   : MemoryBlockPoolAllocator, MemoryBlockAllocation;
 import juptune.core.util : Result, StateMachineTypes;
 import juptune.event.io  : TcpSocket;
-import juptune.http.uri  : ScopeUri, uriParseNoCopy, UriParseHints;
+import juptune.http.uri  : ScopeUri, uriParseNoCopy, UriParseHints, UriParseRules;
 
-private enum INVALID_HEADER_CHAR = 0xFF;
-private immutable ubyte[256] g_headerNormaliseTable = (){
-    ubyte[256] table;
-    table[] = INVALID_HEADER_CHAR;
+private 
+{
+    enum INVALID_HEADER_CHAR = 0xFF;
+    
+    enum Rfc9110CharType
+    {
+        VCHAR                   = 1 << 0,
+        TCHAR                   = 1 << 1,
+        MIDDLE_OF_HEADER_VALUE  = 1 << 2,
+        MIDDLE_OF_HEADER_MASK   = VCHAR | MIDDLE_OF_HEADER_VALUE,
+    }
+    
+    immutable g_headerNormaliseTable = (){
+        ubyte[256] table;
+        table[] = INVALID_HEADER_CHAR;
 
-    foreach(ch; 'A'..'Z')
-        table[ch] = cast(ubyte)((ch - 'A') + 'a');
+        foreach(ch; 'A'..'Z')
+            table[ch] = cast(ubyte)((ch - 'A') + 'a');
 
-    foreach(ch; 'a'..'z')
-        table[ch] = cast(ubyte)ch;
+        foreach(ch; 'a'..'z')
+            table[ch] = cast(ubyte)ch;
 
-    foreach(ch; '0'..'9')
-        table[ch] = cast(ubyte)ch;
+        foreach(ch; '0'..'9')
+            table[ch] = cast(ubyte)ch;
 
-    table['-'] = '-';
-    return table;
-}();
+        table['-'] = '-';
+        return table;
+    }();
+
+    immutable g_rfc9110CharType = (){
+        Rfc9110CharType[256] table;
+
+        with(Rfc9110CharType)
+        {
+            foreach(ch; 'a'..'z'+1)
+                table[ch] = VCHAR | TCHAR;
+            foreach(ch; 'A'..'Z'+1)
+                table[ch] = VCHAR | TCHAR;
+            foreach(ch; '0'..'9'+1)
+                table[ch] = VCHAR | TCHAR;
+            foreach(ch; ['!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'])
+                table[ch] = VCHAR | TCHAR;
+            
+            // VCHAR only
+            foreach(ch; ['"', '(', ')', '[', ']', '{', '}', ',', '/', ':', ';', '<', '=', '>', '?', '@', '\\'])
+                table[ch] = VCHAR;
+
+            // MIDDLE_OF_HEADER_VALUE
+            foreach(ch; [' ', '\t'])
+                table[ch] = MIDDLE_OF_HEADER_VALUE;
+        }
+
+        return table;
+    }();
+}
 
 private enum response(string status, string msg) = "HTTP/1.1 "~status~" "~msg~"\r\n\r\n";
 
@@ -52,6 +90,7 @@ enum Http1Error
     badRequestVersion,  /// Issue with request version
 
     badHeaderName,      /// Issue with header name
+    badHeaderValue,     /// Issue with header value
     badLengthHeader,    /// Issue with content-length and transfer-encoding headers
 
     badBodyChunk,       /// Issue with a chunk in a chunked body
@@ -268,12 +307,14 @@ struct Http1Config
      + ++/
     size_t maxReadAttempts = 5;
 
-    Duration readTimeout = Duration.zero; /// The timeout for reading data
+    Duration writeTimeout = Duration.zero; /// The default timeout for writing data
+    Duration readTimeout = Duration.zero; /// The default timeout for reading data
 
     @safe @nogc nothrow pure:
 
     Http1Config withMaxReadAttempts(size_t v) return { this.maxReadAttempts = v; return this; }
     Http1Config withReadTimeout(Duration v) return { this.readTimeout = v; return this; }
+    Http1Config withWriteTimeout(Duration v) return { this.writeTimeout = v; return this; }
 }
 
 /++ 
@@ -527,6 +568,9 @@ struct Http1Reader
             return Result.make(Http1Error.badRequestMethod, response!("400", "Empty method in request line"));
         requestLine.method = cast(char[])slice[0..$];
 
+        if(!requestLine.method.isHttp1Token())
+            return Result.make(Http1Error.badRequestMethod, response!("400", "Invalid method in request line"));
+
         // Path
         result = this.readUntil!' '(slice);
         if(result.isError)
@@ -608,6 +652,8 @@ struct Http1Reader
      +
      +  `Http1Error.badHeaderName` if the header name is missing or invalid.
      +
+     +  `Http1Error.badHeaderValue` if the header value is missing or invalid.
+     +
      +  `Http1Error.badLengthHeader` if the header is a content-length or transfer-encoding header when another
      +  header of the same type has already been read.
      +
@@ -649,6 +695,9 @@ struct Http1Reader
         while(end > start && slice[end-1] == ' ')
             end--;
         header.value = cast(char[])slice[start..end];
+
+        if(!header.value.isHttp1HeaderValue())
+            return Result.make(Http1Error.badHeaderValue, response!("400", "Invalid header value"));
         
         // Handle special headers
         result = this.processHeader(header);
@@ -1060,6 +1109,407 @@ struct Http1Reader
     }
 }
 
+struct Http1Writer
+{
+    private alias Machine = StateMachineTypes!(State, MessageState);
+    private alias StateMachine = Machine.Static!([
+        Machine.Transition(State.startLine, State.headers),
+        Machine.Transition(State.headers,   State.body),
+        Machine.Transition(State.body,      State.finalise),
+        Machine.Transition(State.finalise,  State.startLine),
+    ]);
+
+    private enum State
+    {
+        FAILSAFE,
+        startLine,
+        headers,
+        body,
+        finalise,
+    }
+
+    private enum BodyEncoding
+    {
+        FAILSAFE,
+        hasContentLength    = 1 << 0,
+        isChunked           = 1 << 1,
+        hasTransferEncoding = 1 << 2,
+    }
+
+    private static struct MessageState
+    {
+        Http1Version httpVersion;
+        Http1MessageSummary summary;
+        BodyEncoding bodyEncoding;
+        bool isRequest;
+        size_t contentLength;
+    }
+
+    private @nogc nothrow
+    {
+        // General state
+        Http1Config _config;
+        TcpSocket* _socket;
+        ubyte[] _buffer;
+
+        // Current state
+        MessageState _message;
+        StateMachine _state;
+
+        // I/O state
+        size_t _writeCursor;
+
+        invariant(_writeCursor <= _buffer.length);
+    }
+    
+    @disable this(this);
+
+    @nogc nothrow:
+
+    this(TcpSocket* socket, ubyte[] buffer, Http1Config config)
+    in(socket !is null, "socket cannot be null")
+    {
+        this._socket = socket;
+        this._buffer = buffer;
+        this._config = config;
+        this._state  = StateMachine(State.startLine);
+    }
+
+    Result putResultResponse(Result result)
+    in(this._state.mustBeIn(State.startLine))
+    in(result.isErrorType!Http1Error, "Only Http1Error results are supported as they contain a premade HTTP response")
+    in(this._writeCursor == 0, "bug: Unflushed data? Requests must be flushed upon completion, so this shouldnt happen")
+    {
+        return this._socket.put(result.error);
+    }
+
+    Result putRequestLine(scope const char[] method, scope const char[] path, Http1Version httpVersion)
+    in(this._state.mustBeIn(State.startLine))
+    in(this._writeCursor == 0, "bug: Unflushed data? Requests must be flushed upon completion, so this shouldnt happen")
+    {
+        this._message = MessageState.init;
+        this._message.isRequest = true;
+        this._message.httpVersion = httpVersion;
+
+        if(!method.isHttp1Token())
+            return Result.make(Http1Error.badRequestMethod, response!("500", "Invalid method provided when writing request line")); // @suppress(dscanner.style.long_line)
+        if(!http1IsPathValidForMethod(method, path))
+            return Result.make(Http1Error.badRequestPath, response!("500", "Path is either invalid or not supported for selected method when writing request line")); // @suppress(dscanner.style.long_line // @suppress(dscanner.style.long_line)
+
+        auto result = this.bufferedWrite(method);
+        if(result.isError)
+            return result;
+
+        result = this.bufferedWrite(" ");
+        if(result.isError)
+            return result;
+
+        result = this.bufferedWrite(path);
+        if(result.isError)
+            return result;
+
+        result = this.bufferedWrite(" ");
+        if(result.isError)
+            return result;
+
+        switch(httpVersion)
+        {
+            case Http1Version.http10:
+                result = this.bufferedWrite("HTTP/1.0\r\n");
+                break;
+            case Http1Version.http11:
+                result = this.bufferedWrite("HTTP/1.1\r\n");
+                break;
+            default:
+                return Result.make(Http1Error.badRequestVersion, response!("500", "Unsupported http version provided when writing request line")); // @suppress(dscanner.style.long_line)
+        }
+        if(result.isError)
+            return result;
+
+        this._state.mustTransition!(State.startLine, State.headers)(this._message);
+        return Result.noError;
+    }
+
+    Result putResponseLine(Http1Version httpVersion, uint statusCode, scope const char[] reason)
+    in(this._state.mustBeIn(State.startLine))
+    {
+        this._message = MessageState.init;
+        this._message.httpVersion = httpVersion;
+
+        // TODO: Validate reason
+
+        Result result = Result.noError;
+
+        switch(httpVersion)
+        {
+            case Http1Version.http10:
+                result = this.bufferedWrite("HTTP/1.0 ");
+                break;
+            case Http1Version.http11:
+                result = this.bufferedWrite("HTTP/1.1 ");
+                break;
+            default:
+                return Result.make(Http1Error.badRequestVersion, response!("500", "Unsupported http version provided when writing response line")); // @suppress(dscanner.style.long_line)
+        }
+        if(result.isError)
+            return result;
+
+        import juptune.core.util.conv : IntToCharBuffer, toBase10;
+        IntToCharBuffer buffer;
+        auto statusCodeStr = toBase10(statusCode, buffer);
+        result = this.bufferedWrite(statusCodeStr);
+        if(result.isError)
+            return result;
+
+        result = this.bufferedWrite(" ");
+        if(result.isError)
+            return result;
+
+        result = this.bufferedWrite(reason);
+        if(result.isError)
+            return result;
+
+        result = this.bufferedWrite("\r\n");
+        if(result.isError)
+            return result;
+
+        this._state.mustTransition!(State.startLine, State.headers)(this._message);
+        return Result.noError;
+    }
+
+    Result putHeader(scope const char[] name, scope const char[] value)
+    in(this._state.mustBeIn(State.headers))
+    {
+        if(!value.isHttp1HeaderValue())
+            return Result.make(Http1Error.badHeaderValue, response!("500", "Invalid header value provided when writing header")); // @suppress(dscanner.style.long_line)
+
+        const(char)[] bufferedName;
+        auto result = this.bufferHeaderName(name, bufferedName);
+        if(result.isError)
+            return result;
+
+        result = this.processHeader(bufferedName, value);
+        if(result.isError)
+            return result;
+
+        result = this.bufferedWrite(": ");
+        if(result.isError)
+            return result;
+
+        result = this.bufferedWrite(value);
+        if(result.isError)
+            return result;
+
+        result = this.bufferedWrite("\r\n");
+        if(result.isError)
+            return result;
+
+        return Result.noError;
+    }
+
+    Result finishHeaders()
+    in(this._state.mustBeIn(State.headers))
+    {
+        auto result = this.bufferedWrite("\r\n");
+        if(result.isError)
+            return result;
+        
+        this._state.mustTransition!(State.headers, State.body)(this._message);
+        return Result.noError;
+    }
+
+    Result putBody(scope const void[] data)
+    in(this._state.mustBeIn(State.body))
+    {
+        if(this._message.bodyEncoding & BodyEncoding.hasContentLength)
+            return this.putBodyContentLength(data);
+        else if(this._message.bodyEncoding & BodyEncoding.isChunked)
+            return this.putBodyChunked(data);
+        else
+            return Result.make(Http1Error.badTransport, response!("500", "Attempted to write body data when encoding style hasn't been selected")); // @suppress(dscanner.style.long_line)
+    }
+
+    Result finishMessage(scope out Http1MessageSummary summary)
+    {
+        if(this._state.isIn(State.body))
+        {
+            if((this._message.bodyEncoding & BodyEncoding.hasContentLength) && this._message.contentLength > 0)
+                return Result.make(Http1Error.badTransport, response!("500", "Attempted to finish message when content-length bytes has not been fully written to body")); // @suppress(dscanner.style.long_line)
+            this._state.mustTransition!(State.body, State.finalise)(this._message);
+        }
+        this._state.mustBeIn(State.finalise);
+
+        if(this._message.bodyEncoding & BodyEncoding.isChunked)
+        {
+            auto result = this.bufferedWrite("0\r\n\r\n");
+            if(result.isError)
+                return result;
+        }
+
+        auto result = this.flush();
+        if(result.isError)
+            return result;
+
+        summary = this._message.summary;
+        this._state.mustTransition!(State.finalise, State.startLine)(this._message);
+        return Result.noError;
+    }
+
+    private Result putBodyContentLength(scope const void[] data)
+    {
+        if(data.length > this._message.contentLength)
+            return Result.make(Http1Error.badTransport, response!("500", "Attempted to write more body data than the content-length header specified")); // @suppress(dscanner.style.long_line)
+
+        auto result = this.bufferedWrite(data);
+        if(result.isError)
+            return result;
+
+        this._message.contentLength -= data.length;
+        if(this._message.contentLength == 0)
+            this._state.mustTransition!(State.body, State.finalise)(this._message);
+
+        return Result.noError;
+    }
+
+    private Result putBodyChunked(scope const void[] data)
+    {
+        if(data.length == 0)
+            return Result.noError;
+
+        import juptune.core.util.conv : toBase16, IntToHexCharBuffer;
+        IntToHexCharBuffer buffer;
+        auto hex = toBase16(data.length, buffer);
+        // HACK: toBase16 is purely designed to create a human readable string
+        //       in the form `0x00001234`, but we need to remove the `0x0000` prefix
+        //
+        //       A proper solution is to implement a better toBase16 function, but
+        //       this will do for now.
+        hex = hex[2..$]; // Remove the `0x` prefix
+        while(hex.length > 0 && hex[0] == '0')
+            hex = hex[1..$];
+
+        auto result = this.bufferedWrite(hex);
+        if(result.isError)
+            return result;
+
+        result = this.bufferedWrite("\r\n");
+        if(result.isError)
+            return result;
+
+        result = this.bufferedWrite(data);
+        if(result.isError)
+            return result;
+
+        result = this.bufferedWrite("\r\n");
+        if(result.isError)
+            return result;
+
+        return Result.noError;
+    }
+
+    private Result flush()
+    {
+        if(this._writeCursor == 0)
+            return Result.noError;
+
+        auto result = this._socket.put(this._buffer[0..this._writeCursor], this._config.writeTimeout);
+        if(result.isError)
+            return result;
+
+        this._writeCursor = 0;
+        return Result.noError;
+    }
+
+    private Result bufferedWrite(scope const void[] data)
+    {
+        if(this._writeCursor + data.length >= this._buffer.length)
+        {
+            auto result = this.flush();
+            if(result.isError)
+                return result;
+
+            if(data.length >= this._buffer.length) // If we would need to perform more than 1 flush, just send it all directly
+                return this._socket.put(data, this._config.writeTimeout);
+            
+            // Otherwise we can just buffer it for the time being
+            this._buffer[0..data.length] = cast(ubyte[])data[0..$];
+            this._writeCursor = data.length;
+            return Result.noError;
+        }
+
+        this._buffer[this._writeCursor..this._writeCursor + data.length] = cast(ubyte[])data[0..$];
+        this._writeCursor += data.length;
+        return Result.noError;
+    }
+
+    private Result bufferHeaderName(scope const char[] name, out scope const(char)[] buffered)
+    {
+        auto end = this._writeCursor + name.length;
+        if(end > this._buffer.length && this._writeCursor > 0)
+        {
+            auto result = this.flush();
+            if(result.isError)
+                return result;
+            end = name.length;
+        }
+
+        if(end > this._buffer.length)
+            return Result.make(Http1Error.dataExceedsBuffer, response!("500", "when buffering header name, the buffer was full")); // @suppress(dscanner.style.long_line)
+
+        ubyte[] slice = this._buffer[this._writeCursor..end];
+        slice[0..$] = cast(ubyte[])name[0..$];
+        this._writeCursor = end;
+        
+        if(!http1CanonicalHeaderNameInPlace(cast(ubyte[])slice))
+            return Result.make(Http1Error.badHeaderName, response!("500", "when buffering header name, the header name was invalid")); // @suppress(dscanner.style.long_line)
+        
+        buffered = cast(const(char)[])slice[0..$];
+        return Result.noError;
+    }
+
+    private Result processHeader(scope const char[] name, scope const char[] value)
+    {
+        switch(name)
+        {
+            case "content-length":
+                if(this._message.bodyEncoding & BodyEncoding.hasContentLength)
+                    return Result.make(Http1Error.badLengthHeader, response!("500", "when processing header, attempted to send a content-length header when the body has a content-length")); // @suppress(dscanner.style.long_line)
+                else if(this._message.bodyEncoding & BodyEncoding.hasTransferEncoding)
+                    return Result.make(Http1Error.badLengthHeader, response!("500", "when processing header, attempted to send a content-length header when the body has a transfer-encoding")); // @suppress(dscanner.style.long_line)
+
+                this._message.bodyEncoding |= BodyEncoding.hasContentLength;
+
+                import juptune.core.util.conv : to;
+                auto result = to!size_t(value, this._message.contentLength);
+                if(result.isError)
+                    return Result.make(Http1Error.badLengthHeader, response!("500", "when processing header, attempted to send an invalid content-length header - could not convert to a size_t")); // @suppress(dscanner.style.long_line)
+                return Result.noError;
+
+            case "transfer-encoding":
+                if(this._message.bodyEncoding & BodyEncoding.hasContentLength)
+                    return Result.make(Http1Error.badLengthHeader, response!("500", "when processing header, attempted to send a transfer-encoding header when the body has a content-length")); // @suppress(dscanner.style.long_line)
+
+                this._message.bodyEncoding |= BodyEncoding.hasTransferEncoding;
+
+                import std.algorithm : endsWith;
+                if(value.endsWith("chunked"))
+                    this._message.bodyEncoding |= BodyEncoding.isChunked;
+                return Result.noError;
+
+            case "connection":
+                if(value == "close")
+                    this._message.summary.connectionClosed = true;
+                else if(value == "keep-alive")
+                    this._message.summary.connectionClosed = false;
+                break;
+
+            default: break;
+        }
+
+        return Result.noError;
+    }
+}
+
 /**** Helper functions ****/
 
 /++
@@ -1088,6 +1538,157 @@ bool http1CanonicalHeaderNameInPlace(ref scope ubyte[] headerName) @nogc nothrow
         }
     }
     return true;
+}
+
+/++
+ + Checks if a string is a valid HTTP 'token' as defined by RFC 9110.
+ +
+ + Not the most useful function for user code, but there's no reason to not have it be public.
+ +
+ + Notes:
+ +  An empty string is not considered a valid token.
+ +
+ + Params:
+ +  token = The token to check.
+ +
+ + Returns:
+ +  `true` if the token is valid, `false` otherwise.
+ + ++/
+bool isHttp1Token(scope const char[] token) @nogc nothrow pure
+{
+    if(token.length == 0)
+        return false;
+
+    foreach(ch; token)
+    {
+        if(!(g_rfc9110CharType[ch] & Rfc9110CharType.TCHAR))
+            return false;
+    }
+    return true;
+}
+
+/++
+ + Checks if a string is a valid HTTP header value as defined by RFC 9110.
+ +
+ + Not the most useful function for user code, but there's no reason to not have it be public.
+ +
+ + Notes:
+ +  An empty string is not considered a valid header value.
+ +
+ + Params:
+ +  value = The header value to check.
+ +
+ + Returns:
+ +  `true` if the header value is valid, `false` otherwise.
+ + ++/
+bool isHttp1HeaderValue(scope const char[] value) @nogc nothrow pure
+{
+    if(value.length == 0)
+        return false;
+
+    if(!(g_rfc9110CharType[value[0]] & Rfc9110CharType.VCHAR)
+    || !(g_rfc9110CharType[value[$-1]] & Rfc9110CharType.VCHAR))
+        return false;
+
+    foreach(i; 1..value.length)
+    {
+        if(!(g_rfc9110CharType[value[i]] & Rfc9110CharType.MIDDLE_OF_HEADER_MASK))
+            return false;
+    }
+
+    return true;
+}
+
+/++
+ + Checks whether the given path is valid for the given method, taking into account whether
+ + the request is being proxied or not.
+ +
+ + Notes:
+ +  HttpWriter and HttpReader already perform path validation, however keeping this logic
+ +  private doesn't provide much benefit, so it's been made public.
+ +
+ +  This check should match the speficiation of Section 3.2 in RFC9112.
+ +
+ +  The overload that takes a `UriParseHints` is provided for performance reasons, as it allows
+ +  the caller to avoid parsing the path twice. It is unable to handle `OPTIONS *` however as
+ +  '*' is not a valid RFC 3986 URI so a trivial check must be manually performed beforehand.
+ +
+ +  Additionally another overload is provided that returns the parsed URI with hints, as it is likely that
+ +  the caller will need to parse the URI anyway.
+ +
+ + Params:
+ +  method = The method to check the path against.
+ +  path = The path to check.
+ +  isProxyRequest = Whether the request is being proxied or not.
+ +
+ + Returns:
+ +  `true` if the path is valid for the given method, `false` otherwise.
+ + ++/
+bool http1IsPathValidForMethod(
+    scope const char[] method, 
+    const char[] path,
+    bool isProxyRequest = false
+) @safe @nogc nothrow
+{
+    UriParseHints hints;
+    ScopeUri uri;
+    return http1IsPathValidForMethod(method, path, hints, uri, isProxyRequest);
+}
+
+/// ditto.
+bool http1IsPathValidForMethod(
+    scope const char[] method, 
+    const char[] path,
+    scope out UriParseHints hints,
+    scope out ScopeUri uri,
+    bool isProxyRequest = false
+) @safe @nogc nothrow
+{
+    switch(method) with(UriParseHints)
+    {
+        case "OPTIONS":
+            if(path == "*")
+                return true;
+            goto default;
+
+        case "CONNECT":
+            auto result = uriParseNoCopy(path, uri, hints, UriParseRules.allowUriSuffix);
+            return !result.isError && http1IsPathValidForMethod(method, hints, isProxyRequest);
+
+        default:
+            auto result = uriParseNoCopy(path, uri, hints);
+            if(isProxyRequest && method != "OPTIONS")
+                return !result.isError && (hints & isAbsolute);
+            else
+                return !result.isError && http1IsPathValidForMethod(method, hints);
+    }
+}
+
+/// ditto
+bool http1IsPathValidForMethod(scope const char[] method, UriParseHints hints, bool isProxyRequest = false) @safe @nogc nothrow // @suppress(dscanner.style.long_line)
+{
+    switch(method) with(UriParseHints)
+    {
+        case "CONNECT":
+            return (
+                (hints & isUriSuffix)
+                && (hints & pathIsEmpty)
+                && (hints & queryIsEmpty)
+                && (hints & fragmentIsEmpty)
+                && (hints & authorityHasPort)
+                && !(hints & authorityHasUserInfo)
+            );
+
+        default:
+            if(isProxyRequest && method != "OPTIONS")
+                return (hints & isAbsolute) != 0;
+            else
+                return (
+                    !(hints & isAbsolute)
+                    && !(hints & isNetworkReference)
+                    && (hints & pathIsAbsolute)
+                );
+    }
 }
 
 /**** Unit tests ****/
@@ -1707,6 +2308,150 @@ unittest
         Http1RequestLine requestLine;
         auto result = reader.readRequestLine(requestLine);
         assert(result.isError(Http1Error.timeout));
+    });
+    loop.join();
+}
+
+@("Http1Writer - full-requests - simple success cases")
+unittest
+{
+    import juptune.core.util, juptune.event;
+
+    enum E
+    {
+        length,
+        chunked
+    }
+
+    static struct H
+    {
+        string name;
+        string value;
+    }
+
+    static struct T
+    {
+        string method;
+        string path;
+        Http1Version version_;
+        H[] headers;
+        E encoding;
+        string[] chunks;
+        string expectedRequest;
+    }
+
+    static shared T[string] cases;
+    cases = [
+        "request line only": T(
+            "GET", "/", Http1Version.http11,
+            [],
+            E.length, [],
+            "GET / HTTP/1.1\n\n"
+        ),
+        "request line and headers": T(
+            "GET", "/", Http1Version.http11,
+            [
+                H("Host", "dlang.org"),
+                H("User-Agent", "d boulderz"),
+            ],
+            E.length, [],
+            "GET / HTTP/1.1\nhost: dlang.org\nuser-agent: d boulderz\n\n"
+        ),
+        "content-length": T(
+            "GET", "/", Http1Version.http11,
+            [],
+            E.length, ["abc123"], "GET / HTTP/1.1\ncontent-length: 6\n\nabc123"
+        ),
+        "chunked zero": T(
+            "GET", "/", Http1Version.http11,
+            [],
+            E.chunked, [], "GET / HTTP/1.1\ntransfer-encoding: chunked\n\n0\n\n"
+        ),
+        "chunked single": T(
+            "GET", "/", Http1Version.http11,
+            [],
+            E.chunked, ["abc123"], "GET / HTTP/1.1\ntransfer-encoding: chunked\n\n6\nabc123\n0\n\n"
+        ),
+        "chunked multiple": T(
+            "GET", "/", Http1Version.http11,
+            [],
+            E.chunked, ["abc", "123"], "GET / HTTP/1.1\ntransfer-encoding: chunked\n\n3\nabc\n3\n123\n0\n\n"
+        ),
+    ];
+
+    auto loop = EventLoop(EventLoopConfig());
+    loop.addGCThread(() nothrow {
+        try foreach(name, test; cases)
+        {
+            import std.algorithm : move;
+
+            static struct CasePair
+            {
+                string name;
+                T test;
+                TcpSocket socket;
+            }
+
+            TcpSocket[2] pairs;
+            TcpSocket.makePair(pairs).resultAssert;
+
+            CasePair[2] casePairs;
+            casePairs[0] = CasePair(name, cast()test);
+            casePairs[1] = CasePair(name, cast()test);
+            move(pairs[0], casePairs[0].socket);
+            move(pairs[1], casePairs[1].socket);
+
+            async((){
+                import std.algorithm : joiner;
+                import std.conv : to;
+                import std.range : walkLength;
+                
+                auto pair = juptuneEventLoopGetContext!CasePair;
+                
+                Http1MessageSummary summary;
+                ubyte[512] buffer;
+                auto writer = Http1Writer(&pair.socket, buffer, Http1Config());
+
+                writer.putRequestLine(pair.test.method, pair.test.path, pair.test.version_).resultAssert;
+                foreach(header; pair.test.headers)
+                    writer.putHeader(header.name, header.value).resultAssert;
+
+                if(pair.test.encoding == E.length && pair.test.chunks.length > 0)
+                    writer.putHeader("Content-Length", pair.test.chunks.joiner.walkLength.to!string).resultAssert;
+                else if(pair.test.encoding == E.chunked)
+                    writer.putHeader("Transfer-Encoding", "chunked").resultAssert;
+                
+                writer.finishHeaders().resultAssert;
+                foreach(chunk; pair.test.chunks)
+                    writer.putBody(chunk).resultAssert;
+                writer.finishMessage(summary).resultAssert;
+            }, casePairs[0], &asyncMoveSetter!CasePair).resultAssert;
+
+            async((){
+                import std.exception : assumeWontThrow;
+                auto pair = juptuneEventLoopGetContext!CasePair;
+                
+                ubyte[512] buffer;
+                void[] usedBuffer;
+                pair.socket.recieve(buffer[], usedBuffer).resultAssert;
+
+                import std.algorithm : equal, substitute;
+                import std.format : format;
+                assert(
+                    (cast(char[])usedBuffer)
+                    .substitute!("\r\n", "\n")
+                    .equal(pair.test.expectedRequest)
+                    .assumeWontThrow,
+                    
+                    format(
+                        "Expected request to be \n---\n%s\n---\nbut was\n---\n%s\n---\n", 
+                        pair.test.expectedRequest, 
+                        cast(char[])usedBuffer
+                    ).assumeWontThrow
+                );
+            }, casePairs[1], &asyncMoveSetter!CasePair).resultAssert;
+        }
+        catch(Exception ex) assert(false, ex.msg);
     });
     loop.join();
 }
