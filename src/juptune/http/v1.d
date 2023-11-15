@@ -89,6 +89,10 @@ enum Http1Error
     badRequestPath,     /// Issue with request path
     badRequestVersion,  /// Issue with request version
 
+    badResponseVersion, /// Issue with response version
+    badResponseCode,    /// Issue with response code
+    badResponseReason,  /// Issue with response reason
+
     badHeaderName,      /// Issue with header name
     badHeaderValue,     /// Issue with header value
     badLengthHeader,    /// Issue with content-length and transfer-encoding headers
@@ -164,6 +168,40 @@ struct Http1RequestLine
     in(this.entireLine._pinned !is null, "entireLine must be pinned")
     {
         func(this.method, this.path);
+    }
+}
+
+/++ 
+ + Contains the contents of a response line.
+ +
+ + Notes:
+ +  This struct contains a pinned slice of the Http1Reader's buffer, so after
+ +  processing the response line, the user code must release the slice by destroying
+ +  the struct (e.g. setting it to `.init`, letting it go out of scope, etc.)
+ +
+ +  In order to make it as clear as possible that data from this struct must **not** be escaped,
+ +  the `access` method is provided which enforces via the type system that string data is not
+ +  escaped.
+ + ++/
+struct Http1ResponseLine
+{
+    private Http1PinnedSlice entireLine;
+    Http1Version httpVersion; /// The http version of the response line
+    uint statusCode; /// The status code of the response
+    private const(char)[] reasonPhrase;
+
+    /// Accesses the response line data.
+    void access(scope void delegate(scope const char[] reasonPhrase) @safe func) @safe
+    in(this.entireLine._pinned !is null, "entireLine must be pinned")
+    {
+        func(this.reasonPhrase);
+    }
+
+    /// ditto.
+    void access(scope void delegate(scope const char[] reasonPhrase) @safe @nogc nothrow func) @safe @nogc nothrow // @suppress(dscanner.style.long_line)
+    in(this.entireLine._pinned !is null, "entireLine must be pinned")
+    {
+        func(this.reasonPhrase);
     }
 }
 
@@ -455,6 +493,7 @@ struct Http1Reader
         Http1MessageSummary summary;
         bool isRequest;
         bool hasReadFirstChunk;
+        bool isBodyless; // RFC 9112 section 6.3.1
         size_t contentLength;
         size_t contentLengthRead;
     }
@@ -522,7 +561,7 @@ struct Http1Reader
     
     /++ 
      + Reads the entire request line. This will configure the reader to be a request parser for the
-     + remainder message, until `finishMessage` is called.
+     + remainder of this message, until `finishMessage` is called.
      +
      + State:
      +  This function must be called when the reader is in the `startLine` state.
@@ -606,6 +645,106 @@ struct Http1Reader
 
         requestLine.httpVersion = this._message.httpVersion;
         requestLine.entireLine = Http1PinnedSlice(&this._pinnedSliceIsAlive);
+        this._state.mustTransition!(State.startLine, State.maybeEndOfHeaders)(this._message);
+        this._pinCursor = this._readCursor;
+        return Result.noError;
+    }
+    
+    /++
+     + Reads the entire response line. This will configure the reader to be a response parser for the
+     + remainder of this message, until `finishMessage` is called.
+     +
+     + State:
+     +  This function must be called when the reader is in the `startLine` state.
+     +
+     +  After this function is called, the reader will be in the `maybeEndOfHeaders` state.
+     +
+     + Notes:
+     +  Under certain circumstances (such as `isBodyless` being `true`) the reader will act as if
+     +  the response has no body, regardless of whatever the headers may suggest. You must still
+     +  call `readBody` to follow the correct state transitions.
+     +
+     + Params:
+     +  responseLine = Stores the response line data.
+     +  isBodyless   = Force that the response is bodyless. This is must be set if reading a response
+     +                 to a HEAD request.
+     +
+     + Throws:
+     +  If an error occurs, the reader will be in an invalid state and should not be used again.
+     +
+     +  Anything the underlying I/O functions can throw. An attempt is made to map common errors to
+     +  a standardised `Http1Error` value, but this is not guaranteed for every response.
+     +
+     +  `Http1Error.dataExceedsBuffer` if the response line is larger than the provided buffer.
+     +
+     +  `Http1Error.badResponseVersion` if the response version is missing, invalid, or specifies an unsupported version.
+     +
+     +  `Http1Error.badResponseCode` if the response code is missing or invalid.
+     +
+     +  `Http1Error.badResponseReason` if the response reason phrase is missing or invalid.
+     +
+     +  `Http1Error.badTransport` if it is determined that the transport layer is in a bad state, or if the
+     +  sender appears to be malicious/poorly coded.
+     +
+     + Returns:
+     +  A `Result` describing if an error ocurred. Any `Http1Error` will contain a valid HTTP error response
+     + ++/
+    Result readResponseLine(out scope Http1ResponseLine responseLine, bool isBodyless = false)
+    {
+        ubyte[] slice;
+        this._message = MessageState.init;
+        this._message.isRequest = false;
+
+        // Version
+        auto result = this.readUntil!' '(slice);
+        if(result.isError)
+            return result;
+        else if(slice.length != 8)
+            return Result.make(Http1Error.badResponseVersion, response!("400", "Invalid/unsupported http version in response line")); // @suppress(dscanner.style.long_line)
+        else if(slice[0..8] == "HTTP/1.0")
+        {
+            this._message.httpVersion = Http1Version.http10;
+            this._message.summary.connectionClosed = true; // HTTP/1.0 defaults to connection: close
+        }
+        else if(slice[0..8] == "HTTP/1.1")
+            this._message.httpVersion = Http1Version.http11;
+        else
+            return Result.make(Http1Error.badResponseVersion, response!("400", "Unsupported http version in response line")); // @suppress(dscanner.style.long_line)
+        responseLine.httpVersion = this._message.httpVersion;
+        responseLine.entireLine = Http1PinnedSlice(&this._pinnedSliceIsAlive);
+
+        // Status code
+        result = this.readUntil!' '(slice);
+        if(result.isError)
+            return result;
+        else if(slice.length == 0)
+            return Result.make(Http1Error.badResponseCode, response!("400", "Invalid status code in response line"));
+
+        import juptune.core.util.conv : to;
+        responseLine.statusCode = to!uint(cast(char[])slice, result);
+        if(result.isError)
+            return Result.make(Http1Error.badResponseCode, response!("400", "Invalid status code in response line")); // @suppress(dscanner.style.long_line)
+
+        if(
+            (responseLine.statusCode >= 100 && responseLine.statusCode <= 199)
+            || responseLine.statusCode == 204
+            || responseLine.statusCode == 304
+            || isBodyless
+        )
+        {
+            this._message.isBodyless = true;
+        }
+
+        // Reason phrase
+        result = this.readUntil!'\n'(slice);
+        if(result.isError)
+            return result;
+        else if(slice.length == 0)
+            return Result.make(Http1Error.badResponseReason, response!("400", "Empty reason phrase in response line"));
+        responseLine.reasonPhrase = cast(char[])slice[0..$];
+
+        // TODO: Validate reason phrase
+
         this._state.mustTransition!(State.startLine, State.maybeEndOfHeaders)(this._message);
         this._pinCursor = this._readCursor;
         return Result.noError;
@@ -740,6 +879,16 @@ struct Http1Reader
     in(this._pinCursor == this._readCursor, "pin cursor must be at the read cursor")
     in(internal || this._state.mustBeIn(State.maybeEndOfHeaders))
     {
+        scope(exit)
+        {
+            // RFC 9112 section 6.3.1
+            if(this._state.isIn(State.body) && this._message.isBodyless)
+            {
+                this._message.bodyEncoding = BodyEncoding.hasContentLength;
+                this._message.contentLength = 0;
+            }
+        }
+
         // Fast path: if we already have enough data in the buffer we can
         //            skip the readUntil call.
         // TODO: readUntil could be completely avoided by using fetchData directly
@@ -2240,6 +2389,133 @@ Transfer-Encoding: chunked
                     assert(path == test.expectedPath);
                 });
                 requestLine = Http1RequestLine.init;
+
+                bool endOfHeaders;
+                reader.checkEndOfHeaders(endOfHeaders).resultAssert;
+                while(!endOfHeaders)
+                {
+                    Http1Header header;
+                    reader.readHeader(header).resultAssert;
+                    header.access((name, value) {
+                        foreach(expected; test.expectedHeaders)
+                        {
+                            if(name == expected.name)
+                            {
+                                assert(value == expected.value);
+                                return;
+                            }
+                        }
+                        assert(false, "header not found");
+                    });
+                    header = Http1Header.init;
+                    reader.checkEndOfHeaders(endOfHeaders).resultAssert;
+                }
+
+                size_t totalRead;
+                Http1BodyChunk bodyChunk;
+                bool loop = true;
+                while(loop)
+                {
+                    reader.readBody(bodyChunk).resultAssert;
+                    bodyChunk.access((data) {
+                        assert(data == test.expectedBody[totalRead..totalRead+data.length]);
+                    });
+                    totalRead += bodyChunk.data.length;
+                    loop = bodyChunk.hasDataLeft;
+                    bodyChunk = Http1BodyChunk.init;
+                }
+                assert(totalRead == test.expectedBody.length);
+                assert(!bodyChunk.hasDataLeft);
+
+                Http1MessageSummary summary;
+                reader.finishMessage(summary).resultAssert;
+
+                if(test.expectedVersion == Http1Version.http11)
+                    assert(!summary.connectionClosed);
+                else
+                    assert(summary.connectionClosed);
+            }
+        }, pairs[1], &asyncMoveSetter!TcpSocket).resultAssert;
+    });
+    loop.join();
+}
+
+@("Http1Reader - full responses - low-level API - success cases")
+unittest
+{
+    import juptune.core.util, juptune.event;
+
+    static struct H
+    {
+        string name;
+        string value;
+    }
+
+    static struct T
+    {
+        string response;
+        Http1Version expectedVersion;
+        uint expectedStatusCode;
+        string expectedReasonPhrase;
+        H[] expectedHeaders;
+        string expectedBody;
+    }
+
+    static T[] cases = [
+        T(
+`HTTP/1.1 200 OK
+Content-Length: 4
+Content-Type: text/plain
+
+1234`,
+            Http1Version.http11, 200, "OK",
+            [
+                H("content-length", "4"),
+                H("content-type", "text/plain"),
+            ], 
+            "1234"
+        ),
+
+        // Keep last - it leaves data in the socket we currently don't skip past.
+        T(
+`HTTP/1.1 100 OK
+Content-Length: 512
+
+Because this is a 1xx response, the reader should force treat this as bodyless`,
+            Http1Version.http11, 100, "OK",
+            [
+                H("content-length", "512"),
+            ],
+            ""
+        ),
+    ];
+
+    auto loop = EventLoop(EventLoopConfig());
+    loop.addGCThread(() @nogc nothrow {
+        TcpSocket[2] pairs;
+        TcpSocket.makePair(pairs).resultAssert;
+
+        async((){
+            auto socket = juptuneEventLoopGetContext!TcpSocket;
+            foreach(test; cases)
+                socket.put(test.response).resultAssert;
+        }, pairs[0], &asyncMoveSetter!TcpSocket).resultAssert;
+
+        async((){
+            ubyte[64] buffer;
+            auto socket = juptuneEventLoopGetContext!TcpSocket;
+            auto reader = Http1Reader(socket, buffer[], Http1Config());
+
+            foreach(test; cases)
+            {
+                Http1ResponseLine responseLine;
+                reader.readResponseLine(responseLine).resultAssert;
+                responseLine.access((reason) {
+                    assert(responseLine.httpVersion == test.expectedVersion);
+                    assert(responseLine.statusCode == test.expectedStatusCode);
+                    assert(reason == test.expectedReasonPhrase);
+                });
+                responseLine = Http1ResponseLine.init;
 
                 bool endOfHeaders;
                 reader.checkEndOfHeaders(endOfHeaders).resultAssert;
