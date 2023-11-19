@@ -435,6 +435,25 @@ struct Http1ReadResponseConfig
  +  4. Call `finishMessage` to finish the request, and if the `Http1MessageSummary.connectionClosed` is `false`,
  +     loop back to step 1 (if applicable), otherwise cease using this reader and socket for communication.
  +
+ + ResponseFlow:
+ +  Responses are slightly different as in some cases it requires external context from a previous request/response
+ +  as well as the fact responses can contain trailers for chunked bodies, thus requiring an extra processing stage.
+ +
+ +  1. Call `readResponseLine` to read the response line.
+ +      1.1. If the response is for a HEAD request, please ensure you set `config.isBodyless` to `true` for
+ +           correct handling.
+ +      1.2. Process the response line and destroy the returned `Http1ResponseLine` struct before continuing.
+ +  2. While `checkEndOfHeaders` returns `false`:
+ +      2.1. Call `readHeader` to read a header.
+ +      2.2. Process the header and destroy the returned `Http1Header` struct before continuing.
+ +  3. While `readBody`'s return value's `hasDataLeft` is `true`:
+ +      3.1. Process the body chunk and destroy the returned `Http1BodyChunk` struct before continuing.
+ +  4. While `checkEndOfTrailers` returns `false`:
+ +      4.1. Call `readTrailer` to read a trailer.
+ +      4.2. Process the trailer and destroy the returned `Http1Header` struct before continuing.
+ +  5. Call `finishMessage` to finish the response, and if the `Http1MessageSummary.connectionClosed` is `false`,
+ +     loop back to step 1 (if applicable), otherwise cease using this reader and socket for communication.
+ +
  + Notes:
  +  A high-level API is planned, but for now not implemented.
  +
@@ -1369,7 +1388,9 @@ struct Http1Writer
     private alias StateMachine = Machine.Static!([
         Machine.Transition(State.startLine, State.headers),
         Machine.Transition(State.headers,   State.body),
-        Machine.Transition(State.body,      State.finalise),
+        Machine.Transition(State.body,      State.finalise, (ref state) => state.isRequest),
+        Machine.Transition(State.body,      State.trailers, (ref state) => !state.isRequest),
+        Machine.Transition(State.trailers,  State.finalise),
         Machine.Transition(State.finalise,  State.startLine),
     ]);
 
@@ -1379,6 +1400,7 @@ struct Http1Writer
         startLine,
         headers,
         body,
+        trailers,
         finalise,
     }
 
@@ -1531,8 +1553,11 @@ struct Http1Writer
         return Result.noError;
     }
 
-    Result putHeader(scope const char[] name, scope const char[] value)
-    in(this._state.mustBeIn(State.headers))
+    alias putHeader = putHeaderImpl!false;
+    alias putTrailer = putHeaderImpl!true;
+
+    private Result putHeaderImpl(bool trailers)(scope const char[] name, scope const char[] value)
+    in((!trailers && this._state.mustBeIn(State.headers)) || (trailers && this._state.mustBeIn(State.trailers)))
     {
         if(!value.isHttp1HeaderValue())
             return Result.make(Http1Error.badHeaderValue, response!("500", "Invalid header value provided when writing header")); // @suppress(dscanner.style.long_line)
@@ -1561,14 +1586,28 @@ struct Http1Writer
         return Result.noError;
     }
 
-    Result finishHeaders()
-    in(this._state.mustBeIn(State.headers))
+    alias finishHeaders = finishHeadersImpl!false;
+    alias finishTrailers = finishHeadersImpl!true;
+
+    private Result finishHeadersImpl(bool trailers)()
+    in((!trailers && this._state.mustBeIn(State.headers)) || (trailers && this._state.mustBeIn(State.trailers)))
     {
+        static if(trailers)
+        if(!(this._message.bodyEncoding & BodyEncoding.isChunked)) // If we're not using chunked encoding, we don't need to write a final \r\n
+        {
+            this._state.mustTransition!(State.trailers, State.finalise)(this._message);
+            return Result.noError;
+        }
+
         auto result = this.bufferedWrite("\r\n");
         if(result.isError)
             return result;
         
-        this._state.mustTransition!(State.headers, State.body)(this._message);
+        static if(!trailers)
+            this._state.mustTransition!(State.headers, State.body)(this._message);
+        else
+            this._state.mustTransition!(State.trailers, State.finalise)(this._message);
+
         return Result.noError;
     }
 
@@ -1583,23 +1622,39 @@ struct Http1Writer
             return Result.make(Http1Error.badTransport, response!("500", "Attempted to write body data when encoding style hasn't been selected")); // @suppress(dscanner.style.long_line)
     }
 
-    Result finishMessage(scope out Http1MessageSummary summary)
+    Result finishBody()
+    in(this._state.mustBeIn(State.body))
     {
-        if(this._state.isIn(State.body))
+        if((this._message.bodyEncoding & BodyEncoding.hasContentLength) && this._message.contentLength > 0)
+            return Result.make(Http1Error.badTransport, response!("500", "Attempted to finish body when content-length bytes has not been fully written to body")); // @suppress(dscanner.style.long_line)
+        
+        if(this._message.isRequest)
         {
-            if((this._message.bodyEncoding & BodyEncoding.hasContentLength) && this._message.contentLength > 0)
-                return Result.make(Http1Error.badTransport, response!("500", "Attempted to finish message when content-length bytes has not been fully written to body")); // @suppress(dscanner.style.long_line)
+            if(this._message.bodyEncoding & BodyEncoding.isChunked)
+            {
+                auto result = this.bufferedWrite("0\r\n\r\n");
+                if(result.isError)
+                    return result;
+            }
             this._state.mustTransition!(State.body, State.finalise)(this._message);
         }
-        this._state.mustBeIn(State.finalise);
-
-        if(this._message.bodyEncoding & BodyEncoding.isChunked)
+        else
         {
-            auto result = this.bufferedWrite("0\r\n\r\n");
-            if(result.isError)
-                return result;
+            if(this._message.bodyEncoding & BodyEncoding.isChunked)
+            {
+                auto result = this.bufferedWrite("0\r\n");
+                if(result.isError)
+                    return result;
+            }
+            this._state.mustTransition!(State.body, State.trailers)(this._message);
         }
 
+        return Result.noError;  
+    }
+
+    Result finishMessage(scope out Http1MessageSummary summary)
+    in(this._state.mustBeIn(State.finalise))
+    {
         auto result = this.flush();
         if(result.isError)
             return result;
@@ -1619,9 +1674,6 @@ struct Http1Writer
             return result;
 
         this._message.contentLength -= data.length;
-        if(this._message.contentLength == 0)
-            this._state.mustTransition!(State.body, State.finalise)(this._message);
-
         return Result.noError;
     }
 
@@ -2885,6 +2937,7 @@ unittest
                 writer.finishHeaders().resultAssert;
                 foreach(chunk; pair.test.chunks)
                     writer.putBody(chunk).resultAssert;
+                writer.finishBody().resultAssert;
                 writer.finishMessage(summary).resultAssert;
             }, casePairs[0], &asyncMoveSetter!CasePair).resultAssert;
 

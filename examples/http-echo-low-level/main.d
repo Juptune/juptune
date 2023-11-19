@@ -194,6 +194,12 @@ void nogcInsaneServer()
                         result = writer.putBody(bufBlock[0..cursor]);
                         if(result.isError) return;
 
+                        result = writer.finishBody();
+                        if(result.isError) return;
+
+                        result = writer.finishTrailers();
+                        if(result.isError) return;
+
                         result = writer.finishMessage(summary);
                         if(result.isError) return;
                     } while(!summary.connectionClosed);
@@ -244,7 +250,7 @@ void nogcSaneServer()
 
                         Http1RequestLine requestLine;
                         auto result = reader.readRequestLine(requestLine);
-                        if(result.isError) { handleErrorNoGC(result, &writer); return; }
+                        if(result.isError) return;
                         
                         requestLine.access((method, path)
                         {
@@ -298,12 +304,16 @@ void nogcSaneServer()
                         result = reader.finishMessage(summary);
                         if(result.isError){ handleErrorNoGC(result, &writer); return; }
 
+                        Http1MessageSummary outSummary;
                         result = writer.putResponseLine(Http1Version.http11, 200, "OK").then!(
                             () => writer.putHeader("Content-Type", "text/plain"),
                             () => writer.putHeader("Transfer-Encoding", "chunked"),
                             () => writer.finishHeaders(),
                             () => writer.putBody(response[0..$]),
-                            () => writer.finishMessage(summary),
+                            () => writer.finishBody(),
+                            () => writer.putTrailer("X-Connection-Closed", summary.connectionClosed ? "true" : "false"),
+                            () => writer.finishTrailers(),
+                            () => writer.finishMessage(outSummary),
                         );
                         if(result.isError)
                             return; // Can't call handleErrorNoGC here as the request may be in a half-written state.
