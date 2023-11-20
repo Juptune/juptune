@@ -38,6 +38,7 @@ jobs:
           mkdir tmp
           mv ./build/meson-private/juptune.pc tmp/
           export PKG_CONFIG_PATH=$(pwd)/tmp
+          export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:$(pwd)/install/lib/x86_64-linux-gnu
 
           cd examples/basic-meson-project
           meson setup build
