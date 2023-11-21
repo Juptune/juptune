@@ -30,6 +30,47 @@ version(Posix) private
     extern(C) int inet_aton(const scope char*, scope in_addr*) @nogc nothrow;
 }
 
+/++++ Error helpers ++++/
+
+/// A `Result` error enum.
+enum IoError
+{
+    none,
+
+    /// A request timedout, or was cancelled.
+    timeout,
+}
+
+private void wrapIOResult(scope ref Result result) @trusted @nogc nothrow
+{
+    version(linux)
+    if(result.isErrorType!LinuxError)
+    {
+        import core.sys.linux.errno : ECANCELED, ETIME;
+        switch(result.errorCode)
+        {
+            case ECANCELED:
+            case ETIME:
+                result.changeErrorType(IoError.timeout);
+                break;
+
+            default: break;
+        }
+    }
+}
+
+private Result getPosixResult(string errorMessage, int errno) @trusted @nogc nothrow
+{
+    version(linux)
+        auto result = linuxErrorAsResult(errorMessage, errno);
+    else version(Posix)
+        auto result = Result.make(cast(IoError)errno, errorMessage);
+    else assert(false, "This function shouldn't have been called on this platform.");
+
+    wrapIOResult(result);
+    return result;
+}
+
 /++++ Non-IO helper structs ++++/
 
 /++
@@ -456,15 +497,7 @@ struct PosixTcpSocket
 
         int fd = socket(AF_INET6, SOCK_STREAM, 0);
         if(fd == -1)
-        {
-            version(linux)
-                return linuxErrorAsResult("failed to open socket", errno());
-            else
-            {
-                enum SocketError { a }
-                return Result.make(cast(SocketError)errno(), "failed to open socket");
-            }
-        }
+            return getPosixResult("failed to open socket", errno());
 
         int enable = 1;
         int disable = 0;
@@ -597,27 +630,12 @@ struct PosixTcpSocket
 
         const bindResult = bind(this.fd, used, cast(socklen_t)usedLength);
         if(bindResult == -1)
-        {
-            version(linux)
-                return linuxErrorAsResult("failed to bind socket", errno());
-            else
-            {
-                enum SocketError { a }
-                return Result.make(cast(SocketError)errno(), "failed to bind socket");
-            }
-        }
+            return getPosixResult("failed to bind socket", errno());
 
         const listenResult = clisten(this._driver.fd, backlog);
         if(listenResult < 0)
-        {
-            version(linux)
-                return linuxErrorAsResult("failed to listen socket", errno());
-            else
-            {
-                enum SocketError { a }
-                return Result.make(cast(SocketError)errno(), "failed to listen socket");
-            }
-        }
+            return getPosixResult("failed to listen on socket", errno());
+
         auto yieldResult = yield(); // Emulate using io_uring
         if(yieldResult.isError)
             return yieldResult;
@@ -688,15 +706,7 @@ struct PosixTcpSocket
 
         const result = cconnect(this.fd, used, cast(socklen_t)usedLength);
         if(result < 0)
-        {
-            version(linux)
-                return linuxErrorAsResult("failed to connect to server", errno());
-            else
-            {
-                enum SocketError { a }
-                return Result.make(cast(SocketError)errno(), "failed to connect to server");
-            }
-        }
+            return getPosixResult("failed to connect to server", errno());
 
         return Result.noError;
     }
@@ -707,11 +717,7 @@ struct PosixTcpSocket
 
         const result = socketpair(AF_UNIX, SOCK_STREAM, 0, fds);
         if(result < 0)
-        {
-            version(linux)
-                return linuxErrorAsResult("failed to create socket pairs", result);
-            else assert(false);
-        }
+            return getPosixResult("failed to create socket pairs", result);
 
         PosixTcpSocket[2] wrapped;
         sockets[0]._driver.wrap(fds[0]);
@@ -971,16 +977,7 @@ private struct PosixGenericIoDriver
             return submitResult;
 
         if(cqe.result < 0)
-        {
-            // TODO: Figure out how to standardise the errors a bit
-            version(linux)
-                return linuxErrorAsResult("failed to send data to socket", cqe.result);
-            else
-            {
-                enum SocketError { a }
-                return Result.make(cast(SocketError)cqe.result, "failed to send data to socket");
-            }
-        }
+            return getPosixResult("failed to send data to socket", cqe.result);
 
         assert(cqe.result >= 0);
         bytesSent = cqe.result;
@@ -999,16 +996,7 @@ private struct PosixGenericIoDriver
             return submitResult;
 
         if(cqe.result < 0)
-        {
-            // TODO: Figure out how to standardise the errors a bit
-            version(linux)
-                return linuxErrorAsResult("failed to recieve data from socket", cqe.result);
-            else
-            {
-                enum SocketError { a }
-                return Result.make(cast(SocketError)cqe.result, "failed to recieve data from socket");
-            }
-        }
+            return getPosixResult("failed to recieve data from socket", cqe.result);
 
         assert(cqe.result >= 0);
         sliceWithData = buffer[0..cqe.result];
@@ -1112,9 +1100,7 @@ private struct PosixGenericIoDriver
             else
                 static immutable message = "failed to send data to socket via gather output";
 
-            version(linux)
-                return linuxErrorAsResult(message, cqe.result);
-            else assert(false);
+            return getPosixResult(message, cqe.result);
         }
 
         assert(cqe.result >= 0);
@@ -1284,13 +1270,12 @@ unittest
 unittest
 {
     import core.time : msecs;
-    import juptune.event.internal.linux : LinuxError;
 
     static void testResult(Result r)
     {
         assert(r.isError);
         version(linux)
-            assert(r.isError(LinuxError.cancelled));
+            assert(r.isError(IoError.timeout));
     }
 
     auto loop = EventLoop(EventLoopConfig());

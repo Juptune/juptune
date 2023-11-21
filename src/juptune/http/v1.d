@@ -8,7 +8,7 @@ module juptune.http.v1;
 
 import juptune.core.ds   : MemoryBlockPoolAllocator, MemoryBlockAllocation;
 import juptune.core.util : Result, StateMachineTypes;
-import juptune.event.io  : TcpSocket;
+import juptune.event.io  : TcpSocket, IoError;
 import juptune.http.uri  : ScopeUri, uriParseNoCopy, UriParseHints, UriParseRules;
 
 private 
@@ -83,7 +83,6 @@ enum Http1Error
     none,
     dataExceedsBuffer,  /// Not enough room in provided buffer to process request
     badTransport,       /// Transport layer error
-    timeout,            /// Timeout during read
 
     badRequestMethod,   /// Issue with request method
     badRequestPath,     /// Issue with request path
@@ -621,8 +620,7 @@ struct Http1Reader
      + Throws:
      +  If an error occurs, the reader will be in an invalid state and should not be used again.
      +
-     +  Anything the underlying I/O functions can throw. An attempt is made to map common errors to
-     +  a standardised `Http1Error` value, but this is not guaranteed for every response.
+     +  Anything the underlying I/O functions can throw. See `juptune.event.io.IoError`.
      +
      +  `Http1Error.dataExceedsBuffer` if the request line is larger than the provided buffer.
      +
@@ -718,8 +716,7 @@ struct Http1Reader
      + Throws:
      +  If an error occurs, the reader will be in an invalid state and should not be used again.
      +
-     +  Anything the underlying I/O functions can throw. An attempt is made to map common errors to
-     +  a standardised `Http1Error` value, but this is not guaranteed for every response.
+     +  Anything the underlying I/O functions can throw. See `juptune.event.io.IoError`.
      +
      +  `Http1Error.dataExceedsBuffer` if the response line is larger than the provided buffer.
      +
@@ -833,8 +830,7 @@ struct Http1Reader
      + Throws:
      +  If an error occurs, the reader will be in an invalid state and should not be used again.
      +
-     +  Anything the underlying I/O functions can throw. An attempt is made to map common errors to
-     +  a standardised `Http1Error` value, but this is not guaranteed for every response.
+     +  Anything the underlying I/O functions can throw. See `juptune.event.io.IoError`.
      +
      +  `Http1Error.dataExceedsBuffer` if the entire header line is larger than the provided buffer.
      +
@@ -926,8 +922,7 @@ struct Http1Reader
      + Throws:
      +  If an error occurs, the reader will be in an invalid state and should not be used again.
      +
-     +  Anything the underlying I/O functions can throw. An attempt is made to map common errors to
-     +  a standardised `Http1Error` value, but this is not guaranteed for every response.
+     +  Anything the underlying I/O functions can throw. See `juptune.event.io.IoError`.
      +
      +  `Http1Error.badTransport` if it is determined that the transport layer is in a bad state, or if the
      +  sender appears to be malicious/poorly coded.
@@ -1055,8 +1050,7 @@ struct Http1Reader
      + Throws:
      +  If an error occurs, the reader will be in an invalid state and should not be used again.
      +
-     +  Anything the underlying I/O functions can throw. An attempt is made to map common errors to
-     +  a standardised `Http1Error` value, but this is not guaranteed for every response.
+     +  Anything the underlying I/O functions can throw. See `juptune.event.io.IoError`.
      +
      +  `Http1Error.badBodyChunk` if the body is chunked and the client sent an invalid chunk.
      +
@@ -1298,10 +1292,7 @@ struct Http1Reader
             size_t bytesFetched;
             auto result = this.fetchData(bytesFetched, startCursor);
             if(result.isError)
-            {
-                this.translateReadError(result);
                 return result;
-            }
             if(bytesFetched == 0)
                 return Result.make(Http1Error.dataExceedsBuffer, response!("500", "when reading until a delimiter, 0 bytes were read?")); // @suppress(dscanner.style.long_line)
 
@@ -1356,28 +1347,6 @@ struct Http1Reader
 
             default:
                 return Result.noError;
-        }
-    }
-
-    private void translateReadError(scope ref return Result result)
-    {
-        // TODO: I really think io.d needs to translate some errors instead of relying on this madness.
-        import core.sys.linux.errno : ECANCELED, ETIME;
-        import juptune.event.internal.linux : LinuxError;
-
-        version(linux)
-        if(result.isErrorType!LinuxError)
-        {
-            switch(result.errorCode)
-            {
-                case ECANCELED:
-                case ETIME:
-                    result.changeErrorType(Http1Error.timeout);
-                    result.error = response!("408", "Request timed out during read operation");
-                    return;
-
-                default: break;
-            }
         }
     }
 }
@@ -2820,7 +2789,7 @@ unittest
 
         Http1RequestLine requestLine;
         auto result = reader.readRequestLine(requestLine);
-        assert(result.isError(Http1Error.timeout));
+        assert(result.isError(IoError.timeout));
     });
     loop.join();
 }
