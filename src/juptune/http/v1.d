@@ -454,8 +454,6 @@ struct Http1ReadResponseConfig
  +     loop back to step 1 (if applicable), otherwise cease using this reader and socket for communication.
  +
  + Notes:
- +  A high-level API is planned, but for now not implemented.
- +
  +  Currently reading body data requires the use of the provided user buffer, but in the future
  +  a separate set of functions will be provided that will allow the user to provide a separate buffer specifically
  +  for body data.
@@ -1351,6 +1349,90 @@ struct Http1Reader
     }
 }
 
+/++
+ + A low-level writer for the HTTP/1.0 and HTTP/1.1 protocols.
+ +
+ + Performance:
+ +  No explicit effort has been made to optimise this writer for performance, but
+ +  it should be reasonably fast.
+ +
+ +  Memory wise the writer does not directly allocate heap memory as it uses the user-provided buffer,
+ +  however the I/O calls can of course do whatever they want.
+ +
+ +  If the writer would have to perform more than 1 flush due to the data
+ +  being larger than the buffer, then the writer will perform two flushes
+ +  at most - one for the currently buffered data, and one for the entire remaining data 
+ +  (without needing to buffer the remaining data directly).
+ +
+ + Buffer:
+ +  The writer operates directly on a buffer provided by the user.
+ +
+ +  The size of the buffer dictates how many bytes can be stored before a flush
+ +  is forced. Certain actions, such as calling `finishMessage`, will also force a flush.
+ +
+ +  Generally the idea of the buffer is to reduce the amount of I/O calls, more
+ +  than anything else.
+ +
+ + Flow:
+ +  The writer is a low-level, state-machine API, and thus requires quite a lot of involvement from the user
+ +  as well as a magical incantation of calls to create fully valid HTTP messages.
+ +
+ +  Similar to the `Http1Reader` any `HttpError` result will contain a valid HTTP response,
+ +  however it's not really useful due to the fact these errors will almost always occur mid-message,
+ +  making it impossible to relay the information to the client.
+ +
+ +  Generally, if a protocol error is encountered simply close the connection.
+ +
+ + RequestFlow:
+ +  1. Call `putRequestLine` to write the request line.
+ +  2. Call `putHeader` to write any headers.
+ +      2.1 If you plan to write a body, you must either write a `content-length` header,
+ +          or write a `transfer-encoding: chunked` header.
+ +  3. Call `finishHeaders` to finish the headers.
+ +  4. Call `putBody` to write any body data, if any.
+ +  5. Call `finishBody` to finish the body.
+ +  6. Call `finishMessage` to finish the message.
+ +
+ + ResponseFlow:
+ +  The response flow is very similar to the request flow except we need
+ +  to account for being able to write trailer headers.
+ +
+ +  1. Call `putResponseLine` to write the response line.
+ +  2. Call `putHeader` to write any headers.
+ +    2.1 If you plan to write a body, you must either write a `content-length` header,
+ +        or write a `transfer-encoding: chunked` header.
+ +  3. Call `finishHeaders` to finish the headers.
+ +  4. Call `putBody` to write any body data, if any.
+ +  5. Call `finishBody` to finish the body.
+ +  6. If the `transfer-encoding: chunked` header was written:
+ +      6.1 Call `putTrailer` to write any trailer headers, if any.
+ +  7. Call `finishTrailer` to finish the trailer headers. You must do this regardless of if you wrote/can use trailers.
+ +  8. Call `finishMessage` to finish the message.
+ +
+ + Notes:
+ +  The writer currently does not support scattered writes.
+ +
+ +  The writer will never close the socket as it does not have ownership of it.
+ +
+ + Security:
+ +  The writer internally makes use of a type-system-based state machine to make it more difficult
+ +  to perform a bad state transition.
+ +
+ +  No other specific security issues are addressed beyond ensuring that the data
+ +  written is valid according to RFC 9110 & 9112
+ +
+ + Issues:
+ +  The writer is currently in an early state, and is not yet ready for production.
+ +
+ +  The current API is not stable, and may change in the future.
+ +
+ +  The writer does not natively perform compression.
+ +
+ +  The writer is not very extensively tested yet.
+ +
+ +  Specific differences between HTTP/1.0 and HTTP/1.1 are not fully implemented,
+ +  as HTTP/1.1 has been the main focus.
+ + ++/
 struct Http1Writer
 {
     private alias Machine = StateMachineTypes!(State, MessageState);
@@ -1411,6 +1493,24 @@ struct Http1Writer
 
     @nogc nothrow:
 
+    /++
+     + Creates a new HTTP/1 writer.
+     +
+     + State:
+     +  The writer will be in the `startLine` state.
+     +
+     + Notes:
+     +  The writer does not take ownership of the socket.
+     +
+     +  The writer takes ownership of the data inside of `buffer`, but not it's overall lifetime.
+     +
+     +  `socket` and `buffer` must outlive the writer.
+     +
+     + Params:
+     +  socket = The socket to write to.
+     +  buffer = The buffer to use for writing.
+     +  config = The configuration to use.
+     + ++/
     this(TcpSocket* socket, ubyte[] buffer, Http1Config config)
     in(socket !is null, "socket cannot be null")
     {
@@ -1420,17 +1520,74 @@ struct Http1Writer
         this._state  = StateMachine(State.startLine);
     }
 
+    /++
+     + Writes the HTTP message stored within the provided `result`
+     + to the socket.
+     +
+     + State:
+     +  The writer must be in the `startLine` state. It will still be in the `startLine` 
+     +  state after this function is called.
+     +
+     + Assertions:
+     +  The provided `result` must be an `Http1Error` result.
+     +
+     + Notes:
+     +  This function assumes that the result was created by a `Http1Reader` or
+     +  a `Http1Writer`, as these types ensure that the error response is a valid HTTP message.
+     +
+     +  Technically there is nothing stopping the user from homebrewing their own `Http1Error` result,
+     +  but this is not recommended.
+     +
+     + Params:
+     +  result = The result to write.
+     +
+     + Throws:
+     +  If an error occurs, the writer will be in an invalid state and should not be used again.
+     +
+     +  Anything the underlying I/O functions can throw. See `juptune.event.io.IoError`.
+     +
+     + Returns:
+     +  A `Result` describing if an error ocurred. Any `Http1Error` will contain a valid HTTP error response.
+     + ++/
     Result putResultResponse(Result result)
     in(this._state.mustBeIn(State.startLine))
     in(result.isErrorType!Http1Error, "Only Http1Error results are supported as they contain a premade HTTP response")
-    in(this._writeCursor == 0, "bug: Unflushed data? Requests must be flushed upon completion, so this shouldnt happen")
+    in(this._writeCursor == 0, "bug: Unflushed data? Messages must be flushed upon completion, so this shouldnt happen")
     {
         return this._socket.put(result.error);
     }
 
+    /++
+     + Writes an entire request line. This will configure this writer to be a request writer
+     + for the remainder of the message, until `finishMessage` is called.
+     +
+     + State:
+     +  The writer must be in the `startLine` state.
+     +
+     +  The writer will be in the `headers` state after this function is called.
+     +
+     + Params:
+     +  method      = The method to use.
+     +  path        = The path to use.
+     +  httpVersion = The HTTP version to use.
+     +
+     + Throws:
+     +  If an error occurs, the writer will be in an invalid state and should not be used again.
+     +
+     +  Anything the underlying I/O functions can throw. See `juptune.event.io.IoError`.
+     +
+     +  `Http1Error.badRequestMethod` if the method is invalid.
+     +
+     +  `Http1Error.badRequestPath` if the path is invalid. See `http1IsPathValidForMethod`.
+     +
+     +  `Http1Error.badRequestVersion` if the HTTP version is invalid.
+     +
+     + Returns:
+     +  A `Result` describing if an error ocurred. Any `Http1Error` will contain a valid HTTP error response.
+     + ++/
     Result putRequestLine(scope const char[] method, scope const char[] path, Http1Version httpVersion)
     in(this._state.mustBeIn(State.startLine))
-    in(this._writeCursor == 0, "bug: Unflushed data? Requests must be flushed upon completion, so this shouldnt happen")
+    in(this._writeCursor == 0, "bug: Unflushed data? Messages must be flushed upon completion, so this shouldnt happen")
     {
         this._message = MessageState.init;
         this._message.isRequest = true;
@@ -1475,8 +1632,35 @@ struct Http1Writer
         return Result.noError;
     }
 
+    /++
+     + Writes an entire response line. This will configure this writer to be a response writer
+     + for the remainder of the message, until `finishMessage` is called.
+     +
+     + State:
+     +  The writer must be in the `startLine` state.
+     +
+     +  The writer will be in the `headers` state after this function is called.
+     +
+     + Params:
+     +  httpVersion = The HTTP version to use.
+     +  statusCode  = The status code to use.
+     +  reason      = The reason to use.
+     +
+     + Throws:
+     +  If an error occurs, the writer will be in an invalid state and should not be used again.
+     +
+     +  Anything the underlying I/O functions can throw. See `juptune.event.io.IoError`.
+     +
+     +  `Http1Error.badRequestVersion` if the HTTP version is invalid.
+     +
+     +  `Http1Error.badRequestReason` if the reason is empty or invalid.
+     +
+     + Returns:
+     +  A `Result` describing if an error ocurred. Any `Http1Error` will contain a valid HTTP error response.
+     + ++/
     Result putResponseLine(Http1Version httpVersion, uint statusCode, scope const char[] reason)
     in(this._state.mustBeIn(State.startLine))
+    in(this._writeCursor == 0, "bug: Unflushed data? Messages must be flushed upon completion, so this shouldnt happen")
     {
         this._message = MessageState.init;
         this._message.httpVersion = httpVersion;
@@ -1522,12 +1706,64 @@ struct Http1Writer
         return Result.noError;
     }
 
+    /++
+     + Writes a single header.
+     +
+     + State:
+     +  The writer must be in the `headers` state.
+     +
+     +  The writer will be in the `headers` state after this function is called.
+     +
+     +  If the header is "content-length" then the writer will enter an internal
+     +  state that allows it to keep track of how much data has been written with `putBody`.
+     +
+     +  If the header is "transfer-encoding" with a value of "chunked" then the writer
+     +  will enter an internal state that allows it to create chunked bodies when using `putBody`.
+     +
+     + Notes:
+     +  The writer will automatically keep track of any critical headers it requires
+     +  in order to function correctly, such as "content-length" and "transfer-encoding".
+     +
+     +  In defiance of the RFC, and is relatively common practice nowadays, the writer
+     +  will force all header names into lowercase. This is to simplify the user code's processing,
+     +  and to ensure the user code does not have to deal with case-insensitive comparisons.
+     +
+     +  This is especially important for user code that can use HTTP/2 and HTTP/3, as those protocols
+     +  are case-insensitive with header names. (if/whenever these protocols are supported). Case-sensitive
+     +  header names are a relic of the past, and should not be used nor encouraged.
+     +
+     +  Headers are written in the order they are provided.
+     +
+     + Params:
+     +  name  = The name of the header.
+     +  value = The value of the header.
+     +
+     + Throws:
+     +  If an error occurs, the writer will be in an invalid state and should not be used again.
+     +
+     +  Anything the underlying I/O functions can throw. See `juptune.event.io.IoError`.
+     +
+     +  `Http1Error.badHeaderName` if the header name is invalid.
+     +
+     +  `Http1Error.badHeaderValue` if the header value is invalid.
+     +
+     +  `Http1Error.badTransport` if `putTrailer` is being used when not using chunked encoding.
+     +
+     + Returns:
+     +  A `Result` describing if an error ocurred. Any `Http1Error` will contain a valid HTTP error response.
+     + ++/
     alias putHeader = putHeaderImpl!false;
+
+    /// Ditto.
     alias putTrailer = putHeaderImpl!true;
 
     private Result putHeaderImpl(bool trailers)(scope const char[] name, scope const char[] value)
     in((!trailers && this._state.mustBeIn(State.headers)) || (trailers && this._state.mustBeIn(State.trailers)))
     {
+        static if(trailers)
+        if(!(this._message.bodyEncoding & BodyEncoding.isChunked))
+            return Result.make(Http1Error.badTransport, response!("500", "Attempted to write a trailer header when not using chunked encoding")); // @suppress(dscanner.style.long_line)
+
         if(!value.isHttp1HeaderValue())
             return Result.make(Http1Error.badHeaderValue, response!("500", "Invalid header value provided when writing header")); // @suppress(dscanner.style.long_line)
 
@@ -1555,7 +1791,25 @@ struct Http1Writer
         return Result.noError;
     }
 
+    /++
+     + Finishes the headers.
+     +
+     + State:
+     +  The writer must be in the `headers` state.
+     +
+     +  The writer will be in the `body` state after this function is called.
+     +
+     + Throws:
+     +  If an error occurs, the writer will be in an invalid state and should not be used again.
+     +
+     +  Anything the underlying I/O functions can throw. See `juptune.event.io.IoError`.
+     +
+     + Returns:
+     +  A `Result` describing if an error ocurred. Any `Http1Error` will contain a valid HTTP error response.
+     + ++/
     alias finishHeaders = finishHeadersImpl!false;
+
+    /// Ditto.
     alias finishTrailers = finishHeadersImpl!true;
 
     private Result finishHeadersImpl(bool trailers)()
@@ -1580,6 +1834,37 @@ struct Http1Writer
         return Result.noError;
     }
 
+    /++
+     + Writes body data.
+     +
+     + State:
+     +  The writer must be in the `body` state.
+     +
+     +  The writer will be in the `body` state after this function is called.
+     +
+     + Notes:
+     +  If the body encoding is `BodyEncoding.hasContentLength` then the writer will
+     +  automatically keep track of how much data has been written, and will return an error
+     +  if the user attempts to write more data than the `content-length` header specified.
+     +
+     +  If the body encoding is `BodyEncoding.isChunked` then the writer will instead
+     +  use a chunked encoded body, allowing the user to write as much data as they want.
+     +
+     +  Currently the ability to write chunk extensions is not supported.
+     +
+     + Params:
+     +  data = The data to write.
+     +
+     + Throws:
+     +  If an error occurs, the writer will be in an invalid state and should not be used again.
+     +
+     +  Anything the underlying I/O functions can throw. See `juptune.event.io.IoError`.
+     +
+     +  `Http1Error.badTransport` if the writer is using "content-length" for this message
+     +   and the length of `data` will exceed the amount of data allowed by "conent-length".
+     +
+     +  `Http1Error.badTransport` if the writer cannot determine how to encode the body.
+     + ++/
     Result putBody(scope const void[] data)
     in(this._state.mustBeIn(State.body))
     {
@@ -1591,6 +1876,29 @@ struct Http1Writer
             return Result.make(Http1Error.badTransport, response!("500", "Attempted to write body data when encoding style hasn't been selected")); // @suppress(dscanner.style.long_line)
     }
 
+    /++
+     + Finishes the body.
+     +
+     + State:
+     +  The writer must be in the `body` state.
+     +
+     +  [Requests Only]
+     +  The writer will be in the `finalise` state after this function is called.
+     +
+     +  [Responses Only]
+     +  The writer will be in the `trailers` state after this function is called.
+     +
+     + Throws:
+     +  If an error occurs, the writer will be in an invalid state and should not be used again.
+     +
+     +  Anything the underlying I/O functions can throw. See `juptune.event.io.IoError`.
+     +
+     +  `Http1Error.badTransport` if the writer is using "content-length" for this message
+     +  and the amount of data sent in the body is not equal to the amount of data specified by "content-length".
+     +
+     + Returns:
+     +  A `Result` describing if an error ocurred. Any `Http1Error` will contain a valid HTTP error response.
+     + ++/
     Result finishBody()
     in(this._state.mustBeIn(State.body))
     {
@@ -1621,6 +1929,30 @@ struct Http1Writer
         return Result.noError;  
     }
 
+    /++
+     + Acknowledges that the entire HTTP message has been written, and returns a summary
+     +
+     + State:
+     +  The writer must be in the `finalise` state.
+     +
+     +  The writer will be in the `startLine` state after this function is called.
+     +
+     +  The writer will no longer be in request/response mode after this function is called.
+     +
+     + Notes:
+     +  This will always perform a flush.
+     +
+     + Params:
+     +  summary = The summary of the message.
+     +
+     + Throws:
+     +  If an error occurs, the writer will be in an invalid state and should not be used again.
+     +
+     +  Anything the underlying I/O functions can throw. See `juptune.event.io.IoError`.
+     +
+     + Returns:
+     +  A `Result` describing if an error ocurred. Any `Http1Error` will contain a valid HTTP error response.
+     + ++/
     Result finishMessage(scope out Http1MessageSummary summary)
     in(this._state.mustBeIn(State.finalise))
     {
