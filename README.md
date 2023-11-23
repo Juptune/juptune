@@ -49,6 +49,20 @@ In the future I'd like to look more closely into cross-thread communication; mak
 
 Currently all of missing features mentioned in the above paragraph have to be homebrewed by an application.
 
+# Fibers
+
+Each thread in the event loop will have a loop running to process the fibers for said thread.
+
+This loop is currently _very_ simple, and as with everything else, not very well suited for a production application quite yet:
+
+* If there are no fibers running - exit the loop and allow the thread to resolve.
+* Check io_uring to see if any completion events have come in
+  * If the completion event's userdata points to a fiber, then wake the fiber up and pass it completion info.
+  * If the completion event's userdata is null, do nothing with it as it was intentionally (hopefully) marked to be ignored.
+* If there are no manually yielded fibers, then block the thread until io_uring reports a completion.
+* Otherwise, if there are any manually yielded fibers, awake them.
+* (reloop)
+
 # Roadmap/Wishlist
 
 This is an ever changing list of stuff I want to work on. Whether I get around to it is another question...
@@ -64,6 +78,7 @@ This is an ever changing list of stuff I want to work on. Whether I get around t
 * gRPC support - requires HTTP2 stuff ;_;
 * gRPC-web support?
 * Logging package.
+* @nogc file format parsing & emitting
 
 # Examples
 
