@@ -8,6 +8,26 @@ Only Linux is supported, and that likely won't ever change.
 
 **I currently don't accept MRs for this project - really small things like tiny bug fixes may be merged in however**
 
+# Getting Started
+
+This library is super alpha, please don't use it for any serious work.
+
+I also want to make this easier in the future, but for now:
+
+```bash
+your-package-manager install yasm meson
+
+git clone https://github.com/Juptune/juptune
+cd juptune
+meson setup build --buildtype=debug # Or =release
+cd build
+sudo ninja install
+
+# You can now use `dependency('juptune')` within your own Meson projects.
+```
+
+You can technically get this to work with dub as well, but honestly I don't care enough about dub to bother with it myself.
+
 # Features
 
 * `@nogc` first API, but with `@gc` alternatives for comfort.
