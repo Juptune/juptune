@@ -20,7 +20,11 @@ private
         VCHAR                   = 1 << 0,
         TCHAR                   = 1 << 1,
         MIDDLE_OF_HEADER_VALUE  = 1 << 2,
+        HTAB                    = 1 << 3,
+        SP                      = 1 << 4,
+
         MIDDLE_OF_HEADER_MASK   = VCHAR | MIDDLE_OF_HEADER_VALUE,
+        REASON_MASK             = VCHAR | HTAB | SP,
     }
     
     immutable g_headerNormaliseTable = (){
@@ -785,9 +789,9 @@ struct Http1Reader
             return result;
         else if(slice.length == 0)
             return Result.make(Http1Error.badResponseReason, response!("400", "Empty reason phrase in response line"));
+        else if(!(cast(char[])slice[0..$]).isHttp1Reason())
+            return Result.make(Http1Error.badResponseReason, response!("400", "Invalid reason phrase in response line")); // @suppress(dscanner.style.long_line)
         responseLine.reasonPhrase = cast(char[])slice[0..$];
-
-        // TODO: Validate reason phrase
 
         this._state.mustTransition!(State.startLine, State.maybeEndOfHeaders)(this._message);
         this._pinCursor = this._readCursor;
@@ -1665,7 +1669,8 @@ struct Http1Writer
         this._message = MessageState.init;
         this._message.httpVersion = httpVersion;
 
-        // TODO: Validate reason
+        if(!reason.isHttp1Reason())
+            return Result.make(Http1Error.badResponseReason, response!("500", "Invalid reason provided when writing response line")); // @suppress(dscanner.style.long_line)
 
         Result result = Result.noError;
 
@@ -2200,6 +2205,34 @@ bool isHttp1HeaderValue(scope const char[] value) @nogc nothrow pure
     foreach(i; 1..value.length)
     {
         if(!(g_rfc9110CharType[value[i]] & Rfc9110CharType.MIDDLE_OF_HEADER_MASK))
+            return false;
+    }
+
+    return true;
+}
+
+/++
+ + Checks if a string is a valid HTTP status line reason as defined by RFC 9110.
+ +
+ + Not the most useful function for user code, but there's no reason to not have it be public.
+ +
+ + Notes:
+ +  An empty string is not considered a valid value.
+ +
+ + Params:
+ +  value = The value to check.
+ +
+ + Returns:
+ +  `true` if the value is valid, `false` otherwise.
+ + ++/
+bool isHttp1Reason(scope const char[] value) @nogc nothrow pure
+{
+    if(value.length == 0)
+        return false;
+
+    foreach(i; 0..value.length)
+    {
+        if(!(g_rfc9110CharType[value[i]] & Rfc9110CharType.REASON_MASK))
             return false;
     }
 
