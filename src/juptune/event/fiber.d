@@ -528,16 +528,25 @@ package struct FiberAllocator
                 block.fiberStack    = (startOfBlockStacks + (blockSize * i))[0..fiberStackBytesAligned];
                 block.postGuardPage = startOfBlockStacks + (blockSize * (i + 1)) - pageSizeBytes;
 
-                // import std.stdio : writefln;
+                // Used for sanity checks
+                const blockStart = cast(size_t)block.fiberStack.ptr;
+                const blockEnd   = cast(size_t)block.postGuardPage + pageSizeBytes;
+
+                import std.stdio : writefln, stdout;
                 // debug writefln(
-                //     "i: %s | stack: 0x%X | post: 0x%X",
+                //     "i: %s | stack: 0x%X | post: 0x%X | blockSize: 0x%X | blockActualSize: 0x%X",
                 //     i,
                 //     block.fiberStack.ptr,
-                //     block.postGuardPage
+                //     block.postGuardPage,
+                //     blockSize,
+                //     blockActualSize,
                 // );
+                // debug stdout.flush();
 
                 assert(cast(size_t)block.fiberStack.ptr % pageSizeBytes == 0, "fiberStack is not page-aligned");
                 assert(cast(size_t)block.postGuardPage % pageSizeBytes == 0, "postGuardPage is not page-aligned");
+                assert((blockEnd - blockStart) == blockSize, "block is overflowing into another block - there is a calculation error somewhere"); // @suppress(dscanner.style.long_line)
+                assert((block.fiberStack.ptr + block.fiberStack.length) == block.postGuardPage, "block stack is overflowing into guard page - there is a calculation error somewhere"); // @suppress(dscanner.style.long_line)
 
                 if(i != wall.blocks.length-1) // @suppress(dscanner.suspicious.length_subtraction)
                     block.nextFreeBlock = &wall.blocks[i+1];
