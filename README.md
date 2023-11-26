@@ -22,6 +22,7 @@ cd juptune
 meson setup build --buildtype=debug # Or =release
 cd build
 sudo ninja install
+# sudo ninja uninstall
 
 # You can now use `dependency('juptune')` within your own Meson projects.
 ```

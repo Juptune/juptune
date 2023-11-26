@@ -253,7 +253,6 @@ package struct FiberAllocator
             void[] fiberStack;
             Flags flags;
             JuptuneFiber fiber;
-            void* preGuardPage;
             void* postGuardPage;
 
             void informGC() @nogc nothrow
@@ -419,14 +418,15 @@ package struct FiberAllocator
         -=============================================================-
             [Any padding required to achieve page alignment]
         -=============================================================-
+            A single guard page as the first fiber stack won't have a pre guard page
+        -=============================================================-
         [repeated `blockCount` times
-            -=============================================================-
-                A single guard page (the 'pre' guard page)
             -=============================================================-
                 The page-aligned fiber stack that is at least 
                 `fiberStackBytes` long
             -=============================================================-
-                A single guard page (the 'post' guard page)
+                A single guard page serving as this stack's post guard page,
+                as well as the next stack's pre guard page.
             -=============================================================-
         ]
     */
@@ -444,7 +444,7 @@ package struct FiberAllocator
 
             // Calculate bytes needed for guard pages and fiber stacks
             const pageSizeBytes             = sysconf(_SC_PAGESIZE);
-            const guardPageBytes            = 2 * pageSizeBytes;
+            const guardPageBytes            = pageSizeBytes;
             const fiberStackBytesAligned    = fiberStackBytes.alignTo(pageSizeBytes);
             const blockSize                 = guardPageBytes + fiberStackBytesAligned;
             const totalBlockSize            = blockSize * blockCount;
@@ -453,10 +453,13 @@ package struct FiberAllocator
             const metadataSize      = Wall.sizeof + (Block.sizeof * blockCount);
             const totalMetadataSize = (metadataSize).alignTo(pageSizeBytes);
 
-            const totalSize = totalBlockSize + totalMetadataSize;
+            // Pre Guard Page
+            const preGuardPageSize = pageSizeBytes;
+
+            const totalSize = totalBlockSize + totalMetadataSize + preGuardPageSize;
             assert(totalSize % pageSizeBytes == 0, "Calculations aren't page-aligned");
 
-            // Map the memory and populate metadata
+            // Map the memory
             auto mapFlags = MAP_ANON | MAP_PRIVATE;
             static if(__traits(compiles, MAP_STACK))
                 mapFlags |= MAP_STACK;
@@ -494,7 +497,24 @@ package struct FiberAllocator
             wall.blocks = (cast(Block*)(mapping + Wall.sizeof))[0..blockCount];
             wall.entireMappingRaw = mapping[0..totalSize];
 
-            auto startOfBlockStacks = mapping + totalMetadataSize;
+            // Create first guard page
+            const firstGuardResult = mprotect(mapping + totalMetadataSize, 1, PROT_NONE); 
+            if(firstGuardResult < 0)
+            {
+                version(linux)
+                {
+                    import core.sys.linux.errno : errno;
+                    return linuxErrorAsResult("Unable to set memory protection of the first guard page", errno());
+                }
+                else
+                {
+                    static enum E { none, failed = int.max }
+                    return Result.make(E.failed, "Unable to set memory protection of the first guard page");
+                }
+            }
+
+            // Populate metadata
+            auto startOfBlockStacks = mapping + totalMetadataSize + preGuardPageSize;
             assert(cast(size_t)startOfBlockStacks % pageSizeBytes == 0, "startOfBlockStacks is not page-aligned");
             assert(
                 cast(void*)wall.blocks.ptr 
@@ -505,40 +525,22 @@ package struct FiberAllocator
 
             foreach(i, ref block; wall.blocks)
             {
-                block.preGuardPage  = startOfBlockStacks + (blockSize * i);
-                block.fiberStack    = (startOfBlockStacks + (blockSize * i) + pageSizeBytes)[0..fiberStackBytesAligned];
+                block.fiberStack    = (startOfBlockStacks + (blockSize * i))[0..fiberStackBytesAligned];
                 block.postGuardPage = startOfBlockStacks + (blockSize * (i + 1)) - pageSizeBytes;
 
                 // import std.stdio : writefln;
                 // debug writefln(
-                //     "i: %s | pre: 0x%X | stack: 0x%X | post: 0x%X",
+                //     "i: %s | stack: 0x%X | post: 0x%X",
                 //     i,
-                //     block.preGuardPage,
                 //     block.fiberStack.ptr,
                 //     block.postGuardPage
                 // );
 
-                assert(cast(size_t)block.preGuardPage % pageSizeBytes == 0, "preGuardPage is not page-aligned");
                 assert(cast(size_t)block.fiberStack.ptr % pageSizeBytes == 0, "fiberStack is not page-aligned");
                 assert(cast(size_t)block.postGuardPage % pageSizeBytes == 0, "postGuardPage is not page-aligned");
 
                 if(i != wall.blocks.length-1) // @suppress(dscanner.suspicious.length_subtraction)
                     block.nextFreeBlock = &wall.blocks[i+1];
-
-                const preGuardResult = mprotect(block.preGuardPage, 1, PROT_NONE);
-                if(preGuardResult < 0)
-                {
-                    version(linux)
-                    {
-                        import core.sys.linux.errno : errno;
-                        return linuxErrorAsResult("Unable to set memory protection of the pre guard page", errno());
-                    }
-                    else
-                    {
-                        static enum E { none, failed = int.max }
-                        return Result.make(E.failed, "Unable to set memory protection of the pre guard page");
-                    }
-                }
 
                 const postGuardResult = mprotect(block.postGuardPage, 1, PROT_NONE);
                 if(postGuardResult < 0)
