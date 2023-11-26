@@ -31,7 +31,7 @@ struct EventLoopConfig
     @safe @nogc nothrow pure:
 
     EventLoopConfig withIoUringConfig(IoUringConfig conf) return { this.ioUring = conf; return this; }
-    EventLoopConfig withFiberAllocatorConfig(FiberAllocatorConfig conf) return { this.fiberAllocator = conf; return this; }
+    EventLoopConfig withFiberAllocatorConfig(FiberAllocatorConfig conf) return { this.fiberAllocator = conf; return this; } // @suppress(dscanner.style.long_line)
     EventLoopConfig withSigtermHandler(bool value) return { this.handleSigterm = value; return this; }
 }
 
@@ -432,7 +432,7 @@ struct SubmitEventConfig
 
     @nogc nothrow pure:
 
-    SubmitEventConfig shouldYieldUntilCompletion(bool value) return { this.yieldUntilComplete = cast(YieldUntilCompletion)value; return this; }
+    SubmitEventConfig shouldYieldUntilCompletion(bool value) return { this.yieldUntilComplete = cast(YieldUntilCompletion)value; return this; } // @suppress(dscanner.style.long_line)
     SubmitEventConfig withTimeout(Duration value) return { this.timeout = value; return this; }
 }
 
@@ -573,7 +573,7 @@ void asyncMoveSetter(ContextT)(scope ref ContextT a, scope out ContextT b) @nogc
 Result async(ContextT)(
     JuptuneFiber.EntryPointNoGC func,
     auto ref ContextT context,
-    void function(scope ref ContextT value, scope out ContextT contextValue) @nogc nothrow setter = &asyncDefaultSetter!ContextT,
+    void function(scope ref ContextT value, scope out ContextT contextValue) @nogc nothrow setter = &asyncDefaultSetter!ContextT, // @suppress(dscanner.style.long_line)
     AsyncConfig config = AsyncConfig(),
 ) @nogc nothrow
 {
@@ -584,7 +584,7 @@ Result async(ContextT)(
 Result async(ContextT)(
     JuptuneFiber.EntryPointGC func,
     auto ref ContextT context,
-    void function(scope ref ContextT value, scope out ContextT contextValue) @nogc nothrow setter = &asyncDefaultSetter!ContextT,
+    void function(scope ref ContextT value, scope out ContextT contextValue) @nogc nothrow setter = &asyncDefaultSetter!ContextT, // @suppress(dscanner.style.long_line)
     AsyncConfig config = AsyncConfig(),
 ) @nogc nothrow
 {
@@ -650,7 +650,7 @@ Result yield() @nogc nothrow
     juptuneFiberSwap(juptuneFiberGetRoot());
 
     if(juptuneEventLoopIsThreadCanceled())
-        return Result.make(JuptuneEventLoopError.threadWasCanceled, "Thread has been canceled; please abort the fiber gracefully.");
+        return Result.make(JuptuneEventLoopError.threadWasCanceled, "Thread has been canceled; please abort the fiber gracefully."); // @suppress(dscanner.style.long_line)
 
     return Result.noError;
 }

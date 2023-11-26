@@ -95,7 +95,7 @@ Result linuxErrorAsResult(string staticMessage, int errnum) @nogc nothrow
     result.context[0..$] = '\0';
 
     scope mutablePtr = cast(char*)result.context.ptr; // Breaks the type system; but is safe to do this.
-    const staticMsg = strerror_r(errnum, mutablePtr, result.context.length-1); // - 1 so we can ensure a null terminator
+    const staticMsg = strerror_r(errnum, mutablePtr, result.context.length-1); // - 1 so we can ensure a null terminator // @suppress(dscanner.suspicious.length_subtraction)
 
     // Sometimes strerror_r returns a static string, sometimes it stores it in the buffer. What beautiful API design...
     if(staticMsg !is null && staticMsg !is mutablePtr)

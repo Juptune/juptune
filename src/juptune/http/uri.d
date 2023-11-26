@@ -321,7 +321,7 @@ Result uriParseNoCopy(
     out scope ScopeUri uri,
     out scope UriParseHints hints,
     UriParseRules rules = UriParseRules.strict
-) @nogc @safe nothrow
+) @nogc @trusted nothrow // Note: It is actually @safe however compiler-generated temporaries trigger @safe deprecated warnings
 in(input.length > 0, "Attempting to parse an empty string is likely incorrect logic. Null checks, people!")
 {
     const(char)[] next;
@@ -390,7 +390,7 @@ Result uriParseScheme(
     out scope const(char)[] scheme,
     out scope const(char)[] next,
     ref scope UriParseHints hints
-) @nogc @safe nothrow
+) @nogc @trusted nothrow // Note: It is actually @safe however compiler-generated temporaries trigger @safe deprecated warnings
 in(chars.length > 0, "URI must not be empty")
 {
     if(!(g_rfc3986CharType[chars[0]] & Rfc3986CharType.SCHEME_ALPHA))
@@ -517,7 +517,7 @@ Result uriParseAuthority(
     out scope const(char)[] next,
     ref scope UriParseHints hints,
     UriParseRules rules = UriParseRules.strict
-) @nogc @safe nothrow
+) @nogc @trusted nothrow // Note: It is actually @safe however compiler-generated temporaries trigger @safe deprecated warnings
 {
     size_t cursor = 2;
     if(chars.length < 2 || chars[0] != '/' || chars[1] != '/')

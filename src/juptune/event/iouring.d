@@ -221,7 +221,7 @@ private mixin template GenerateDriverFuncs(alias Opcode)
             static if(Udas.length > 0)
             {
                 static if(is(typeof(Udas[0]) == MapField))
-                    mixin("sqe."~Udas[0].sqeFieldName~" = cast(typeof(sqe."~Udas[0].sqeFieldName~"))this."~memberName~";");
+                    mixin("sqe."~Udas[0].sqeFieldName~" = cast(typeof(sqe."~Udas[0].sqeFieldName~"))this."~memberName~";"); // @suppress(dscanner.style.long_line)
                 else static if(is(typeof(Udas[0]) : MapFlag))
                     mixin("sqe."~Udas[0].sqeFieldName~" |= this."~memberName~" ? Udas[0].mask : 0;");
                 else static if(is(Udas[0] : MapBuffer))
@@ -515,11 +515,12 @@ private struct IoUringNativeLinuxDriver
         import core.sys.posix.signal : signal, SIG_IGN, SIGPIPE;
         import core.sys.linux.sys.mman;
 
-        signal(SIGPIPE, SIG_IGN);
+        signal(SIGPIPE, SIG_IGN); // Convenient place to put this
 
         this.config = config;
         this.enableFeatures();
 
+        // Init io_uring and map memory.
         const setupResult = io_uring_setup(config.sqeEntryCount, &this.ioUringParams);
         if(setupResult < 0)
             return linuxErrorAsResult("io_ring_setup failed", setupResult);
@@ -568,10 +569,11 @@ private struct IoUringNativeLinuxDriver
         }
 
         auto cqEntriesPtr = cast(io_uring_cqe*)(this.cqPtr + this.ioUringParams.cq_off.cqes);
-        this.sqeIndexSlice = (cast(uint*)(this.sqPtr + this.ioUringParams.sq_off.array))[0..this.ioUringParams.sq_entries];
+        this.sqeIndexSlice = (cast(uint*)(this.sqPtr + this.ioUringParams.sq_off.array))[0..this.ioUringParams.sq_entries]; // @suppress(dscanner.style.long_line)
         this.sqeSlice = sqEntriesPtr[0..this.ioUringParams.sq_entries];
         this.cqeSlice = cqEntriesPtr[0..this.ioUringParams.cq_entries];
 
+        // Allocate SQE mask array - used to track which SQEs are in use.
         const maskCount = (this.ioUringParams.sq_entries / 64) + 1;
         auto maskPtr = cast(ulong*)malloc(ulong.sizeof * maskCount);
         if(maskPtr is null)
@@ -582,7 +584,8 @@ private struct IoUringNativeLinuxDriver
         this.sqeInUseMasks = maskPtr[0..maskCount];
         this.sqeInUseMasks[] = ulong.max;
 
-        auto timeoutPtr = cast(IoUringTimeoutUserData*)malloc(IoUringTimeoutUserData.sizeof * this.ioUringParams.sq_entries);
+        // Allocate timeout user data - saves us from having to allocate it for every timeout.
+        auto timeoutPtr = cast(IoUringTimeoutUserData*)malloc(IoUringTimeoutUserData.sizeof * this.ioUringParams.sq_entries); // @suppress(dscanner.style.long_line)
         if(timeoutPtr is null)
         {
             this.uninitDriver();
@@ -631,6 +634,7 @@ private struct IoUringNativeLinuxDriver
         if(this.ioUringParams.sq_entries - this.pendingSubmits < 2)
             return SubmitQueueIsFull.yes;
 
+        // Submit the command and then a link timeout, using IO_LINK to link them together.
         const result = this.submitImpl(command, (sqe, sqeIndex){
             sqe.flags |= IOSQE_IO_LINK;
         });
@@ -690,6 +694,9 @@ private struct IoUringNativeLinuxDriver
                     this.pendingSubmits = 0;
                     break;
 
+                // TODO: Look into all of the above, a better way is likely to read the state
+                //       of the queue instead of relying on the return value.
+
                 default:
                     import juptune.event.internal.linux : linuxErrorAsResult;
                     linuxErrorAsResult("io_uring_enter failed", result).resultAssert;
@@ -712,7 +719,10 @@ private struct IoUringNativeLinuxDriver
     }
 
     alias _submitImplTest = submitImpl!(IoUringNop);
-    private SubmitQueueIsFull submitImpl(Command)(Command command, scope void delegate(io_uring_sqe*, uint) @nogc nothrow modifyFunc)
+    private SubmitQueueIsFull submitImpl(Command)(
+        Command command, 
+        scope void delegate(io_uring_sqe*, uint) @nogc nothrow modifyFunc
+    )
     in(this.pendingSubmits <= this.ioUringParams.sq_entries, "Bug: pendingSubmits is larger than the SQE count")
     {
         import core.atomic : atomicStore, MemoryOrder;
@@ -747,7 +757,7 @@ private struct IoUringNativeLinuxDriver
         size_t i;
         while(this.sqeInUseMasks[i] == 0)
             i++;
-        assert(i < this.sqeInUseMasks.length, "Bug: allocateNextSqe shouldn't have been called, since there's none left.");
+        assert(i < this.sqeInUseMasks.length, "Bug: allocateNextSqe shouldn't have been called, since there's none left."); // @suppress(dscanner.style.long_line)
 
         const index = bsf(this.sqeInUseMasks[i]);
         this.sqeInUseMasks[i] &= ~(1UL << index);
@@ -788,8 +798,8 @@ private struct IoUringEmulatedPosixDriver
     void uninitDriver(){ assert(false, "Not implemented"); }
     void enter(uint minCompletes = 0){ assert(false, "Not implemented"); }
     SubmitQueueIsFull submit(Command)(Command command){ assert(false, "Not implemented"); }
-    SubmitQueueIsFull submitTimeout(Command)(Command command, Duration timeout = Duration.zero){ assert(false, "Not implemented"); }
-    void processCompletions(scope void delegate(IoUringCompletion) nothrow @nogc handler) nothrow @nogc{ assert(false, "Not implemented"); }
+    SubmitQueueIsFull submitTimeout(Command)(Command command, Duration timeout = Duration.zero){ assert(false, "Not implemented"); } // @suppress(dscanner.style.long_line)
+    void processCompletions(scope void delegate(IoUringCompletion) nothrow @nogc handler) nothrow @nogc{ assert(false, "Not implemented"); } // @suppress(dscanner.style.long_line)
 }
 
 private mixin template IoUringTests(IoUringDriver driver)
@@ -935,6 +945,7 @@ private mixin template IoUringTests(IoUringDriver driver)
 
             // NOTE: I think extra OP_NOPs get completely dropped by the kernal,
             //       which is why I can't get this extra `+ 1` CQE to occur.
+            // TODO: Verify with a non-OP_NOP command.
             //
             // driver.enter();
             // driver.processCompletions((_){ completed++; });
