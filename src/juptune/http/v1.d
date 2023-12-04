@@ -498,7 +498,7 @@ struct Http1ReadResponseConfig
  +
  +  And of course there's all the other stuff I haven't thought of yet, such as more esoteric features and use cases.
  + ++/
-struct Http1Reader 
+struct Http1ReaderBase(SocketT)
 {
     private alias Machine = StateMachineTypes!(State, MessageState);
     private alias StateMachine = Machine.Static!([
@@ -550,7 +550,7 @@ struct Http1Reader
     {
         // General state
         Http1Config _config;
-        TcpSocket* _socket;
+        SocketT* _socket;
         ubyte[] _buffer;
 
         // Current state
@@ -590,7 +590,7 @@ struct Http1Reader
      +  buffer = The buffer to read into.
      +  config = The configuration for the reader.
      + ++/
-    this(TcpSocket* socket, ubyte[] buffer, Http1Config config)
+    this(SocketT* socket, ubyte[] buffer, Http1Config config)
     in(socket !is null, "socket cannot be null")
     in(buffer !is null, "buffer cannot be null")
     in(buffer.length > 0, "buffer cannot be empty")
@@ -1352,6 +1352,8 @@ struct Http1Reader
         }
     }
 }
+/// Http1 over an insecure TCP socket.
+alias Http1Reader = Http1ReaderBase!TcpSocket;
 
 /++
  + A low-level writer for the HTTP/1.0 and HTTP/1.1 protocols.
@@ -1437,7 +1439,7 @@ struct Http1Reader
  +  Specific differences between HTTP/1.0 and HTTP/1.1 are not fully implemented,
  +  as HTTP/1.1 has been the main focus.
  + ++/
-struct Http1Writer
+struct Http1WriterBase(SocketT)
 {
     private alias Machine = StateMachineTypes!(State, MessageState);
     private alias StateMachine = Machine.Static!([
@@ -1480,7 +1482,7 @@ struct Http1Writer
     {
         // General state
         Http1Config _config;
-        TcpSocket* _socket;
+        SocketT* _socket;
         ubyte[] _buffer;
 
         // Current state
@@ -1515,7 +1517,7 @@ struct Http1Writer
      +  buffer = The buffer to use for writing.
      +  config = The configuration to use.
      + ++/
-    this(TcpSocket* socket, ubyte[] buffer, Http1Config config)
+    this(SocketT* socket, ubyte[] buffer, Http1Config config)
     in(socket !is null, "socket cannot be null")
     {
         this._socket = socket;
@@ -2121,6 +2123,8 @@ struct Http1Writer
         return Result.noError;
     }
 }
+/// Http1 over an insecure TCP socket.
+alias Http1Writer = Http1WriterBase!TcpSocket;
 
 /**** Helper functions ****/
 
