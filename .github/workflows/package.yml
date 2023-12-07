@@ -75,15 +75,15 @@ jobs:
 
       - name: Rename RPMs
         run: |
+            mkdir upload
             for file in $(ls ${RPM_TOPDIR}/RPMS/x86_64/); do
-              mv -v ${RPM_TOPDIR}/RPMS/x86_64/${file} ${RPM_TOPDIR}/RPMS/x86_64/opensuse-${file}
+              mv -v ${RPM_TOPDIR}/RPMS/x86_64/${file} upload/opensuse-${file}
             done
             for file in $(ls ${RPM_TOPDIR}/SRPMS/); do
-              mv -v ${RPM_TOPDIR}/SRPMS/${file} ${RPM_TOPDIR}/SRPMS/opensuse-${file}
+              mv -v ${RPM_TOPDIR}/SRPMS/${file} upload/opensuse-${file}
             done
 
       - uses: softprops/action-gh-release@v1
         with:
           files: |
-            ${RPM_TOPDIR}/RPMS/x86_64/*.rpm
-            ${RPM_TOPDIR}/SRPMS/*.src.rpm
+            upload/*.rpm
