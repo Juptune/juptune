@@ -37,7 +37,8 @@ jobs:
   # Dodgy unsigned RPMs it is.
   opensuse_rpm:
     name: Create OpenSUSE RPM
-    runs-on: opensuse/tumbleweed
+    runs-on: ubuntu-latest
+    container: opensuse/tumbleweed:latest
     steps:
       - uses: actions/checkout@v4
 
