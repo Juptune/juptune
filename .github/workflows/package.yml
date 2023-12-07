@@ -55,7 +55,7 @@ jobs:
         run: zypper -n in --no-recommends --auto-agree-with-licenses meson ldc-phobos-devel pkg-config rpm-build
       
       - name: Setup RPM Build Environment
-        run: mkdir ~/rpmbuild/SOURCES
+        run: mkdir -p ~/rpmbuild/SOURCES
 
       - name: Copy Source Dist
         run: cp dists/juptune-source.tar.gz ~/rpmbuild/SOURCES
