@@ -4,7 +4,7 @@ project(
     'juptune', 
     'd',
     license: 'MPL-2.0',
-    version: '0.0.1'
+    version: '0.0.1',
 )
 
 # Tl;dr Meson has crappy bugs for its basic functionality that will take 200 years to be addressed:
@@ -124,3 +124,7 @@ pkgc.generate(
 #### Tests ####
 
 test('juptune-unittest', juptune_all_unittest_exe)
+
+#### Subdirs ####
+
+subdir('./devops/pkg/opensuse-rpm')

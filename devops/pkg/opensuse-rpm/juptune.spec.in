@@ -1,0 +1,77 @@
+#
+# spec file for package juptune
+#
+# Copyright (c) 2023 Bradley Chatha (prefer: bradley.chatha@gmail.com, alt: bradley@chatha.dev)
+#
+# All modifications and additions to the file contributed by third parties
+# remain the property of their copyright owners, unless otherwise agreed
+# upon. The license for this file, and modifications and additions to the
+# file, is the same license as for the pristine package itself (unless the
+# license for the pristine package is not an Open Source License, in which
+# case the license is the MIT License). An "Open Source License" is a
+# license that conforms to the Open Source Definition (Version 1.9)
+# published by the Open Source Initiative.
+
+# Please submit bugfixes or comments via https://bugs.opensuse.org/
+#
+
+# Note: This file is used as a template that is then rendered via Meson.
+
+%define lib_name        lib%{name}
+%define include_dir     juptune
+%define pkgconfig_name  juptune
+
+Name:           juptune
+Version:        @JUPTUNE_VERSION@
+Release:        0
+Summary:        Async I/O framework for D
+License:        MPL-2.0
+Group:          System/Libraries
+URL:            https://github.com/Juptune/juptune
+Source0:        juptune-@JUPTUNE_VERSION@.tar.gz
+BuildRequires:  meson
+BuildRequires:  ldc-phobos-devel
+BuildRequires:  pkg-config
+Requires:       libdruntime-ldc102
+Requires:       libphobos2-ldc102
+ExclusiveArch:  x86_64
+
+%description
+Contains runtime shared libraries required by all applications 
+that use Juptune. Juptune is a library that provides D applications
+access to asynchronous I/O, as well as features such as HTTP
+client/server implementations.
+
+%package        devel
+Summary:        Development files for %{name}
+Requires:       %{name} = %{version}
+License:        MPL-2.0
+Group:          Development/Language/D
+
+%description devel
+The %{name}-devel package contains libraries and header files for
+developing applications that use %{name}.
+
+%prep
+%autosetup -p1
+
+%build
+%meson
+%meson_build
+
+%install
+%meson_install
+
+%post -p /sbin/ldconfig
+%postun -p /sbin/ldconfig
+
+%files
+%license LICENSE.txt
+%doc README.md
+%{_libdir}/%{lib_name}*.so*
+
+%files devel
+%{_includedir}/d/%{include_dir}/*
+%{_libdir}/pkgconfig/%{pkgconfig_name}.pc
+
+%changelog
