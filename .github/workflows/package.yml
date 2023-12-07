@@ -37,6 +37,7 @@ jobs:
   # Dodgy unsigned RPMs it is.
   opensuse_rpm:
     name: Create OpenSUSE RPM
+    needs: create_dists
     runs-on: ubuntu-latest
     container: opensuse/tumbleweed:latest
     steps:
@@ -51,12 +52,7 @@ jobs:
         run: tar -xzvf dists/devops.tar.gz
 
       - name: Install Build Dependencies
-        run: >-
-            zypper -n in --no-recommends --auto-agree-with-licenses 
-              meson 
-              ldc-phobos-devel 
-              pkg-config
-              rpm-build
+        run: zypper -n in --no-recommends --auto-agree-with-licenses meson ldc-phobos-devel pkg-config rpm-build
       
       - name: Setup RPM Build Environment
         run: mkdir ~/rpmbuild/SOURCES
