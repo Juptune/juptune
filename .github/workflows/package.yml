@@ -53,28 +53,31 @@ jobs:
 
       - name: Install Build Dependencies
         run: zypper -n in --no-recommends --auto-agree-with-licenses meson ldc-phobos-devel pkg-config rpm-build
+
+      - name: Get rpm topdir
+        run: echo "RPM_TOPDIR=$(rpm --eval '%{_topdir}')" >> $GITHUB_ENV
       
       - name: Setup RPM Build Environment
-        run: mkdir -p ~/rpmbuild/SOURCES
+        run: mkdir -p ${RPM_TOPDIR}/SOURCES
 
       - name: Copy Source Dist
-        run: cp dists/juptune-source.tar.gz ~/rpmbuild/SOURCES
+        run: cp dists/juptune-source.tar.gz ${RPM_TOPDIR}/SOURCES
 
       - name: Perform build
         run: rpmbuild -ba build/devops/pkg/opensuse-rpm/juptune.spec
 
       - name: Rename RPMs
         run: |
-            for file in $(ls ~/rpmbuild/RPMS/x86_64/); do
-              mv -v ~/rpmbuild/RPMS/x86_64/${file} ~/rpmbuild/RPMS/x86_64/opensuse-${file}
+            for file in $(ls ${RPM_TOPDIR}/RPMS/x86_64/); do
+              mv -v ${RPM_TOPDIR}/RPMS/x86_64/${file} ${RPM_TOPDIR}/RPMS/x86_64/opensuse-${file}
             done
-            for file in $(ls ~/rpmbuild/SRPMS/); do
-              mv -v ~/rpmbuild/SRPMS/${file} ~/rpmbuild/SRPMS/opensuse-${file}
+            for file in $(ls ${RPM_TOPDIR}/SRPMS/); do
+              mv -v ${RPM_TOPDIR}/SRPMS/${file} ${RPM_TOPDIR}/SRPMS/opensuse-${file}
             done
 
       - uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            ~/rpmbuild/RPMS/x86_64/*.rpm
-            ~/rpmbuild/SRPMS/*.src.rpm
+            ${RPM_TOPDIR}/RPMS/x86_64/*.rpm
+            ${RPM_TOPDIR}/SRPMS/*.src.rpm
