@@ -1,6 +1,7 @@
 name: Package
 
 on:
+  push: # Temp
   release:
     types: [published]
 
