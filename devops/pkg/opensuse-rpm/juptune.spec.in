@@ -30,7 +30,7 @@ Group:          System/Libraries
 URL:            https://github.com/Juptune/juptune
 Source0:        juptune-source.tar.gz
 BuildRequires:  meson
-BuildRequires:  ldc-phobos-devel
+BuildRequires:  ldc
 BuildRequires:  pkg-config
 Requires:       libdruntime-ldc102
 Requires:       libphobos2-ldc102
