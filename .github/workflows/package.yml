@@ -52,7 +52,14 @@ jobs:
         run: tar -xzvf dists/devops.tar.gz
 
       - name: Install Build Dependencies
-        run: zypper -n in --no-recommends --auto-agree-with-licenses meson ldc ldc-phobos-devel ldc-runtime-devel pkg-config rpm-build
+        run: zypper -n in --no-recommends --auto-agree-with-licenses \
+          meson \
+          ldc \
+          ldc-phobos-devel \
+          ldc-runtime-devel \
+          pkg-config \
+          rpm-build \
+          yasm
 
       - name: Get rpm topdir
         run: echo "RPM_TOPDIR=$(rpm --eval '%{_topdir}')" >> $GITHUB_ENV
