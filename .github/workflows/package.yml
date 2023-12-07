@@ -1,7 +1,6 @@
 name: Package
 
 on:
-  push: # Temp
   release:
     types: [published]
 
@@ -84,7 +83,6 @@ jobs:
             done
 
       - uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
             ${RPM_TOPDIR}/RPMS/x86_64/*.rpm
