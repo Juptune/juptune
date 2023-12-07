@@ -11,19 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Tooling (apt)
-        run: sudo apt update && sudo apt install -y python3-pip yasm
-
-      - name: Install Tooling (pip)
-        run: pip3 install meson ninja
-
-      - name: Install Dlang
-        uses: dlang-community/setup-dlang@v1
-        with:
-          compiler: ldc-latest
-
-      - name: Configure Meson
-        run: meson setup build --prefix $(pwd)/install
+      - name: Setup Meson
+        uses: ./.github/actions/meson-setup
 
       - name: Build
         run: meson compile -C build
