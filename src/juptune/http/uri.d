@@ -217,7 +217,6 @@ enum UriParseRules
     allowUriSuffix = 1 << 0,
 }
 
-
 /++
  + A fairly featureless POD struct that represents a URI that specifically does *not* own
  + the data it points to.
@@ -228,6 +227,8 @@ enum UriParseRules
  + ++/
 struct ScopeUri
 {
+    import juptune.core.ds : String;
+
     const(char)[] scheme; /// The scheme of the URI, e.g. "http", if one exists
     const(char)[] userInfo; /// The user info of the URI, e.g. "user:info", if one exists
     const(char)[] host; /// The host of the URI, e.g. "localhost", if one exists
@@ -260,6 +261,111 @@ struct ScopeUri
     const(char)[] path; /// The path of the URI, e.g. "/some/path", if one exists
     const(char)[] query; /// The query of the URI, e.g. "?some=query", if one exists
     const(char)[] fragment; /// The fragment of the URI, e.g. "#some-fragment", if one exists
+
+    UriParseHints hints; /// A bitmask of hints that can be used to determine the structure of the URI
+
+    Result reconstruct(scope out String result) @trusted @nogc nothrow const
+    {
+        scope put = (scope const char[] slice) => result.put(slice);
+        this.reconstructSink(put);
+
+        UriParseRules sanityRules;
+        if(this.hints & UriParseHints.isUriSuffix)
+            sanityRules |= UriParseRules.allowUriSuffix;
+
+        ScopeUri sanityCheck;
+        auto parseResult = uriParseNoCopy(result[], sanityCheck, sanityRules);
+        if(parseResult.isError)
+            return parseResult;
+
+        if(this != sanityCheck)
+        {
+            // Despite being a bug, it's better to not make this an assert as this code path can
+            // be heavily influcenced by user input, and thus should be handled gracefully.
+            debug
+            {
+                import std.exception : assumeWontThrow;
+                import std.format    : format;
+
+                return Result.make(
+                    UriError.none,
+                    format(
+                        "---\nTHIS: %s\nGOT : %s\nSTR : %s",
+                        this,
+                        sanityCheck,
+                        result[]
+                    ).assumeWontThrow
+                );
+            }
+            else
+                return Result.make(UriError.none, "bug: Reconstructed URI does not match original URI");
+        }
+
+        return Result.noError;
+    }
+
+    version(unittest) private void mustReconstruct() const
+    {
+        import juptune.core.ds : String;
+        String sanityCheck;
+        reconstruct(sanityCheck).resultAssert;
+    }
+
+    private void reconstructSink(SinkT)(scope ref SinkT sink) const
+    {
+        if(this.hints & UriParseHints.isAbsolute)
+        {
+            sink(this.scheme);
+            sink("://");
+        }
+        else if(this.hints & UriParseHints.isNetworkReference)
+            sink("//");
+        
+        if(this.hints & (UriParseHints.isAbsolute | UriParseHints.isNetworkReference | UriParseHints.isUriSuffix))
+        {
+            if(this.hints & UriParseHints.authorityHasUserInfo)
+            {
+                sink(this.userInfo);
+                sink("@");
+            }
+            
+            sink(this.host);
+            
+            if(this.hints & UriParseHints.authorityHasPort)
+            {
+                import juptune.core.util : toBase10, IntToCharBuffer;
+
+                IntToCharBuffer buffer;
+                const slice = toBase10(this.port.get(), buffer);
+
+                sink(":");
+                sink(slice);
+            }
+        }
+
+        if(
+            (this.hints & UriParseHints.pathIsEmpty)
+            && (
+                !(this.hints & UriParseHints.queryIsEmpty)
+                || !(this.hints & UriParseHints.pathIsEmpty)
+            )
+        )
+            sink("/");
+        else
+            sink(this.path);
+
+        if(!(this.hints & UriParseHints.queryIsEmpty))
+        {
+            sink("?");
+            sink(this.query);
+        }
+
+        if(!(this.hints & UriParseHints.fragmentIsEmpty))
+        {
+            sink("#");
+            sink(this.fragment);
+        }
+    }
 }
 
 /**** Higher level Uri parsing functions ****/
@@ -319,35 +425,34 @@ struct ScopeUri
 Result uriParseNoCopy(
     const(char)[] input,
     out scope ScopeUri uri,
-    out scope UriParseHints hints,
     UriParseRules rules = UriParseRules.strict
 ) @nogc @trusted nothrow // Note: It is actually @safe however compiler-generated temporaries trigger @safe deprecated warnings
 in(input.length > 0, "Attempting to parse an empty string is likely incorrect logic. Null checks, people!")
 {
     const(char)[] next;
 
-    auto result = uriParseScheme(input, uri.scheme, next, hints);
+    auto result = uriParseScheme(input, uri.scheme, next, uri.hints);
     if(result.isError) // Schemaless URIs are allowed. Difficult to determine if it is a schemaless URI or an invalid schema
         next = input;
 
-    result = uriParseAuthority(next, uri.userInfo, uri.host, uri.hostAsIp, uri.port, next, hints, rules);
+    result = uriParseAuthority(next, uri.userInfo, uri.host, uri.hostAsIp, uri.port, next, uri.hints, rules);
     if(result.isError)
         return result;
 
-    result = uriParsePath(next, uri.path, next, hints);
+    result = uriParsePath(next, uri.path, next, uri.hints);
     if(result.isError)
         return result;
 
     if(next.length > 0 && next[0] != '#') // Special case: query is empty but fragment is not
     {
-        result = uriParseQuery(next, uri.query, next, hints);
+        result = uriParseQuery(next, uri.query, next, uri.hints);
         if(result.isError)
             return result;
     }
     else
-        hints |= UriParseHints.queryIsEmpty;
+        uri.hints |= UriParseHints.queryIsEmpty;
 
-    result = uriParseFragment(next, uri.fragment, next, hints);
+    result = uriParseFragment(next, uri.fragment, next, uri.hints);
     if(result.isError)
         return result;
 
@@ -1838,79 +1943,130 @@ unittest
         UriParseRules rules;
     }
 
-    const tests = [
+    auto tests = [
         "scheme & host": T(
             "https://chatha.dev",
             ScopeUri("https", null, "chatha.dev"),
-            UriParseHints.isAbsolute | UriParseHints.authorityHostIsDomain | UriParseHints.pathIsEmpty | UriParseHints.queryIsEmpty | UriParseHints.fragmentIsEmpty // @suppress(dscanner.style.long_line)
+            UriParseHints.isAbsolute 
+            | UriParseHints.authorityHostIsDomain 
+            | UriParseHints.pathIsEmpty 
+            | UriParseHints.queryIsEmpty 
+            | UriParseHints.fragmentIsEmpty
         ),
         "scheme & host & root path": T(
             "https://chatha.dev/",
             ScopeUri("https", null, "chatha.dev", Nullable!IpAddress.init, Nullable!ushort.init, "/"),
-            UriParseHints.isAbsolute | UriParseHints.authorityHostIsDomain | UriParseHints.pathIsAbsolute | UriParseHints.queryIsEmpty | UriParseHints.fragmentIsEmpty // @suppress(dscanner.style.long_line)
+            UriParseHints.isAbsolute 
+            | UriParseHints.authorityHostIsDomain 
+            | UriParseHints.pathIsAbsolute 
+            | UriParseHints.queryIsEmpty 
+            | UriParseHints.fragmentIsEmpty
         ),
         "scheme & host & path & query": T(
             "https://chatha.dev/blog?post=1&sort=time",
             ScopeUri("https", null, "chatha.dev", Nullable!IpAddress.init, Nullable!ushort.init, "/blog", "post=1&sort=time"), // @suppress(dscanner.style.long_line)
-            UriParseHints.isAbsolute | UriParseHints.authorityHostIsDomain | UriParseHints.pathIsAbsolute | UriParseHints.fragmentIsEmpty // @suppress(dscanner.style.long_line)
+            UriParseHints.isAbsolute 
+            | UriParseHints.authorityHostIsDomain 
+            | UriParseHints.pathIsAbsolute 
+            | UriParseHints.fragmentIsEmpty
         ),
         "scheme & host & path & fragment": T(
             "https://chatha.dev/blog#post-1",
             ScopeUri("https", null, "chatha.dev", Nullable!IpAddress.init, Nullable!ushort.init, "/blog", "", "post-1"), // @suppress(dscanner.style.long_line)
-            UriParseHints.isAbsolute | UriParseHints.authorityHostIsDomain | UriParseHints.pathIsAbsolute | UriParseHints.queryIsEmpty // @suppress(dscanner.style.long_line)
+            UriParseHints.isAbsolute 
+            | UriParseHints.authorityHostIsDomain 
+            | UriParseHints.pathIsAbsolute 
+            | UriParseHints.queryIsEmpty
         ),
         "scheme & host & path & query & fragment": T(
             "https://chatha.dev/bl%20og?post=1&sort=%20time#post%201",
             ScopeUri("https", null, "chatha.dev", Nullable!IpAddress.init, Nullable!ushort.init, "/bl%20og", "post=1&sort=%20time", "post%201"), // @suppress(dscanner.style.long_line)
-            UriParseHints.isAbsolute | UriParseHints.authorityHostIsDomain | UriParseHints.pathIsAbsolute // @suppress(dscanner.style.long_line)
+            UriParseHints.isAbsolute 
+            | UriParseHints.authorityHostIsDomain 
+            | UriParseHints.pathIsAbsolute
+            | UriParseHints.percentEncodedPath
+            | UriParseHints.percentEncodedQuery
+            | UriParseHints.percentEncodedFragment
         ),
         "network reference": T(
             "//chatha.dev",
             ScopeUri(null, null, "chatha.dev"),
-            UriParseHints.isNetworkReference | UriParseHints.authorityHostIsDomain
+            UriParseHints.isNetworkReference 
+            | UriParseHints.authorityHostIsDomain
+            | UriParseHints.pathIsEmpty
+            | UriParseHints.queryIsEmpty
+            | UriParseHints.fragmentIsEmpty
         ),
         "URI suffix without flag": T(
             "chatha.dev/path",
             ScopeUri(null, null, "", Nullable!IpAddress.init, Nullable!ushort.init, "chatha.dev/path"),
             UriParseHints.pathIsRootless
+            | UriParseHints.queryIsEmpty
+            | UriParseHints.fragmentIsEmpty
         ),
         "URI suffix with flag": T(
             "chatha.dev/path",
             ScopeUri(null, null, "chatha.dev", Nullable!IpAddress.init, Nullable!ushort.init, "/path"),
-            UriParseHints.isUriSuffix | UriParseHints.pathIsAbsolute,
+            UriParseHints.isUriSuffix 
+            | UriParseHints.authorityHostIsDomain
+            | UriParseHints.pathIsAbsolute
+            | UriParseHints.queryIsEmpty
+            | UriParseHints.fragmentIsEmpty,
             UriParseRules.allowUriSuffix
         ),
         "absolute relative reference with URI suffix flag": T(
             "/chatha.dev/path",
             ScopeUri(null, null, "", Nullable!IpAddress.init, Nullable!ushort.init, "/chatha.dev/path"),
-            UriParseHints.pathIsAbsolute,
+            UriParseHints.pathIsAbsolute
+            | UriParseHints.queryIsEmpty
+            | UriParseHints.fragmentIsEmpty,
             UriParseRules.allowUriSuffix
         ),
         "network reference with URI suffix flag": T(
             "//chatha.dev/path",
             ScopeUri(null, null, "chatha.dev", Nullable!IpAddress.init, Nullable!ushort.init, "/path"),
-            UriParseHints.isNetworkReference | UriParseHints.pathIsAbsolute,
+            UriParseHints.isNetworkReference 
+            | UriParseHints.authorityHostIsDomain
+            | UriParseHints.pathIsAbsolute
+            | UriParseHints.queryIsEmpty
+            | UriParseHints.fragmentIsEmpty,
             UriParseRules.allowUriSuffix
         ),
         "absolute relative reference": T(
             "/chatha.dev/path",
             ScopeUri(null, null, "", Nullable!IpAddress.init, Nullable!ushort.init, "/chatha.dev/path"),
             UriParseHints.pathIsAbsolute
+            | UriParseHints.queryIsEmpty
+            | UriParseHints.fragmentIsEmpty
         ),
         "ip host": T(
             "https://127.0.0.1",
             ScopeUri("https", null, "127.0.0.1", Nullable!IpAddress(IpAddress.mustParse("127.0.0.1"))),
-            UriParseHints.isAbsolute | UriParseHints.authorityHostIsIpv4
+            UriParseHints.isAbsolute 
+            | UriParseHints.authorityHostIsIpv4
+            | UriParseHints.pathIsEmpty
+            | UriParseHints.queryIsEmpty
+            | UriParseHints.fragmentIsEmpty
         ),
         "ip host with port": T(
             "https://127.0.0.1:8080",
             ScopeUri("https", null, "127.0.0.1", Nullable!IpAddress(IpAddress.mustParse("127.0.0.1:8080")), Nullable!ushort(8080)), // @suppress(dscanner.style.long_line)
-            UriParseHints.isAbsolute | UriParseHints.authorityHostIsIpv4
+            UriParseHints.isAbsolute 
+            | UriParseHints.authorityHostIsIpv4
+            | UriParseHints.authorityHasPort
+            | UriParseHints.pathIsEmpty
+            | UriParseHints.queryIsEmpty
+            | UriParseHints.fragmentIsEmpty
         ),
         "domain host with port": T(
             "https://chatha.dev:8080",
             ScopeUri("https", null, "chatha.dev", Nullable!IpAddress.init, Nullable!ushort(8080)),
-            UriParseHints.isAbsolute | UriParseHints.authorityHostIsDomain
+            UriParseHints.isAbsolute 
+            | UriParseHints.authorityHostIsDomain
+            | UriParseHints.authorityHasPort
+            | UriParseHints.pathIsEmpty
+            | UriParseHints.queryIsEmpty
+            | UriParseHints.fragmentIsEmpty
         ),
     ];
 
@@ -1919,9 +2075,9 @@ unittest
         import std.format : format;
 
         ScopeUri uri;
-        UriParseHints hints;
-        auto result = uriParseNoCopy(test.input, uri, hints, test.rules);
+        auto result = uriParseNoCopy(test.input, uri, test.rules);
         assert(!result.isError, "[" ~ name ~ "]: " ~ result.error);
+        test.expectedUri.hints = test.expectedHints;
         assert(
             uri == test.expectedUri, 
             format(
@@ -1931,7 +2087,7 @@ unittest
                 uri
             )
         );
-        assert((hints & test.expectedHints) == test.expectedHints, "Failed for test: " ~ name);
+        uri.mustReconstruct();
     }
 }
 

@@ -12,7 +12,8 @@ Only Linux is supported, and that likely won't ever change.
 
 This library is super alpha, please don't use it for any serious work.
 
-I also want to make this easier in the future, but for now:
+The latest Github release will contain packages for a few Linux distros, however if you want the latest changes or
+if there's no release for your distro, you can manually pull down and build Juptune:
 
 ```bash
 your-package-manager install yasm meson

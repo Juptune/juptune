@@ -7,6 +7,8 @@
 module juptune.http;
 
 public import 
+    juptune.http.common,
+    juptune.http.client,
     juptune.http.uri,
     juptune.http.v1
 ;

@@ -63,18 +63,18 @@ struct String
     @nogc nothrow:
 
     @trusted
-    this(string str)
+    this(scope string str)
     {
         this = str;
     }
 
     @trusted // Bounds checking + always confirming pointer validity *should* make this safe.
-    this(const(char)[] str)
+    this(scope const(char)[] str)
     {
         this = str;
     }
 
-    this(const char* ptr)
+    this(scope const char* ptr)
     {
         import core.stdc.string : strlen;
         if(!ptr)
@@ -195,7 +195,7 @@ struct String
     }
 
     @trusted
-    void opAssign(const(char)[] str)
+    void opAssign(scope const(char)[] str)
     {   
         if(str is null)
             this = null;

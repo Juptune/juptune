@@ -40,6 +40,8 @@ event_srcs = files(
 )
 
 http_srcs = files(
+    './src/juptune/http/common.d',
+    './src/juptune/http/client.d',
     './src/juptune/http/package.d',
     './src/juptune/http/uri.d',
     './src/juptune/http/v1.d',

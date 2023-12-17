@@ -664,13 +664,12 @@ struct Http1ReaderBase(SocketT)
         else if(slice.length == 0)
             return Result.make(Http1Error.badRequestPath, response!("400", "Empty path in request line. A minimum of / is required")); // @suppress(dscanner.style.long_line)
         
-        UriParseHints hints;
-        result = uriParseNoCopy(cast(char[])slice, requestLine.path, hints);
+        result = uriParseNoCopy(cast(char[])slice, requestLine.path);
         if(result.isError)
             return result;
         else if(
-            (hints & (UriParseHints.isAbsolute | UriParseHints.isNetworkReference))
-            || !(hints & UriParseHints.pathIsAbsolute)
+            (requestLine.path.hints & (UriParseHints.isAbsolute | UriParseHints.isNetworkReference))
+            || !(requestLine.path.hints & UriParseHints.pathIsAbsolute)
         )
             return Result.make(Http1Error.badRequestPath, response!("400", "Invalid path in request line. Must be an absolute, relative-reference path.")); // @suppress(dscanner.style.long_line)
 
@@ -1069,7 +1068,7 @@ struct Http1ReaderBase(SocketT)
     in(this._state.mustBeIn(State.body))
     in(this._pinCursor == this._readCursor, "pin cursor must be at the read cursor")
     {
-        if(this._message.bodyEncoding & BodyEncoding.hasContentLength)
+        if((this._message.bodyEncoding & BodyEncoding.hasContentLength) && this._message.contentLength > 0)
             return this.readBodyContentLength(bodyChunk);
         else if(this._message.bodyEncoding & BodyEncoding.isChunked)
             return this.readBodyChunked(bodyChunk);
@@ -1203,7 +1202,7 @@ struct Http1ReaderBase(SocketT)
         }
 
         import juptune.core.util.conv : to;
-        result = to!size_t(cast(char[])slice, chunkSize);
+        result = to!size_t(cast(char[])slice, chunkSize, 16);
         if(result.isError)
             return Result.make(Http1Error.badBodyChunkSize, response!("400", "Client sent an invalid chunk size - could not convert to a size_t")); // @suppress(dscanner.style.long_line)
 
@@ -2274,16 +2273,14 @@ bool http1IsPathValidForMethod(
     bool isProxyRequest = false
 ) @safe @nogc nothrow
 {
-    UriParseHints hints;
     ScopeUri uri;
-    return http1IsPathValidForMethod(method, path, hints, uri, isProxyRequest);
+    return http1IsPathValidForMethod(method, path, uri, isProxyRequest);
 }
 
 /// ditto.
 bool http1IsPathValidForMethod(
     scope const char[] method, 
     const char[] path,
-    scope out UriParseHints hints,
     scope out ScopeUri uri,
     bool isProxyRequest = false
 ) @safe @nogc nothrow
@@ -2296,15 +2293,15 @@ bool http1IsPathValidForMethod(
             goto default;
 
         case "CONNECT":
-            auto result = uriParseNoCopy(path, uri, hints, UriParseRules.allowUriSuffix);
-            return !result.isError && http1IsPathValidForMethod(method, hints, isProxyRequest);
+            auto result = uriParseNoCopy(path, uri, UriParseRules.allowUriSuffix);
+            return !result.isError && http1IsPathValidForMethod(method, uri.hints, isProxyRequest);
 
         default:
-            auto result = uriParseNoCopy(path, uri, hints);
+            auto result = uriParseNoCopy(path, uri);
             if(isProxyRequest && method != "OPTIONS")
-                return !result.isError && (hints & isAbsolute);
+                return !result.isError && (uri.hints & isAbsolute);
             else
-                return !result.isError && http1IsPathValidForMethod(method, hints);
+                return !result.isError && http1IsPathValidForMethod(method, uri.hints);
     }
 }
 
@@ -2431,6 +2428,7 @@ unittest
                 assert(requestLine.httpVersion == test.expectedVersion);
                 requestLine.access((method, path) {
                     assert(method == test.expectedMethod);
+                    path.hints = UriParseHints.none; // We don't care about the hints
                     assert(path == test.expectedPath);
                 });
 
@@ -2743,7 +2741,7 @@ unittest
     static T[] cases = [
         T("0\r\n\r\n", ""),
         T("8\r\n01234567\r\n0\r\n\r\n", "01234567"),
-        T("10\r\n0123456789\r\n10\r\nabcdefghij\r\n0\r\n\r\n", "0123456789abcdefghij"),
+        T("A\r\n0123456789\r\nA\r\nabcdefghij\r\n0\r\n\r\n", "0123456789abcdefghij"),
     ];
 
     auto loop = EventLoop(EventLoopConfig());
@@ -2884,6 +2882,7 @@ Transfer-Encoding: chunked
                 assert(requestLine.httpVersion == test.expectedVersion);
                 requestLine.access((method, path) {
                     assert(method == test.expectedMethod);
+                    path.hints = UriParseHints.none; // We don't care about the hints
                     assert(path == test.expectedPath);
                 });
                 requestLine = Http1RequestLine.init;
@@ -2961,6 +2960,19 @@ unittest
     }
 
     static T[] cases = [
+        T(
+`HTTP/1.1 200 OK
+Content-Length: 0
+
+`,
+            Http1Version.http11, 200, "OK",
+            [
+                H("content-length", "0"),
+            ], 
+            "",
+            []
+        ),
+
         T(
 `HTTP/1.1 200 OK
 Content-Length: 4

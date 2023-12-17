@@ -174,7 +174,16 @@ void resultAssert(Result result)
     if(!result.isError)
         return;
 
+    // Quirk: Assert seems to hold onto the string slice longer than it should do,
+    //        so we have to destroy the string without actually calling the destructor.
+    import std.algorithm : moveEmplace;
+
     String s;
     result.toString(s);
-    assert(false, s.slice);
+
+    String s2;
+    auto slice = s[];
+    moveEmplace(s2, s);
+    
+    assert(false, slice);
 }
