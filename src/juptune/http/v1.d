@@ -160,7 +160,7 @@ struct Http1RequestLine
     private ScopeUri path;
 
     /// Accesses the request line data.
-    void access(scope void delegate(scope const char[] method, scope ScopeUri path) @safe func) @safe
+    void access(scope void delegate(scope const char[] method, scope ScopeUri path) @safe nothrow func) @safe nothrow
     in(this.entireLine._pinned !is null, "entireLine must be pinned")
     {
         func(this.method, this.path);
@@ -194,7 +194,7 @@ struct Http1ResponseLine
     private const(char)[] reasonPhrase;
 
     /// Accesses the response line data.
-    void access(scope void delegate(scope const char[] reasonPhrase) @safe func) @safe
+    void access(scope void delegate(scope const char[] reasonPhrase) @safe nothrow func) @safe nothrow
     in(this.entireLine._pinned !is null, "entireLine must be pinned")
     {
         func(this.reasonPhrase);
@@ -232,7 +232,7 @@ struct Http1BodyChunk
     private const(char)[] extensionLine;
 
     /// Accesses the body chunk data.
-    void access(scope void delegate(scope ubyte[] data) @safe func) @safe
+    void access(scope void delegate(scope ubyte[] data) @safe nothrow func) @safe nothrow
     in(this.entireChunk._pinned !is null, "entireChunk must be pinned")
     {
         func(this.data);
@@ -281,7 +281,7 @@ struct Http1Header
     private const(char)[] value;
 
     /// Accesses the header data.
-    void access(scope void delegate(scope const char[] name, scope const char[] value) @safe func) @safe
+    void access(scope void delegate(scope const char[] name, scope const char[] value) @safe nothrow func) @safe nothrow
     in(this.entireLine._pinned !is null, "entireLine must be pinned")
     {
         func(this.name, this.value);

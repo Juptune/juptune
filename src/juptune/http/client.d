@@ -37,8 +37,8 @@ interface IHttpClient
     Result streamRequest(
         scope ref const HttpRequest request,
         scope out HttpResponse response,
-        scope HttpClient.StreamRequestFunc bodyPutter, 
-        scope HttpClient.StreamResponseFunc bodyReader,
+        scope HttpClient.StreamRequestFuncGC bodyPutter, 
+        scope HttpClient.StreamResponseFuncGC bodyReader,
     );
     Result connect(IpAddress ip);
     Result close();
@@ -66,9 +66,9 @@ final class HttpClientAdapter : IHttpClient
     Result streamRequest(
         scope ref const HttpRequest request,
         scope out HttpResponse response,
-        scope HttpClient.StreamRequestFunc bodyPutter, 
-        scope HttpClient.StreamResponseFunc bodyReader,
-    ) => this._client.streamRequest(request, response, bodyPutter, bodyReader);
+        scope HttpClient.StreamRequestFuncGC bodyPutter, 
+        scope HttpClient.StreamResponseFuncGC bodyReader,
+    ) => this._client.streamRequestGC(request, response, bodyPutter, bodyReader);
 
     Result connect(IpAddress ip) => this._client.connect(ip);
 
@@ -91,6 +91,8 @@ struct HttpClient
 
     /// A function provided by the user which is used to stream an entire request body.
     alias StreamRequestFunc = Result delegate(scope PutBodyFunc putter) @nogc nothrow;
+    /// ditto
+    alias StreamRequestFuncGC = Result delegate(scope PutBodyFunc putter) nothrow;
 
     /++
      + A function provided by `HttpClient` which can be used to stream read data from the response body.
@@ -100,14 +102,19 @@ struct HttpClient
      + Please note that this is marked `@safe`` to help make it clear that the `scope` for `bodyChunk` is
      + _very_ important to adhear to.
      +
-     + You can (and probably will ahve to) mark your func/lambda as `@trusted`, 
+     + You can (and probably will have to) mark your func/lambda as `@trusted`, 
      + but that will also disable the compiler making sure that you don't accidentally 
      + escape the `bodyChunk` parameter.
-     + ++/   
+     + ++/
     alias StreamResponseFunc = Result delegate(
         scope const ref HttpResponse statusAndHeaders, 
         scope const ubyte[] bodyChunk
     ) @safe @nogc nothrow;
+    /// ditto
+    alias StreamResponseFuncGC = Result delegate(
+        scope const ref HttpResponse statusAndHeaders, 
+        scope const ubyte[] bodyChunk
+    ) @safe nothrow;
 
     private
     {
@@ -133,9 +140,7 @@ struct HttpClient
 
     @disable this(this){}
 
-    @nogc nothrow:
-
-    this(HttpClientConfig config)
+    this(HttpClientConfig config) @nogc nothrow
     {
         this._config                    = config;
         this._readBufferStorage.length  = config.readBufferSize;
@@ -148,7 +153,7 @@ struct HttpClient
         out HttpClient client,
         ref TcpSocket socket, 
         HttpClientConfig config
-    )
+    ) @nogc nothrow
     {
         import std.algorithm : move;
 
@@ -159,7 +164,7 @@ struct HttpClient
         client._isConnected = true;
     }
 
-    Result connect(IpAddress ip)
+    Result connect(IpAddress ip) @nogc nothrow
     in(!this._isConnected, "This client is already connected")
     {
         auto result = this._socket.connect(ip);
@@ -172,7 +177,7 @@ struct HttpClient
         return Result.noError;
     }
 
-    Result close()
+    Result close() @nogc nothrow
     in(this._isConnected, "This client is not connected")
     {
         auto closeResult = this.dispatch!"close"();
@@ -190,13 +195,13 @@ struct HttpClient
         return Result.noError;
     }
 
-    bool isConnected() const => this._isConnected;
+    bool isConnected() @nogc nothrow const => this._isConnected;
 
-    HttpClientVersion selectedVersion() const
+    HttpClientVersion selectedVersion() @nogc nothrow const
     in(this._isConnected, "This client is not connected")
         => this._selectedVersion;
 
-    Result request(scope ref const HttpRequest request, scope out HttpResponse response)
+    Result request(scope ref const HttpRequest request, scope out HttpResponse response) @nogc nothrow
     in(this._isConnected, "This client is not connected")
     {
         auto result = this.dispatch!"request"(request, response);
@@ -211,7 +216,7 @@ struct HttpClient
         scope out HttpResponse response,
         scope StreamRequestFunc bodyPutter, 
         scope StreamResponseFunc bodyReader,
-    )
+    ) @nogc nothrow
     in(this._isConnected, "This client is not connected")
     {
         this._lockClient = true;
@@ -224,7 +229,25 @@ struct HttpClient
         return result;
     }
 
-    private auto dispatch(string func, Args...)(auto ref Args args) // @suppress(dscanner.suspicious.unused_parameter)
+    Result streamRequestGC(
+        scope ref const HttpRequest request,
+        scope out HttpResponse response,
+        scope StreamRequestFuncGC bodyPutter, 
+        scope StreamResponseFuncGC bodyReader,
+    ) nothrow
+    in(this._isConnected, "This client is not connected")
+    {
+        this._lockClient = true;
+        scope(exit) this._lockClient = false;
+
+        auto result = this.dispatch!"streamRequest"(request, response, bodyPutter, bodyReader);
+        if(result.isError)
+            auto _ = this.close(); // streamRequest's error takes priority
+
+        return result;
+    }
+
+    private auto dispatch(string func, Args...)(auto ref Args args) nothrow // @suppress(dscanner.suspicious.unused_parameter)
     {
         final switch(this._selectedVersion) with(HttpClientVersion)
         {
@@ -250,18 +273,18 @@ private struct Http1ClientImpl
     Http1Writer writer;
     Http1Reader reader;
     
-    @nogc nothrow:
+    nothrow:
 
-    this(HttpClientConfig config, TcpSocket* socket, ubyte[] writeBuffer, ubyte[] readBuffer)
+    this(HttpClientConfig config, TcpSocket* socket, ubyte[] writeBuffer, ubyte[] readBuffer) @nogc
     in(socket !is null, "socket is null")
     {
         this.writer = Http1Writer(socket, writeBuffer, config.http1);
         this.reader = Http1Reader(socket, readBuffer, config.http1);
     }
 
-    Result close() => Result.noError;
+    Result close() @nogc => Result.noError;
 
-    Result request(scope ref const HttpRequest request, scope ref HttpResponse response)
+    Result request(scope ref const HttpRequest request, scope ref HttpResponse response) @nogc
     in(writer != Http1Writer.init, "Http1Writer is not initialized")
     in(reader != Http1Reader.init, "Http1Reader is not initialized")
     {
@@ -292,11 +315,11 @@ private struct Http1ClientImpl
         return Result.noError;
     }
 
-    Result streamRequest(
+    Result streamRequest(RequestFuncT, ResponseFuncT)(
         scope ref const HttpRequest request,
         scope out HttpResponse response,
-        scope HttpClient.StreamRequestFunc bodyPutter, 
-        scope HttpClient.StreamResponseFunc bodyReader,
+        scope RequestFuncT bodyPutter, 
+        scope ResponseFuncT bodyReader,
     )
     in(writer != Http1Writer.init, "Http1Writer is not initialized")
     in(reader != Http1Reader.init, "Http1Reader is not initialized")
@@ -328,7 +351,7 @@ private struct Http1ClientImpl
         return Result.noError;
     }
 
-    Result sendHead(scope ref const HttpRequest request)
+    Result sendHead(scope ref const HttpRequest request) @nogc
     {
         auto result = this.writer.putRequestLine(request.method[], request.path[], Http1Version.http11);
         if(result.isError)
@@ -369,7 +392,7 @@ private struct Http1ClientImpl
         return Result.noError;
     }
 
-    Result sendBody(scope ref const HttpRequest request)
+    Result sendBody(scope ref const HttpRequest request) @nogc
     {
         auto result = this.writer.putBody(request.body[]);
         if(result.isError)
@@ -387,9 +410,9 @@ private struct Http1ClientImpl
         return Result.noError;
     }
 
-    Result streamSendBody(
+    Result streamSendBody(RequestFuncT)(
         scope ref const HttpRequest request,
-        scope HttpClient.StreamRequestFunc bodyPutter,
+        scope RequestFuncT bodyPutter,
     )
     {
         auto result = bodyPutter(data => this.writer.putBody(data));
@@ -408,7 +431,7 @@ private struct Http1ClientImpl
         return Result.noError;
     }
 
-    Result readHead(scope ref HttpResponse response, const Http1ReadResponseConfig readConfig)
+    Result readHead(scope ref HttpResponse response, const Http1ReadResponseConfig readConfig) @nogc
     {
         auto result = Result.noError;
         
@@ -450,7 +473,7 @@ private struct Http1ClientImpl
         return Result.noError;
     }
 
-    Result readBody(scope ref HttpResponse response)
+    Result readBody(scope ref HttpResponse response) @nogc
     {
         auto result = Result.noError;
 
@@ -472,7 +495,7 @@ private struct Http1ClientImpl
         return Result.noError;
     }
 
-    Result readTrailers(scope ref HttpResponse response)
+    Result readTrailers(scope ref HttpResponse response) @nogc
     {
         bool endOfTrailers;
         auto result = this.reader.checkEndOfTrailers(endOfTrailers);
@@ -505,17 +528,28 @@ private struct Http1ClientImpl
         return Result.noError;
     }
 
-    Result streamReadBody(
+    Result streamReadBody(ResponseFuncT)(
         scope ref HttpResponse response,
-        scope HttpClient.StreamResponseFunc bodyReader,
+        scope ResponseFuncT bodyReader,
     )
     {
         auto result = Result.noError;
-        scope accessFunc = (scope ubyte[] data) @nogc nothrow {
-            if(data.length == 0)
-                return;
-            result = bodyReader(response, data);
-        }; // For some reason the compiler thinks it needs to allocate a closure if we use a delegate inline.
+        static if(is(ResponseFuncT == HttpClient.StreamResponseFunc))
+        {
+            scope accessFunc = (scope ubyte[] data) @nogc nothrow {
+                if(data.length == 0)
+                    return;
+                result = bodyReader(response, data);
+            }; // For some reason the compiler thinks it needs to allocate a closure if we use a delegate inline.
+        }
+        else
+        {
+            scope accessFunc = (scope ubyte[] data) nothrow {
+                if(data.length == 0)
+                    return;
+                result = bodyReader(response, data);
+            };
+        }
 
         Http1BodyChunk chunk;
         do
@@ -600,7 +634,7 @@ HttpRequest collectRequest(scope ref Http1Writer writer, scope ref Http1Reader r
     return request;
 }
 
-@("HttpClient - Full Request")
+@("HttpClient - Full Request - Simple")
 unittest
 {
     static struct T
@@ -616,16 +650,16 @@ unittest
     }
 
     __gshared T[string] cases;
-    T t;
-    
-    t = T();
-    t.toSend.withMethod("GET");
-    t.toSend.withPath("/test");
-    t.toSend.setHeader("host", "localhost");
-    t.toSend.putBody(cast(ubyte[])"Hello, world!");
-    t.expected = t.toSend;
-    t.expected.setHeader("transfer-encoding", "chunked");
-    cases["Simple - automatic chunking"] = t;
+    cases["Simple - automatic chunking"] = (){
+        auto t = T();
+        t.toSend.withMethod("GET");
+        t.toSend.withPath("/test");
+        t.toSend.setHeader("host", "localhost");
+        t.toSend.putBody(cast(ubyte[])"Hello, world!");
+        t.expected = t.toSend;
+        t.expected.setHeader("transfer-encoding", "chunked");
+        return t;
+    }();
 
     auto loop = EventLoop(EventLoopConfig());
     loop.addGCThread(() nothrow {
@@ -677,6 +711,106 @@ unittest
                     setHeader("Content-Length", "5");
                     setHeader("Connection", "close");
                     putBody(cast(ubyte[])"Hello");
+                }
+                assert(response == expectedResponse, "response mismatch - " ~ pair.name);
+            }, casePairs[1], &asyncMoveSetter!CasePair).resultAssert;
+        }
+        catch(Exception ex) assert(false, ex.msg);
+    });
+    loop.join();
+}
+
+@("HttpClient - Full Request - Streamed")
+unittest
+{
+    static struct T
+    {
+        HttpRequest toSend;
+        const(ubyte)[] body;
+        HttpRequest expected;
+
+        this(scope ref return typeof(this) src)
+        {
+            this.toSend = src.toSend;
+            this.body = src.body;
+            this.expected = src.expected;
+        }
+    }
+
+    __gshared T[string] cases;
+    cases["Simple - automatic chunking"] = (){
+        auto t = T();
+        t.toSend.withMethod("GET");
+        t.toSend.withPath("/test");
+        t.toSend.setHeader("host", "localhost");
+        t.body = cast(ubyte[])"Hello, world!";
+        t.expected = t.toSend;
+        t.expected.setHeader("transfer-encoding", "chunked");
+        return t;
+    }();
+
+    auto loop = EventLoop(EventLoopConfig());
+    loop.addGCThread(() nothrow {
+        try foreach(name, test; cases)
+        {
+            import std.algorithm : move;
+
+            static struct CasePair
+            {
+                string name;
+                T test;
+                TcpSocket socket;
+            }
+
+            TcpSocket[2] pairs;
+            TcpSocket.makePair(pairs).resultAssert;
+
+            CasePair[2] casePairs;
+            casePairs[0] = CasePair(name, cast()test);
+            casePairs[1] = CasePair(name, cast()test);
+            move(pairs[0], casePairs[0].socket);
+            move(pairs[1], casePairs[1].socket);
+
+            async((){
+                auto pair = juptuneEventLoopGetContext!CasePair;
+                auto writer = Http1Writer(&pair.socket, new ubyte[512], Http1Config());
+                auto reader = Http1Reader(&pair.socket, new ubyte[512], Http1Config());
+                auto request = collectRequest(writer, reader);
+
+                assert(request.method == pair.test.expected.method, "method mismatch - " ~ pair.name);
+                assert(request.path == pair.test.expected.path, "path mismatch - " ~ pair.name);
+                assert(request.headers == pair.test.expected.headers, "headers mismatch - " ~ pair.name);
+                assert(request.body == pair.test.body, "body mismatch - " ~ pair.name);
+            }, casePairs[0], &asyncMoveSetter!CasePair).resultAssert;
+
+            async((){
+                auto pair = juptuneEventLoopGetContext!CasePair;
+                HttpClient client;
+                HttpClient.wrapPairedSocket(client, pair.socket, HttpClientConfig());
+
+                HttpResponse response;
+                client.streamRequest(
+                    pair.test.toSend, 
+                    response,
+                    (scope put) {
+                        // Test that calling `put` multiple times works.
+                        put(pair.test.body[0..$/2]).resultAssert;
+                        put(pair.test.body[$/2..$]).resultAssert;
+                        return Result.noError;
+                    },
+                    (scope const ref resp, scope const ubyte[] data) @trusted {
+                        assert(data == cast(ubyte[])"Hello", pair.name);
+                        return Result.noError;
+                    }
+                ).resultAssert;
+
+                HttpResponse expectedResponse;
+                with(expectedResponse)
+                {
+                    withStatus(200);
+                    withReason("OK");
+                    setHeader("Content-Length", "5");
+                    setHeader("Connection", "close");
                 }
                 assert(response == expectedResponse, "response mismatch - " ~ pair.name);
             }, casePairs[1], &asyncMoveSetter!CasePair).resultAssert;

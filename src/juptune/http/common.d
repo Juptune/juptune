@@ -70,13 +70,10 @@ struct HttpHeader
         this._name = String(name);
         this._value = String(value);
 
-        // Since the strings haven't ever escaped yet, it's safe to modify them in place.
         // NOTE: While it would be nice to check the validation result, this
         //       should get caught in the writer anyway. The annoyance of constructors :(
         scope nameSlice = cast(ubyte[])this._name[];
-        scope valueSlice = cast(ubyte[])this._value[];
         http1CanonicalHeaderNameInPlace(nameSlice);
-        http1CanonicalHeaderNameInPlace(valueSlice);
     }
 
     this(scope ref return typeof(this) src) @trusted @nogc nothrow // @safe: D can't figure out that the copy constructor... copies
