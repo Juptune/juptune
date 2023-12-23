@@ -2,30 +2,57 @@ module juptune.http.client;
 
 import juptune.core.util : Result;
 
+/++
+ + Which version of HTTP to use/has been selected by a `HttpClient`.
+ + ++/
 enum HttpClientVersion
 {
     FAILSAFE,
+
+    /// Automatically select the highest version supported by the server.
     automatic,
+
+    /// HTTP/1.1
     http1,
 }
 
+/++
+ + Configuration for a `HttpClient`.
+ + ++/
 struct HttpClientConfig
 {
     import core.time       : seconds;
     import juptune.http.v1 : Http1Config;
 
+    /// Configuration for HTTP/1.1 - this defaults to a 30 second timeout for both reading and writing.
     Http1Config http1 = Http1Config().withReadTimeout(30.seconds).withWriteTimeout(30.seconds);
+
+    /// Which version of HTTP to use when connecting to a server.
     HttpClientVersion httpVersion = HttpClientVersion.automatic;
     
-    size_t readBufferSize  = 1024 * 8;
-    size_t writeBufferSize = 1024 * 8;
+    size_t readBufferSize  = 1024 * 8; /// The size of the read buffer to use.
+    size_t writeBufferSize = 1024 * 8; /// The size of the write buffer to use.
 
     @safe @nogc nothrow pure:
 
     HttpClientConfig withHttp1Config(Http1Config v) return { this.http1 = v; return this; }
     HttpClientConfig withHttpVersion(HttpClientVersion v) return { this.httpVersion = v; return this; }
+    HttpClientConfig withReadBufferSize(size_t v) return { this.readBufferSize = v; return this; }
+    HttpClientConfig withWriteBufferSize(size_t v) return { this.writeBufferSize = v; return this; }
 }
 
+/++
+ + An interface for a HTTP client.
+ +
+ + While Juptune is an @nogc-first library, it's silly to pretend that there's no place for
+ + GC-oriented code. Such code is likely to make use of OOP, so this interface is provided
+ + as a standard way to use a HTTP client.
+ +
+ + Please use the documentation from `HttpClient` as it in almost all cases applies to this interface.
+ +
+ + The only real difference is that `IHttpClient.streamRequest` correspeonds to `HttpClient.streamRequestGC`,
+ + since there's no real reason to expose the @nogc version.
+ + ++/
 interface IHttpClient
 {
     import juptune.http.common : HttpRequest, HttpResponse;
@@ -46,6 +73,11 @@ interface IHttpClient
     HttpClientVersion selectedVersion() const;
 }
 
+/++
+ + An adapter around `HttpClient` that allows it to be used as an `IHttpClient`.
+ +
+ + Please see the documentation for `HttpClient`.
+ + ++/
 final class HttpClientAdapter : IHttpClient
 {
     private
@@ -79,6 +111,29 @@ final class HttpClientAdapter : IHttpClient
     HttpClientVersion selectedVersion() const => this._client.selectedVersion();
 }
 
+/++
+ + A medium-level HTTP client, designed to be a good balance between ease of use, flexibility,
+ + and performance.
+ +
+ + This client attempts to cater to both the @nogc and GC worlds, and as such has a few different
+ + named overloads for its functions.
+ +
+ + It has two different ways to send a request currently: A 'Simple' way, and a 'Streamed' way.
+ +
+ + Simple:
+ +  This is the easiest way to send a request, but isn't the most suitable for all situations,
+ +  especially sending/receiving large amounts of data.
+ +
+ +  This method is used by calling the `request` function with a pre-built `HttpRequest` containing
+ +  the entire request. Please consult the documentation for `HttpRequest` and `request` for more info.
+ +
+ + Streamed:
+ +  This is the most flexible way to send a request beyond using the low-level primitives directly,
+ +  but is more complex to use. This is the recommended way to send/receive large amounts of data.
+ +
+ +  This method is used by calling the `streamRequest` function which provides a callback-based
+ +  pattern for sending/receiving data. Please consult the documentation for `streamRequest` for more info.
+ + ++/
 struct HttpClient
 {
     import juptune.core.ds      : Array;
@@ -88,11 +143,13 @@ struct HttpClient
 
     /// A function provided by `HttpClient` which can be used to push data into the request body.
     alias PutBodyFunc = Result delegate(scope const ubyte[] bodyChunk) @nogc nothrow;
+    /// ditto
+    alias PutBodyFuncGC = Result delegate(scope const ubyte[] bodyChunk) nothrow;
 
     /// A function provided by the user which is used to stream an entire request body.
     alias StreamRequestFunc = Result delegate(scope PutBodyFunc putter) @nogc nothrow;
     /// ditto
-    alias StreamRequestFuncGC = Result delegate(scope PutBodyFunc putter) nothrow;
+    alias StreamRequestFuncGC = Result delegate(scope PutBodyFuncGC putter) nothrow;
 
     /++
      + A function provided by `HttpClient` which can be used to stream read data from the response body.
@@ -135,11 +192,18 @@ struct HttpClient
         bool                _lockClient;
 
         invariant(_isConnected || _selectedVersion == HttpClientVersion.FAILSAFE, "bug: Incorrect state management");
-        invariant(!_lockClient, "Attempted to use client while it was locked (or a bug where the lock wasn't released)");
+        invariant(!_lockClient, "Attempted to use client while it was locked (or a bug where the lock wasn't released)"); // @suppress(dscanner.style.long_line)
     }
 
     @disable this(this){}
 
+    /++
+     + Creates a new `HttpClient` with the given configuration as well as allocating
+     + internal buffers to the size specified in the config.
+     +
+     + Params:
+     +  config = The configuration to use for this client.
+     + ++/
     this(HttpClientConfig config) @nogc nothrow
     {
         this._config                    = config;
@@ -149,7 +213,7 @@ struct HttpClient
         this._writeBuffer               = this._writeBufferStorage[];
     }
 
-    private static void wrapPairedSocket(
+    version(unittest) private static void wrapPairedSocket(
         out HttpClient client,
         ref TcpSocket socket, 
         HttpClientConfig config
@@ -164,6 +228,21 @@ struct HttpClient
         client._isConnected = true;
     }
 
+    /++
+     + Connects this client to the given IP address.
+     +
+     + Assertions:
+     +  The client must not already be connected.
+     +
+     + Params:
+     +  ip = The IP address to connect to.
+     +
+     + Throws:
+     +  Anything that `TcpSocket.connect` can throw.
+     +
+     + Returns:
+     +  A `Result` indicating whether the connection was successful or not.
+     + ++/
     Result connect(IpAddress ip) @nogc nothrow
     in(!this._isConnected, "This client is already connected")
     {
@@ -177,6 +256,18 @@ struct HttpClient
         return Result.noError;
     }
 
+    /++
+     + Closes the connection to the server.
+     +
+     + Assertions:
+     +  The client must be connected.
+     +
+     + Throws:
+     +  Anything that `TcpSocket.close` can throw.
+     +
+     + Returns:
+     +  A `Result` indicating whether the connection was closed successfully or not.
+     + ++/
     Result close() @nogc nothrow
     in(this._isConnected, "This client is not connected")
     {
@@ -195,12 +286,44 @@ struct HttpClient
         return Result.noError;
     }
 
+    /// Returns whether this client is connected to a server.
     bool isConnected() @nogc nothrow const => this._isConnected;
 
+    /// Returns the version of HTTP that this client is using.
     HttpClientVersion selectedVersion() @nogc nothrow const
     in(this._isConnected, "This client is not connected")
         => this._selectedVersion;
 
+    /++
+     + Sends a request to the server and returns the response.
+     +
+     + This is the 'Simple' way to send a request, and is the easiest to use.
+     +
+     + Notes:
+     +  This function will automatically add the `Host` header if it is not already present.
+     +
+     +  If the request has a body and does not have a `Content-Length` or `Transfer-Encoding` header,
+     +  then this function will automatically add a `Transfer-Encoding: chunked` header.
+     +
+     +  The state of the `response` parameter is undefined if this function returns an error.
+     +
+     +  This function will automatically close the connection if an error occurs.
+     +
+     + Assertions:
+     +  The client must be connected.
+     +
+     + Params:
+     +  request  = The request to send.
+     +  response = The response to fill in. This will contain the entire response, including the body.
+     +
+     + Throws:
+     +  Anything that `TcpSocket.send` or `TcpSocket.receive` can throw.
+     +
+     +  If using HTTP1, anything that `Http1Writer` or `Http1Reader` can throw (`Http1Error`).
+     +
+     + Returns:
+     +  A `Result` indicating whether the request was successful or not.
+     + ++/
     Result request(scope ref const HttpRequest request, scope out HttpResponse response) @nogc nothrow
     in(this._isConnected, "This client is not connected")
     {
@@ -211,6 +334,51 @@ struct HttpClient
         return result;
     }
 
+    /++
+     + Streams a request to the server and streams the response.
+     +
+     + This is the 'Streamed' way to send a request, and is the most flexible to use.
+     +
+     + Notes:
+     +  The `response` parameter will only contain the status line, headers, and trailers (on return),
+     +  and will not contain the body unless the user's callback puts it there.
+     +
+     +  The `request` parameter is used to provide the method, path, and headers, but the body is 
+     +  always ignored.
+     +
+     +  The D compiler is really bad with error messages, so you may need to store `bodyPutter` and
+     +  `bodyReader` in a variable before passing them to this function just to get a useful error message.
+     +
+     +  e.g. `scope HttpClient.StreamRequestFunc putter = (...) @trusted @nogc {...}`
+     +
+     +  This function will automatically add the `Host` header if it is not already present.
+     +
+     +  If the request has a body and does not have a `Content-Length` or `Transfer-Encoding` header,
+     +  then this function will automatically add a `Transfer-Encoding: chunked` header.
+     +
+     +  The state of the `response` parameter is undefined if this function returns an error.
+     +
+     +  This function will automatically close the connection if an error occurs.
+     +
+     + Assertions:
+     +  The client must be connected.
+     +
+     + Params:
+     +  request    = The request to send. Only the method, path, and headers are used.
+     +  response   = The response to fill in. This will contain the status line, headers, and trailers.
+     +  bodyPutter = A callback that will be called to stream the request body.
+     +  bodyReader = A callback that will be called to stream the response body.
+     +
+     + Throws:
+     +  Anything that `TcpSocket.send` or `TcpSocket.receive` can throw.
+     +
+     +  If using HTTP1, anything that `Http1Writer` or `Http1Reader` can throw (`Http1Error`).
+     +
+     +  Anything the user returns from `bodyPutter` or `bodyReader`.
+     +
+     + Returns:
+     +  A `Result` indicating whether the request was successful or not.
+     + ++/
     Result streamRequest(
         scope ref const HttpRequest request,
         scope out HttpResponse response,
@@ -229,6 +397,7 @@ struct HttpClient
         return result;
     }
 
+    /// ditto
     Result streamRequestGC(
         scope ref const HttpRequest request,
         scope out HttpResponse response,

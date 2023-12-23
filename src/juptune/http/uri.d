@@ -264,6 +264,32 @@ struct ScopeUri
 
     UriParseHints hints; /// A bitmask of hints that can be used to determine the structure of the URI
 
+    /++
+     + Reconstructs the URI from the data it points to, 
+     + and validates that the reconstructed URI matches the original URI.
+     +
+     + Notes:
+     +  In debug builds the error returned will contain additional information about the mismatch.
+     +
+     +  If an error is thrown, the `result` parameter will still
+     +  contain the reconstructed URI, but it is up to the user whether to risk using it or not.
+     +
+     + Params:
+     +  result = The string to write the reconstructed URI to
+     +
+     + Throws:
+     +  Anything that `uriParseNoCopy` can throw.
+     +
+     +  `UriError.none` if the reconstructed URI does not match the original URI.
+     +
+     +  Since this error is technically a programmer bug it doesn't have a dedicated error code.
+     +
+     +  Because URIs are heavily influenced by user input it was decided that this function should
+     +  handle the error gracefully instead of asserting, just to prevent any potential denial of service.
+     +
+     + Returns:
+     +  A `Result` indicating whether the reconstruction was successful or not.
+     + ++/
     Result reconstruct(scope out String result) @trusted @nogc nothrow const
     {
         scope put = (scope const char[] slice) => result.put(slice);
@@ -410,10 +436,11 @@ struct ScopeUri
  +  is a scheme or an authority. Please note that errors in a scheme may manifest as an error in the
  +  authority component.
  +
+ +  If it's not clear, you can use `uri.hints` to determine the exact structure of the URI.
+ +
  + Params:
  +  input = The input string to parse
  +  uri   = The `ScopeUri` to write the parsed URI to
- +  hints = A set of hints, set by this parser, that can be used to determine the structure of the URI
  +  rules = A set of rules that can be used to control the behaviour of the URI parser
  +
  + Throws:
