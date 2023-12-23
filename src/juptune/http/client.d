@@ -156,7 +156,7 @@ struct HttpClient
      +
      + Please note that the `HttpResponse` does not contain a body - it only contains the headers and status line.
      +
-     + Please note that this is marked `@safe`` to help make it clear that the `scope` for `bodyChunk` is
+     + Please note that this is marked `@safe` to help make it clear that the `scope` for `bodyChunk` is
      + _very_ important to adhear to.
      +
      + You can (and probably will have to) mark your func/lambda as `@trusted`, 
@@ -246,6 +246,13 @@ struct HttpClient
     Result connect(IpAddress ip) @nogc nothrow
     in(!this._isConnected, "This client is already connected")
     {
+        if(!this._socket.isOpen)
+        {
+            auto result = this._socket.open();
+            if(result.isError)
+                return result;
+        }
+
         auto result = this._socket.connect(ip);
         if(result.isError)
             return result;
