@@ -136,7 +136,7 @@ final class HttpClientAdapter : IHttpClient
  + ++/
 struct HttpClient
 {
-    import juptune.core.ds      : Array;
+    import juptune.core.ds      : Array, String;
     import juptune.event.io     : TcpSocket, IpAddress;
     import juptune.http.common  : HttpRequest, HttpResponse;
     import juptune.http.uri     : ScopeUri;
@@ -190,6 +190,7 @@ struct HttpClient
         bool                _isConnected;
         HttpClientVersion   _selectedVersion;
         bool                _lockClient;
+        String              _hostName;
 
         invariant(_isConnected || _selectedVersion == HttpClientVersion.FAILSAFE, "bug: Incorrect state management");
         invariant(!_lockClient, "Attempted to use client while it was locked (or a bug where the lock wasn't released)"); // @suppress(dscanner.style.long_line)
@@ -235,7 +236,8 @@ struct HttpClient
      +  The client must not already be connected.
      +
      + Params:
-     +  ip = The IP address to connect to.
+     +  ip   = The IP address to connect to.
+     +  host = The hostname to use for the `Host` header. If this is null, then the IP address will be used.
      +
      + Throws:
      +  Anything that `TcpSocket.connect` can throw.
@@ -243,9 +245,27 @@ struct HttpClient
      + Returns:
      +  A `Result` indicating whether the connection was successful or not.
      + ++/
-    Result connect(IpAddress ip) @nogc nothrow
+    Result connect(IpAddress ip, scope const char[] host = null) @nogc nothrow
     in(!this._isConnected, "This client is already connected")
     {
+        if(host.length == 0)
+        {
+            this._hostName.length = 0;
+            ip.toString(this._hostName);
+        }
+        else
+        {
+            this._hostName = host;
+
+            if(ip.port != 80)
+            {
+                import juptune.core.util : IntToCharBuffer, toBase10;
+                IntToCharBuffer port;
+                this._hostName ~= ":";
+                this._hostName ~= toBase10(ip.port, port);
+            }
+        }
+
         if(!this._socket.isOpen)
         {
             auto result = this._socket.open();
@@ -312,6 +332,9 @@ struct HttpClient
      +  If the request has a body and does not have a `Content-Length` or `Transfer-Encoding` header,
      +  then this function will automatically add a `Transfer-Encoding: chunked` header.
      +
+     +  If the request does not have a `Host` header, then this function will automatically add one
+     +  using the `host` provided by the relevant connect function that was used.
+     +
      +  The state of the `response` parameter is undefined if this function returns an error.
      +
      +  This function will automatically close the connection if an error occurs.
@@ -334,7 +357,7 @@ struct HttpClient
     Result request(scope ref const HttpRequest request, scope out HttpResponse response) @nogc nothrow
     in(this._isConnected, "This client is not connected")
     {
-        auto result = this.dispatch!"request"(request, response);
+        auto result = this.dispatch!"request"(request, response, this._hostName);
         if(result.isError)
             auto _ = this.close(); // request's error takes priority
 
@@ -362,6 +385,9 @@ struct HttpClient
      +
      +  If the request has a body and does not have a `Content-Length` or `Transfer-Encoding` header,
      +  then this function will automatically add a `Transfer-Encoding: chunked` header.
+     +
+     +  If the request does not have a `Host` header, then this function will automatically add one
+     +  using the `host` provided by the relevant connect function that was used.
      +
      +  The state of the `response` parameter is undefined if this function returns an error.
      +
@@ -397,7 +423,7 @@ struct HttpClient
         this._lockClient = true;
         scope(exit) this._lockClient = false;
 
-        auto result = this.dispatch!"streamRequest"(request, response, bodyPutter, bodyReader);
+        auto result = this.dispatch!"streamRequest"(request, response, bodyPutter, bodyReader, this._hostName);
         if(result.isError)
             auto _ = this.close(); // streamRequest's error takes priority
 
@@ -416,7 +442,7 @@ struct HttpClient
         this._lockClient = true;
         scope(exit) this._lockClient = false;
 
-        auto result = this.dispatch!"streamRequest"(request, response, bodyPutter, bodyReader);
+        auto result = this.dispatch!"streamRequest"(request, response, bodyPutter, bodyReader, this._hostName);
         if(result.isError)
             auto _ = this.close(); // streamRequest's error takes priority
 
@@ -439,6 +465,7 @@ struct HttpClient
 
 private struct Http1ClientImpl
 {
+    import juptune.core.ds      : String;
     import juptune.event.io     : TcpSocket;
     import juptune.http.common  : HttpRequest, HttpResponse;
     
@@ -460,7 +487,11 @@ private struct Http1ClientImpl
 
     Result close() @nogc => Result.noError;
 
-    Result request(scope ref const HttpRequest request, scope ref HttpResponse response) @nogc
+    Result request(
+        scope ref const HttpRequest request, 
+        scope ref HttpResponse response,
+        scope ref const String defaultHost,
+    ) @nogc
     in(writer != Http1Writer.init, "Http1Writer is not initialized")
     in(reader != Http1Reader.init, "Http1Reader is not initialized")
     {
@@ -468,7 +499,7 @@ private struct Http1ClientImpl
         if(request.method == "HEAD")
             readConfig = readConfig.withIsBodyless(true);
 
-        auto result = this.sendHead(request);
+        auto result = this.sendHead(request, defaultHost);
         if(result.isError)
             return result;
 
@@ -496,6 +527,7 @@ private struct Http1ClientImpl
         scope out HttpResponse response,
         scope RequestFuncT bodyPutter, 
         scope ResponseFuncT bodyReader,
+        scope ref const String defaultHost,
     )
     in(writer != Http1Writer.init, "Http1Writer is not initialized")
     in(reader != Http1Reader.init, "Http1Reader is not initialized")
@@ -504,7 +536,7 @@ private struct Http1ClientImpl
         if(request.method == "HEAD")
             readConfig = readConfig.withIsBodyless(true);
 
-        auto result = this.sendHead(request);
+        auto result = this.sendHead(request, defaultHost);
         if(result.isError)
             return result;
 
@@ -527,7 +559,10 @@ private struct Http1ClientImpl
         return Result.noError;
     }
 
-    Result sendHead(scope ref const HttpRequest request) @nogc
+    Result sendHead(
+        scope ref const HttpRequest request,
+        scope ref const String defaultHost
+    ) @nogc
     {
         auto result = this.writer.putRequestLine(request.method[], request.path[], Http1Version.http11);
         if(result.isError)
@@ -556,7 +591,7 @@ private struct Http1ClientImpl
 
         if(!hasHostHeader)
         {
-            result = this.writer.putHeader("Host", "TODO");
+            result = this.writer.putHeader("Host", defaultHost[]);
             if(result.isError)
                 return result;
         }

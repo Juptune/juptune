@@ -307,6 +307,9 @@ struct String
     @property
     void length(size_t newLen)
     {
+        if(this.isCompletelyEmpty && newLen == 0)
+            return; // edge case.
+
         if(this.isSmall && !this.isCompletelyEmpty)
         {
             if(newLen > this._store.smallString.length)
@@ -511,4 +514,11 @@ unittest
     assert(s2 == "put it ");
     s2 ~= String("in mah belleh");
     assert(s2 == "put it in mah belleh");
+}
+
+@("String - length = 0 edge case")
+unittest
+{
+    String s;
+    s.length = 0; // Shouldn't crash.
 }
