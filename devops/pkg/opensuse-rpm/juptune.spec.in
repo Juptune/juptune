@@ -33,9 +33,11 @@ BuildRequires:  meson
 BuildRequires:  ldc
 BuildRequires:  ldc-phobos-devel
 BuildRequires:  ldc-runtime-devel
+BuildRequires:  libsodium-devel
 BuildRequires:  pkg-config
 Requires:       libdruntime-ldc102
 Requires:       libphobos2-ldc102
+Requires:       libsodium23
 ExclusiveArch:  x86_64
 
 %description

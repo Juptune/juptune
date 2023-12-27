@@ -57,6 +57,7 @@ jobs:
             ldc \
             ldc-phobos-devel \
             ldc-runtime-devel \
+            libsodium-devel \
             pkg-config \
             rpm-build
 

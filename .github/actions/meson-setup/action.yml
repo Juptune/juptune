@@ -5,7 +5,7 @@ runs:
   steps:
     - name: Install Tooling (apt)
       shell: sh
-      run: sudo apt update && sudo apt install -y python3-pip
+      run: sudo apt update && sudo apt install -y python3-pip libsodium-dev
 
     - name: Install Tooling (pip)
       shell: sh

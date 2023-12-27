@@ -10,6 +10,8 @@ project(
 # Meson has crappy bugs for its basic functionality that will take 200 years to be addressed:
 # https://github.com/mesonbuild/meson/issues/11999
 
+libsodium_dep = dependency('libsodium', version: '>=1.0.18')
+
 #### Sources ####
 
 core_srcs = files(
@@ -29,6 +31,7 @@ core_srcs = files(
 )
 
 crypto_srcs = files(
+    './src/juptune/crypto/libsodium.di',
     './src/juptune/crypto/package.d',
 )
 
@@ -59,7 +62,7 @@ juptune_core_dep = declare_dependency(
 
 juptune_crypto_dep = declare_dependency(
     sources: crypto_srcs,
-    dependencies: [juptune_core_dep],
+    dependencies: [juptune_core_dep, libsodium_dep],
 )
 
 juptune_event_dep = declare_dependency(
