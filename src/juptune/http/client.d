@@ -335,6 +335,9 @@ struct HttpClient
      +  If the request does not have a `Host` header, then this function will automatically add one
      +  using the `host` provided by the relevant connect function that was used.
      +
+     +  The client will gracefully close the connection in normal circumstances such as
+     +  the `Connection: close` header being present.
+     +
      +  The state of the `response` parameter is undefined if this function returns an error.
      +
      +  This function will automatically close the connection if an error occurs.
@@ -357,8 +360,9 @@ struct HttpClient
     Result request(scope ref const HttpRequest request, scope out HttpResponse response) @nogc nothrow
     in(this._isConnected, "This client is not connected")
     {
-        auto result = this.dispatch!"request"(request, response, this._hostName);
-        if(result.isError)
+        bool closeConnection;
+        auto result = this.dispatch!"request"(request, response, this._hostName, closeConnection);
+        if(result.isError || closeConnection)
             auto _ = this.close(); // request's error takes priority
 
         return result;
@@ -388,6 +392,9 @@ struct HttpClient
      +
      +  If the request does not have a `Host` header, then this function will automatically add one
      +  using the `host` provided by the relevant connect function that was used.
+     +
+     +  The client will gracefully close the connection in normal circumstances such as
+     +  the `Connection: close` header being present.
      +
      +  The state of the `response` parameter is undefined if this function returns an error.
      +
@@ -423,9 +430,20 @@ struct HttpClient
         this._lockClient = true;
         scope(exit) this._lockClient = false;
 
-        auto result = this.dispatch!"streamRequest"(request, response, bodyPutter, bodyReader, this._hostName);
-        if(result.isError)
+        bool closeConnection;
+        auto result = this.dispatch!"streamRequest"(
+            request, 
+            response, 
+            bodyPutter, 
+            bodyReader, 
+            this._hostName,
+            closeConnection
+        );
+        if(result.isError || closeConnection)
+        {
+            this._lockClient = false;
             auto _ = this.close(); // streamRequest's error takes priority
+        }
 
         return result;
     }
@@ -442,9 +460,20 @@ struct HttpClient
         this._lockClient = true;
         scope(exit) this._lockClient = false;
 
-        auto result = this.dispatch!"streamRequest"(request, response, bodyPutter, bodyReader, this._hostName);
-        if(result.isError)
+        bool closeConnection;
+        auto result = this.dispatch!"streamRequest"(
+            request, 
+            response, 
+            bodyPutter, 
+            bodyReader, 
+            this._hostName,
+            closeConnection
+        );
+        if(result.isError || closeConnection)
+        {
+            this._lockClient = false;
             auto _ = this.close(); // streamRequest's error takes priority
+        }
 
         return result;
     }
@@ -491,6 +520,7 @@ private struct Http1ClientImpl
         scope ref const HttpRequest request, 
         scope ref HttpResponse response,
         scope ref const String defaultHost,
+        scope out bool closeConnection,
     ) @nogc
     in(writer != Http1Writer.init, "Http1Writer is not initialized")
     in(reader != Http1Reader.init, "Http1Reader is not initialized")
@@ -503,7 +533,7 @@ private struct Http1ClientImpl
         if(result.isError)
             return result;
 
-        result = this.sendBody(request);
+        result = this.sendBody(request, closeConnection);
         if(result.isError)
             return result;
 
@@ -515,7 +545,7 @@ private struct Http1ClientImpl
         if(result.isError)
             return result;
 
-        result = this.readTrailers(response);
+        result = this.readTrailers(response, closeConnection);
         if(result.isError)
             return result;
 
@@ -528,6 +558,7 @@ private struct Http1ClientImpl
         scope RequestFuncT bodyPutter, 
         scope ResponseFuncT bodyReader,
         scope ref const String defaultHost,
+        scope out bool closeConnection,
     )
     in(writer != Http1Writer.init, "Http1Writer is not initialized")
     in(reader != Http1Reader.init, "Http1Reader is not initialized")
@@ -540,7 +571,7 @@ private struct Http1ClientImpl
         if(result.isError)
             return result;
 
-        result = this.streamSendBody(request, bodyPutter);
+        result = this.streamSendBody(request, bodyPutter, closeConnection);
         if(result.isError)
             return result;
 
@@ -552,7 +583,7 @@ private struct Http1ClientImpl
         if(result.isError)
             return result;
 
-        result = this.readTrailers(response);
+        result = this.readTrailers(response, closeConnection);
         if(result.isError)
             return result;
 
@@ -603,7 +634,10 @@ private struct Http1ClientImpl
         return Result.noError;
     }
 
-    Result sendBody(scope ref const HttpRequest request) @nogc
+    Result sendBody(
+        scope ref const HttpRequest request,
+        scope out bool closeConnection,
+    ) @nogc
     {
         auto result = this.writer.putBody(request.body[]);
         if(result.isError)
@@ -618,12 +652,14 @@ private struct Http1ClientImpl
         if(result.isError)
             return result;
 
+        closeConnection = closeConnection || summary.connectionClosed;
         return Result.noError;
     }
 
     Result streamSendBody(RequestFuncT)(
         scope ref const HttpRequest request,
         scope RequestFuncT bodyPutter,
+        scope out bool closeConnection,
     )
     {
         auto result = bodyPutter(data => this.writer.putBody(data));
@@ -639,6 +675,7 @@ private struct Http1ClientImpl
         if(result.isError)
             return result;
 
+        closeConnection = closeConnection || summary.connectionClosed;
         return Result.noError;
     }
 
@@ -706,7 +743,10 @@ private struct Http1ClientImpl
         return Result.noError;
     }
 
-    Result readTrailers(scope ref HttpResponse response) @nogc
+    Result readTrailers(
+        scope ref HttpResponse response,
+        scope out bool closeConnection,
+    ) @nogc
     {
         bool endOfTrailers;
         auto result = this.reader.checkEndOfTrailers(endOfTrailers);
@@ -736,6 +776,7 @@ private struct Http1ClientImpl
         if(result.isError)
             return result;
 
+        closeConnection = closeConnection || summary.connectionClosed;
         return Result.noError;
     }
 

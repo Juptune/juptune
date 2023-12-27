@@ -37,7 +37,7 @@ enum IoError
 {
     none,
 
-    /// A request timedout, or was cancelled.
+    /// A request timed out, or was cancelled.
     timeout,
 }
 
@@ -719,7 +719,6 @@ struct PosixTcpSocket
         if(result < 0)
             return getPosixResult("failed to create socket pairs", result);
 
-        PosixTcpSocket[2] wrapped;
         sockets[0]._driver.wrap(fds[0]);
         sockets[1]._driver.wrap(fds[1]);
 
@@ -1274,8 +1273,7 @@ unittest
     static void testResult(Result r)
     {
         assert(r.isError);
-        version(linux)
-            assert(r.isError(IoError.timeout));
+        assert(r.isError(IoError.timeout));
     }
 
     auto loop = EventLoop(EventLoopConfig());

@@ -16,7 +16,7 @@ The latest Github release will contain packages for a few Linux distros, however
 if there's no release for your distro, you can manually pull down and build Juptune:
 
 ```bash
-your-package-manager install yasm meson
+your-package-manager install meson
 
 git clone https://github.com/Juptune/juptune
 cd juptune

@@ -34,7 +34,6 @@ BuildRequires:  ldc
 BuildRequires:  ldc-phobos-devel
 BuildRequires:  ldc-runtime-devel
 BuildRequires:  pkg-config
-BuildRequires:  yasm
 Requires:       libdruntime-ldc102
 Requires:       libphobos2-ldc102
 ExclusiveArch:  x86_64

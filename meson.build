@@ -7,7 +7,7 @@ project(
     version: '0.0.1',
 )
 
-# Tl;dr Meson has crappy bugs for its basic functionality that will take 200 years to be addressed:
+# Meson has crappy bugs for its basic functionality that will take 200 years to be addressed:
 # https://github.com/mesonbuild/meson/issues/11999
 
 #### Sources ####
@@ -28,7 +28,10 @@ core_srcs = files(
     './src/juptune/core/util/utf.d',
 )
 
-event_asm_srcs = files() # Conditionally set by platform
+crypto_srcs = files(
+    './src/juptune/crypto/package.d',
+)
+
 event_srcs = files(
     './src/juptune/event/fiber.d',
     './src/juptune/event/io.d',
@@ -47,19 +50,6 @@ http_srcs = files(
     './src/juptune/http/v1.d',
 )
 
-#### Asm configuration ####
-
-if target_machine.cpu() == 'x86_64' and target_machine.system() == 'linux'
-    add_languages('nasm')
-    add_project_arguments('-Dlinux_amd64_sysv', language: 'nasm')
-    event_asm_srcs = files(
-        './src/juptune/event/asm/amd64/fiber.asm',
-        './src/juptune/event/asm/amd64/iouring.asm',
-    )
-else
-    error('Unsupported architecture')
-endif
-
 #### Dependencies ####
 
 juptune_core_dep = declare_dependency(
@@ -67,18 +57,23 @@ juptune_core_dep = declare_dependency(
     sources: core_srcs,
 )
 
+juptune_crypto_dep = declare_dependency(
+    sources: crypto_srcs,
+    dependencies: [juptune_core_dep],
+)
+
 juptune_event_dep = declare_dependency(
-    sources: [event_srcs, event_asm_srcs],
+    sources: event_srcs,
     dependencies: [juptune_core_dep],
 )
 
 juptune_http_dep = declare_dependency(
     sources: http_srcs,
-    dependencies: [juptune_core_dep, juptune_event_dep],
+    dependencies: [juptune_core_dep, juptune_crypto_dep, juptune_event_dep],
 )
 
 juptune_all_dep = declare_dependency(
-    dependencies: [juptune_core_dep, juptune_event_dep, juptune_http_dep],
+    dependencies: [juptune_core_dep, juptune_crypto_dep, juptune_event_dep, juptune_http_dep],
 )
 
 #### Executables ####

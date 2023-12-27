@@ -9,7 +9,6 @@ module juptune.event.fiber;
 import std.typecons : Nullable;
 import juptune.core.util : Result, resultAssert;
 
-private extern(C) void juptuneSwapFiberAsm(scope JuptuneRawFiber* from, scope JuptuneRawFiber* to) @nogc nothrow;
 version(linux)
 {
     version(X86_64)
@@ -52,6 +51,39 @@ version(linux)
                 auto ptr = cast(T*)this.rsp;
                 this.setTopOfStack(ptr);
                 return ptr;
+            }
+        }
+
+        extern(C) void juptuneSwapFiberAsm(
+            scope JuptuneRawFiber* from, // rdi
+            scope JuptuneRawFiber* to    // rsi
+        ) @nogc nothrow
+        {
+            asm @nogc nothrow {
+                naked;
+
+                lea RAX, [RSP+8]; // Stack pointer without return address
+                mov R8, [RSP];    // Return address
+                mov [RDI+JuptuneRawFiber.ret.offsetof], R8;
+                mov [RDI+JuptuneRawFiber.rsp.offsetof], RAX;
+                mov [RDI+JuptuneRawFiber.rbx.offsetof], RBX;
+                mov [RDI+JuptuneRawFiber.rbp.offsetof], RBP;
+                mov [RDI+JuptuneRawFiber.r12.offsetof], R12;
+                mov [RDI+JuptuneRawFiber.r13.offsetof], R13;
+                mov [RDI+JuptuneRawFiber.r14.offsetof], R14;
+                mov [RDI+JuptuneRawFiber.r15.offsetof], R15;
+
+                mov R8,  [RSI+JuptuneRawFiber.ret.offsetof];
+                mov RSP, [RSI+JuptuneRawFiber.rsp.offsetof];
+                mov RBX, [RSI+JuptuneRawFiber.rbx.offsetof];
+                mov RBP, [RSI+JuptuneRawFiber.rbp.offsetof];
+                mov R12, [RSI+JuptuneRawFiber.r12.offsetof];
+                mov R13, [RSI+JuptuneRawFiber.r13.offsetof];
+                mov R14, [RSI+JuptuneRawFiber.r14.offsetof];
+                mov R15, [RSI+JuptuneRawFiber.r15.offsetof];
+                jmp R8;
+
+                hlt;
             }
         }
     }

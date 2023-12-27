@@ -25,9 +25,42 @@ version(linux) private
     
     // Implemented by our ASM since it's literally easier than trying to piss around
     // with Meson bugs.
-    extern(C) int io_uring_setup(uint entries, io_uring_params* params) @nogc nothrow;
-    extern(C) int io_uring_enter(int fd, uint to_submit, uint min_complete, uint flags, sigset_t* sig) @nogc nothrow;
-    extern(C) int io_uring_register(int fd, uint opcode, void* arg, uint nr_args) @nogc nothrow;
+    //
+    // Opcodes are taken from
+    // https://github.com/torvalds/linux/blob/master/arch/x86/entry/syscalls
+    
+    extern(C) int io_uring_setup(uint entries, io_uring_params* params) @nogc nothrow
+    {
+        asm @nogc nothrow {
+            naked;
+            mov RAX, 425;
+            syscall;
+            ret;
+        }
+    }
+
+    extern(C) int io_uring_enter(int fd, uint to_submit, uint min_complete, uint flags, sigset_t* sig) @nogc nothrow
+    {
+        asm @nogc nothrow {
+            naked;
+            mov RAX, 426;
+            mov R10, RCX;
+            mov R9, R8;
+            syscall;
+            ret;
+        }
+    }
+
+    extern(C) int io_uring_register(int fd, uint opcode, void* arg, uint nr_args) @nogc nothrow
+    {
+        asm @nogc nothrow {
+            naked;
+            mov RAX, 427;
+            mov R10, RCX;
+            syscall;
+            ret;
+        }
+    }
 
     immutable _g_defaultDriver = IoUringDriver.native;
 

@@ -58,8 +58,7 @@ jobs:
             ldc-phobos-devel \
             ldc-runtime-devel \
             pkg-config \
-            rpm-build \
-            yasm
+            rpm-build
 
       - name: Get rpm topdir
         run: echo "RPM_TOPDIR=$(rpm --eval '%{_topdir}')" >> $GITHUB_ENV
