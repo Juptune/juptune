@@ -24,26 +24,8 @@ jobs:
             echo "  github.ref:    ${{ github.ref }}        "
             exit 1
           fi
-
-      # This is largely to render the template files
-      - name: Build
-        run: meson compile -C build
-
-      - name: Create Source Dist
-        run: meson dist -C build --no-tests --formats gztar
-
-      - name: Rename Source Dist
-        run: mv build/meson-dist/*.tar.gz juptune-source.tar.gz
-
-      - name: Create DevOps Dist
-        run: tar -czvf devops.tar.gz build/devops/pkg
-
-      - uses: actions/upload-artifact@v2
-        with:
-          name: dists
-          path: |
-            juptune-source.tar.gz
-            devops.tar.gz
+      
+      - uses: ./.github/actions/meson-dist
 
   # I can't sign up for the OpenSUSE Build Service because the login page is broken.
   # Dodgy unsigned RPMs it is.
@@ -62,41 +44,3 @@ jobs:
 
       - name: Unzip DevOps Dist
         run: tar -xzvf dists/devops.tar.gz
-
-      - name: Install Build Dependencies
-        run: |
-          zypper -n in --no-recommends --auto-agree-with-licenses \
-            meson \
-            ldc \
-            ldc-phobos-devel \
-            ldc-runtime-devel \
-            libsodium-devel \
-            pkg-config \
-            rpm-build
-
-      - name: Get rpm topdir
-        run: echo "RPM_TOPDIR=$(rpm --eval '%{_topdir}')" >> $GITHUB_ENV
-      
-      - name: Setup RPM Build Environment
-        run: mkdir -p ${RPM_TOPDIR}/SOURCES
-
-      - name: Copy Source Dist
-        run: cp dists/juptune-source.tar.gz ${RPM_TOPDIR}/SOURCES
-
-      - name: Perform build
-        run: rpmbuild -ba build/devops/pkg/opensuse-rpm/juptune.spec
-
-      - name: Rename RPMs
-        run: |
-            mkdir upload
-            for file in $(ls ${RPM_TOPDIR}/RPMS/x86_64/); do
-              mv -v ${RPM_TOPDIR}/RPMS/x86_64/${file} upload/opensuse-${file}
-            done
-            for file in $(ls ${RPM_TOPDIR}/SRPMS/); do
-              mv -v ${RPM_TOPDIR}/SRPMS/${file} upload/opensuse-${file}
-            done
-
-      - uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            upload/*.rpm

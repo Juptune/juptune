@@ -1,0 +1,63 @@
+name: Package Test
+
+on:
+  pull_request: 
+  push:
+
+jobs:
+  create_dists:
+    name: Create Dist Artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/meson-setup
+      - uses: ./.github/actions/meson-dist
+
+  opensuse_rpm:
+    name: Test OpenSUSE RPM
+    needs: create_dists
+    runs-on: ubuntu-latest
+    container: opensuse/tumbleweed:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # - name: Install Node (only needed when using act)
+      #   run: zypper -n install -y nodejs
+
+      - uses: actions/download-artifact@v2
+        with:
+          name: dists
+          path: dists
+
+      - name: Unzip DevOps Dist
+        run: tar -xzvf dists/devops.tar.gz
+
+      - name: Refresh Package Metadata
+        run: zypper refresh
+
+      - name: Install Build Dependencies
+        run: |
+          zypper -n in --no-recommends --auto-agree-with-licenses \
+            meson \
+            ldc \
+            ldc-phobos-devel \
+            ldc-runtime-devel \
+            libsodium-devel \
+            pkg-config \
+            rpm-build \
+            rpmlint
+
+      - name: Get rpm topdir
+        run: echo "RPM_TOPDIR=$(rpm --eval '%{_topdir}')" >> $GITHUB_ENV
+      
+      - name: Setup RPM Build Environment
+        run: mkdir -p ${RPM_TOPDIR}/SOURCES
+
+      - name: Copy Source Dist
+        run: cp dists/juptune-*.tar.gz ${RPM_TOPDIR}/SOURCES
+
+      - name: Perform build
+        run: rpmbuild -ba --nosignature --undefine _enable_debug_packages build/devops/pkg/opensuse-rpm/juptune.spec
+
+      - name: Lint RPMs
+        run: rpmlint -i ${RPM_TOPDIR}/**/*.rpm

@@ -1,0 +1,28 @@
+name: Create Meson Dist
+description: Runs 'meson dist' as well as uploading the rendered devops files.
+runs:
+  using: composite
+  steps:
+      # This is largely to render the template files
+      - name: Build
+        shell: sh
+        run: meson compile -C build
+
+      - name: Create Source Dist
+        shell: sh
+        run: meson dist -C build --no-tests --formats gztar --allow-dirty
+
+      - name: Move Source Dist
+        shell: sh
+        run: mv build/meson-dist/*.tar.gz .
+
+      - name: Create DevOps Dist
+        shell: sh
+        run: tar -czvf devops.tar.gz build/devops/pkg
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: dists
+          path: |
+            juptune-*.tar.gz
+            devops.tar.gz

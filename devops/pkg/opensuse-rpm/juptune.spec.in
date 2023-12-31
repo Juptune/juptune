@@ -20,24 +20,22 @@
 %define lib_name        lib%{name}
 %define include_dir     juptune
 %define pkgconfig_name  juptune
+%define meson_buildtype release
 
 Name:           juptune
 Version:        @JUPTUNE_VERSION@
 Release:        0
 Summary:        Async I/O framework for D
-License:        MPL-2.0 and ISC
+License:        MPL-2.0
 Group:          System/Libraries
 URL:            https://github.com/Juptune/juptune
-Source0:        juptune-source.tar.gz
+Source0:        juptune-%{version}.tar.gz
 BuildRequires:  meson
 BuildRequires:  ldc
 BuildRequires:  ldc-phobos-devel
 BuildRequires:  ldc-runtime-devel
 BuildRequires:  libsodium-devel
 BuildRequires:  pkg-config
-Requires:       libdruntime-ldc102
-Requires:       libphobos2-ldc102
-Requires:       libsodium23
 ExclusiveArch:  x86_64
 
 %description
@@ -49,7 +47,7 @@ client/server implementations.
 %package        devel
 Summary:        Development files for %{name}
 Requires:       %{name} = %{version}
-License:        MPL-2.0
+License:        MPL-2.0 and ISC
 Group:          Development/Language/D
 
 %description devel
@@ -59,23 +57,53 @@ developing applications that use %{name}.
 %prep
 %autosetup -p1
 
+# For some reason, `osc build` is adding in a bad `--flto=auto` flag which LDC2 doesn't support.
+# This doesn't happen with a raw `rpmbuild`. It's simple enough to fix though - we just won't use the meson setup macro.
 %build
-%meson
+/usr/bin/meson setup \
+    --buildtype=%{meson_buildtype} \
+    --prefix=%{_prefix} \
+    --libdir=%{_libdir} \
+    --libexecdir=%{_libexecdir} \
+    --bindir=%{_bindir} \
+    --sbindir=%{_sbindir} \
+    --includedir=%{_includedir} \
+    --datadir=%{_datadir} \
+    --mandir=%{_mandir} \
+    --infodir=%{_infodir} \
+    --localedir=%{_localedir} \
+    --sysconfdir=%{_sysconfdir} \
+    --localstatedir=%{_localstatedir} \
+    --sharedstatedir=%{_sharedstatedir} \
+    --wrap-mode=nodownload \
+    --auto-features=enabled \
+    --strip \
+    %{_vpath_srcdir} \
+    %{_vpath_builddir}
 %meson_build
 
 %install
 %meson_install
 
+%if "%{meson_buildtype}" == "debug" || "%{meson_buildtype}" == "debugoptimized"
+%check
+%meson_test
+%endif
+
 %post -p /sbin/ldconfig
 %postun -p /sbin/ldconfig
 
 %files
+%defattr(-,root,root,-)
 %license LICENSE.txt
 %doc README.md
-%{_libdir}/%{lib_name}*.so*
+%{_libdir}/%{lib_name}.so.*
 
 %files devel
-%{_includedir}/d/%{include_dir}/*
+%defattr(-,root,root,-)
+%dir %{_includedir}/d/
+%{_includedir}/d/%{include_dir}/
 %{_libdir}/pkgconfig/%{pkgconfig_name}.pc
+%{_libdir}/%{lib_name}.so
 
 %changelog

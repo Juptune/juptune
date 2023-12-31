@@ -676,7 +676,7 @@ unittest
 
     auto bb = b;
     alloc.freeBlock(b);
-    assertThrown!Error(alloc.freeBlock(bb));
+    debug assertThrown!Error(alloc.freeBlock(bb)); // Only works when debug blocks are enabled
 }
 
 @("FiberAllocator - zero out block config")
