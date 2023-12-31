@@ -12,6 +12,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/meson-setup
 
+      - name: Check that tag matches Meson project version
+        run: |
+          meson_version=$(meson introspect build --projectinfo | jq -r .version)
+          if [ "${meson_version}" != "${{ github.ref }}" ]; then
+            echo "=========================================="
+            echo " Tag does not match Meson project version "
+            echo " Please edit meson.build to match the tag "
+            echo "=========================================="
+            echo "  meson_version: ${meson_version}         "
+            echo "  github.ref:    ${{ github.ref }}        "
+            exit 1
+          fi
+
       # This is largely to render the template files
       - name: Build
         run: meson compile -C build
