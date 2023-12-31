@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
-module juptune.event.internal.linux;
+module juptune.core.internal.linux;
 
 version(linux):
 

@@ -16,7 +16,7 @@ import juptune.event.loop, juptune.event.iouring;
 version(linux) private
 {
     import core.sys.linux.errno;
-    import juptune.event.internal.linux;
+    import juptune.core.internal.linux;
 }
 
 version(Posix) private

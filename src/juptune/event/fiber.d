@@ -466,7 +466,7 @@ package struct FiberAllocator
     {
         version(Posix)
         {
-            import juptune.event.internal.linux;
+            import juptune.core.internal.linux;
 
             import core.sys.posix.sys.mman;
             import core.sys.posix.unistd : sysconf, _SC_PAGESIZE;

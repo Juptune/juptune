@@ -67,7 +67,7 @@ struct EventLoop
 {
     import core.atomic : cas;
     version(Posix) import core.sys.posix.signal : SIGTERM, SIGABRT;
-    version(linux) import juptune.event.internal.linux;
+    version(linux) import juptune.core.internal.linux;
 
     private
     {

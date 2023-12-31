@@ -21,7 +21,7 @@ version(linux) private
     import core.sys.posix.unistd        : close;
     import core.sys.posix.sys.uio       : iovec;
     import core.stdc.config             : c_long, cpp_longlong;
-    import juptune.event.internal.linux;
+    import juptune.core.internal.linux;
     
     // Implemented by our ASM since it's literally easier than trying to piss around
     // with Meson bugs.
@@ -731,7 +731,7 @@ private struct IoUringNativeLinuxDriver
                 //       of the queue instead of relying on the return value.
 
                 default:
-                    import juptune.event.internal.linux : linuxErrorAsResult;
+                    import juptune.core.internal.linux : linuxErrorAsResult;
                     linuxErrorAsResult("io_uring_enter failed", result).resultAssert;
                     assert(false);
             }
