@@ -25,7 +25,7 @@ Name:           juptune
 Version:        @JUPTUNE_VERSION@
 Release:        0
 Summary:        Async I/O framework for D
-License:        MPL-2.0
+License:        MPL-2.0 and ISC
 Group:          System/Libraries
 URL:            https://github.com/Juptune/juptune
 Source0:        juptune-source.tar.gz

@@ -16,7 +16,10 @@ juptune_d_versions = []
 
 libsodium_dep = dependency('libsodium', version: '>=1.0.18')
 if libsodium_dep.found() # Currently not optional, but just in case in the future.
-    juptune_d_versions += ['libsodium']
+    message('Found libsodium, enabling Juptune_LibSodium.')
+    juptune_d_versions += ['Juptune_LibSodium']
+else
+    error('No cryptography library found.')
 endif
 
 #### Sources ####
