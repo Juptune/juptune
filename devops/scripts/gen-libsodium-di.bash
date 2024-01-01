@@ -16,7 +16,7 @@ main() {
     clang --version
 
     # Fetch libsodium
-    if [[ ! -d "${LIBSODIUM_DIR}" ]]; then
+    if [[ ! -f "${LIBSODIUM_DIR}/.gitignore" ]]; then
         git clone https://github.com/jedisct1/libsodium ${LIBSODIUM_DIR}
     fi
     git checkout tags/${LIBSODIUM_TAG} > /dev/null 2>&1
@@ -54,4 +54,5 @@ main() {
     mv libsodium.di ${JUPTUNE_DIR}/src/juptune/crypto/libsodium.di
 }
 
+mkdir -p ${LIBSODIUM_DIR} || true
 pushd ${LIBSODIUM_DIR}; main; popd
