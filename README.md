@@ -30,6 +30,12 @@ sudo ninja install
 
 You can technically get this to work with dub as well, but honestly I don't care enough about dub to bother with it myself.
 
+## Packages
+
+| Package Name(s)             | Distro              | Status |
+| --------------------------- | ------------------- | ------ |
+| `juptune` & `juptune-devel` | OpenSUSE Tumbleweed | [![build result](https://build.opensuse.org/projects/home:bchatha/packages/juptune/badge.svg?type=default)](https://build.opensuse.org/package/show/home:bchatha/juptune) |
+
 # Features
 
 * `@nogc` first API, but with `@gc` alternatives for comfort.
