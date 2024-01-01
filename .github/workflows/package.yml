@@ -15,18 +15,40 @@ jobs:
       - name: Check that tag matches Meson project version
         run: |
           meson_version=$(meson introspect build --projectinfo | jq -r .version)
-          if [ "${meson_version}" != "${{ github.ref }}" ]; then
+          git_tag=$(echo "${{ github.ref }}" | cut -d '/' -f 3)
+          if [ "${meson_version}" != "${git_tag}" ]; then
             echo "=========================================="
             echo " Tag does not match Meson project version "
             echo " Please edit meson.build to match the tag "
             echo "=========================================="
             echo "  meson_version: ${meson_version}         "
-            echo "  github.ref:    ${{ github.ref }}        "
+            echo "  github.ref:    ${git_tag}               "
             exit 1
           fi
       
       - uses: ./.github/actions/meson-dist
 
   # The sparse docs around OBS are testing my patience, so I'm just going to
-  # do the releases manually and hope I don't forget (what a shame that would be).s
-  # opensuse_rpm:
+  # do the releases manually and hope I don't forget (what a shame that would be).
+  opensuse_rpm:
+    name: Create (Manual) OpenSUSE Package
+    runs-on: ubuntu-latest
+    needs: create_dists
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: dists
+          path: dists
+
+      - name: Move files around into a new zip
+        run: |
+          tar -xzvf dists/devops.tar.gz
+          mkdir release
+          mv build/devops/pkg/opensuse-rpm/juptune.spec release/
+          mv dists/juptune-*.tar.gz release/
+          tar -czvf opensuse-manual-package.tar.gz release
+
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            opensuse-manual-package.tar.gz
