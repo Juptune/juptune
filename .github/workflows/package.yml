@@ -27,20 +27,6 @@ jobs:
       
       - uses: ./.github/actions/meson-dist
 
-  # I can't sign up for the OpenSUSE Build Service because the login page is broken.
-  # Dodgy unsigned RPMs it is.
-  opensuse_rpm:
-    name: Create OpenSUSE RPM
-    needs: create_dists
-    runs-on: ubuntu-latest
-    container: opensuse/tumbleweed:latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v2
-        with:
-          name: dists
-          path: dists
-
-      - name: Unzip DevOps Dist
-        run: tar -xzvf dists/devops.tar.gz
+  # The sparse docs around OBS are testing my patience, so I'm just going to
+  # do the releases manually and hope I don't forget (what a shame that would be).s
+  # opensuse_rpm:
