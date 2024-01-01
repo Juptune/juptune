@@ -21,8 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # - name: Install Node (only needed when using act)
-      #   run: zypper -n install -y nodejs
+      - name: Install Node (only needed when using act)
+        run: zypper -n install -y nodejs
 
       - uses: actions/download-artifact@v2
         with:
@@ -45,7 +45,19 @@ jobs:
             libsodium-devel \
             pkg-config \
             rpm-build \
-            rpmlint
+            rpmlint \
+            spec-cleaner
+      
+      - name: Lint spec file
+        run: |
+          spec-cleaner -p -k --no-curlification -o=juptune.clean.spec build/devops/pkg/opensuse-rpm/juptune.spec
+
+          set +e # Ignore diff exit code, so we can provide a better error message
+          diff -u build/devops/pkg/opensuse-rpm/juptune.spec juptune.clean.spec
+          if [ $? -ne 0 ]; then
+            echo "Difference between spec file and cleaned spec file. Please apply spec-cleaner's changes and try again."
+            exit 1
+          fi
 
       - name: Get rpm topdir
         run: echo "RPM_TOPDIR=$(rpm --eval '%{_topdir}')" >> $GITHUB_ENV
