@@ -108,6 +108,28 @@ This is an ever changing list of stuff I want to work on. Whether I get around t
 * Logging package.
 * @nogc file format parsing & emitting
 
+# Development
+
+To streamline the main development workflows, a [Tiltfile](https://docs.tilt.dev/install.html) is provided (hint: `kubectl` and `ctlptl` are not actually required to install Tilt).
+
+After installing tilt, you can simply run `tilt up && tilt down` within the root directory, and you'll benefit from the following:
+
+* Automatic setup of the meson build directory.
+* Automatic test runs on file save.
+* Helper buttons and commands for various purposes (e.g. running stuff from [./devops/scripts](./devops/scripts/))
+
+## Tooling
+
+Required:
+
+* meson
+* ldc2 (I don't care about `dmd` and `gdc` - no guarentees they will work if you try to use them instead)
+
+Optionally:
+
+* clang (used by some DevOps scripts)
+* tilt
+
 # Examples
 
 Examples live under the `./examples` folder:
