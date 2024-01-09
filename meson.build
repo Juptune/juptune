@@ -22,6 +22,10 @@ else
     error('No cryptography library found.')
 endif
 
+summary({
+    'D Versions': juptune_d_versions,
+}, section: 'Dependencies')
+
 #### Sources ####
 
 core_srcs = files(
@@ -34,6 +38,7 @@ core_srcs = files(
 
     './src/juptune/core/util/ansi.d',
     './src/juptune/core/util/conv.d',
+    './src/juptune/core/util/maths.d',
     './src/juptune/core/util/package.d',
     './src/juptune/core/util/result.d',
     './src/juptune/core/util/statemachine.d',
@@ -99,13 +104,16 @@ examples = {
     'http-client-curl': ['./examples/http-client-curl/main.d'],
 }
 
+example_exes = []
 foreach example_name, example_srcs : examples
-    executable(
+    example_exes += executable(
         'juptune-'+example_name, 
         example_srcs,
         dependencies: [juptune_all_dep],
+        build_by_default: false,
     )
 endforeach
+alias_target('examples', example_exes)
 
 juptune_all_unittest_exe = executable(
     'juptune-unittest', 

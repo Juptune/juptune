@@ -34,7 +34,7 @@ You can technically get this to work with dub as well, but honestly I don't care
 
 | Package Name(s)             | Distro              | Status |
 | --------------------------- | ------------------- | ------ |
-| `juptune` & `juptune-devel` | OpenSUSE Tumbleweed | [![build result](https://build.opensuse.org/projects/home:bchatha/packages/juptune/badge.svg?type=default)](https://build.opensuse.org/package/show/home:bchatha/juptune) |
+| `juptune`, `juptune-devel`  | OpenSUSE Tumbleweed | [![build result](https://build.opensuse.org/projects/home:bchatha/packages/juptune/badge.svg?type=default)](https://build.opensuse.org/package/show/home:bchatha/juptune) |
 
 # Features
 
