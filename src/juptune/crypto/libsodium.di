@@ -520,6 +520,25 @@ extern(C) @nogc nothrow:
 	__gshared int crypto_verify_32(const(ubyte)* x, const(ubyte)* y);
 	__gshared ulong crypto_verify_64_bytes();
 	__gshared int crypto_verify_64(const(ubyte)* x, const(ubyte)* y);
+	struct randombytes_implementation
+	{
+		const(char)* function() implementation_name = void;
+		uint function() random = void;
+		void function() stir = void;
+		uint function(const(uint) upper_bound) uniform = void;
+		void function(void* buf, const(ulong) size) buf = void;
+		int function() close = void;
+	}
+
+	__gshared ulong randombytes_seedbytes();
+	__gshared void randombytes_buf(void* buf, const(ulong) size);
+	__gshared void randombytes_buf_deterministic(void* buf, const(ulong) size, const(ubyte)[32u] seed);
+	__gshared uint randombytes_random();
+	__gshared uint randombytes_uniform(const(uint) upper_bound);
+	__gshared void randombytes_stir();
+	__gshared int randombytes_close();
+	__gshared int randombytes_set_implementation( randombytes_implementation* impl);
+	__gshared const(char)* randombytes_implementation_name();
 	__gshared int sodium_runtime_has_neon();
 	__gshared int sodium_runtime_has_sse2();
 	__gshared int sodium_runtime_has_sse3();

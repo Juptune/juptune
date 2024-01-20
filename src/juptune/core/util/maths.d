@@ -14,7 +14,7 @@ Result checkedAdd(T)(T a, T b, out T result)
 if(isUnsigned!T)
 {
     if(a > (T.max - b))
-        return Result.error(CheckedError.overflow);
+        return Result.make(CheckedError.overflow, "overflow");
     result = a + b;
-    return Result.ok;
+    return Result.noError;
 }

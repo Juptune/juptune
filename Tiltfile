@@ -1,4 +1,4 @@
-load('ext://uibutton', 'cmd_button', 'choice_input')
+load('ext://uibutton', 'cmd_button', 'text_input', 'choice_input')
 
 #### Setup ####
 
@@ -15,6 +15,13 @@ local_resource(
     cmd='meson test -C build',
     deps=['meson.build', 'src/'],
     labels=['development']
+)
+cmd_button(
+    'test:open-logs',
+    resource='test',
+    text='Open logs',
+    argv=['bash', '-c', '$GUI_EDITOR build/meson-logs/testlog.txt'],
+    inputs=[text_input('GUI_EDITOR', 'Editor', default='code')]
 )
 
 local_resource(

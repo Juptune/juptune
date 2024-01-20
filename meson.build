@@ -48,9 +48,11 @@ core_srcs = files(
 )
 
 crypto_srcs = files(
+    './src/juptune/crypto/aead.d',
     './src/juptune/crypto/libsodium.di',
     './src/juptune/crypto/memory.d',
     './src/juptune/crypto/package.d',
+    './src/juptune/crypto/rng.d',
 )
 
 event_srcs = files(

@@ -8,7 +8,9 @@
 module juptune.crypto;
 
 public import
-    juptune.crypto.memory
+    juptune.crypto.aead,
+    juptune.crypto.memory,
+    juptune.crypto.rng
 ;
 
 shared static this()

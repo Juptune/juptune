@@ -52,7 +52,7 @@ void main()
         }
         else if(
             line.canFind("__gshared")
-            && (line.canFind(" crypto_") || line.canFind(" sodium_"))
+            && (line.canFind(" crypto_") || line.canFind(" sodium_") || line.canFind(" randombytes_"))
         ) // A libsodium function declaration
         {
             output.put(line);
@@ -60,7 +60,7 @@ void main()
         }
         else if(
             line.canFind("struct")
-            && (line.canFind(" crypto_") || line.canFind(" sodium_"))
+            && (line.canFind(" crypto_") || line.canFind(" sodium_") || line.canFind(" randombytes_"))
         ) // A libsodium struct
         {
             if(line.endsWith(";"))

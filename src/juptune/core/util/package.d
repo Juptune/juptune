@@ -11,4 +11,5 @@ public import
     juptune.core.util.utf,
     juptune.core.util.result,
     juptune.core.util.statemachine,
+    juptune.core.util.maths,
     juptune.core.util.ansi;

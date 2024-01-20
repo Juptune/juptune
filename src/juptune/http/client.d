@@ -50,7 +50,7 @@ struct HttpClientConfig
  +
  + Please use the documentation from `HttpClient` as it in almost all cases applies to this interface.
  +
- + The only real difference is that `IHttpClient.streamRequest` correspeonds to `HttpClient.streamRequestGC`,
+ + The only real difference is that `IHttpClient.streamRequest` corresponds to `HttpClient.streamRequestGC`,
  + since there's no real reason to expose the @nogc version.
  + ++/
 interface IHttpClient

@@ -31,10 +31,9 @@ module juptune.crypto.memory;
  +  More minorly, the memory is also marked as MADV_WIPEONFORK, so that it is wiped on fork,
  +  in case you use fork() + Juptune for some reason (which isn't supported anyway, btw)
  +
- +  Given a desired length of 1024 bytes; a page size of 4096 bytes; and a padding of 32 bytes:
- +    - Two guard pages are allocated, one before the user memory, and one after the user/padding memory.
+ +  Given a desired length of 1024 bytes, and a page size of 4096 bytes:
+ +    - Two guard pages are allocated, one before the user memory, and one after the user memory.
  +    - A page for the user memory is allocated. (1024 < 4096)
- +    - A page for the padding is allocated. (32 < 4096)
  +
  +  The memory layout is as follows:
  +  
@@ -42,8 +41,6 @@ module juptune.crypto.memory;
  +  = Guard Page (1 page)                  =
  +  ========================================
  +  = User Memory (enough pages as needed) =
- +  ========================================
- +  = Padding (enough pages as needed)     =
  +  ========================================
  +  = Guard Page (1 page)                  =
  +  ========================================
@@ -57,23 +54,94 @@ module juptune.crypto.memory;
  +  value of 0xCC, which is checked on deallocation to ensure that no data has underflowed out
  +  of the user memory.
  +
- +  The padding, if any, is a set of read-only pages. The first byte is set to 0x80, which is
- +  the ISO/IEC 7816-4 value for padding. The padding is in its own page so that it can be set
- +  to read-only independently of the user memory, as, outside of encryption, this memory should
- +  never be mutated by the user directly.
- +
  +  The guard page at the end is... also a guard page - it will crash on access.
  + ++/
 struct SecureMemory
 {
     import juptune.core.util : Result, resultAssert;
 
+    /++
+     + A loose wrapper around a `T[]` that originates from a `SecureMemory` struct.
+     +
+     + Use this type when you want random length slices, but only from hardened memory.
+     +
+     + Notes:
+     +  A rarity for Juptune - this struct is copyable as there just isn't really a clean way
+     +  to enforce that it's not copied outside of the `SecureMemory` struct's lifetime without
+     +  it getting in the way.
+     +
+     +  In case it's not clear. $(B This slice must not outlive the `SecureMemory` struct it came from).
+     +
+     + Safeguards:
+     +  The slice can never be accessed when its unerlying slice is null.
+     +
+     +  If you're slicing up a bunch of memory, please use `mustNotOverlap` and `mustBeContiguous`
+     +  to help ensure you've sliced things correctly.
+     + ++/
+    static struct Slice(T)
+    {
+        private
+        {
+            T[] _memory;
+
+            invariant(_memory !is null, "SecureMemory.Slice is not initialised");
+        }
+
+        @nogc nothrow:
+
+        private this(T[] memory) @trusted
+        in(memory.length % T.sizeof == 0, "bug: memory length is not a multiple of T.sizeof")
+        {
+            this._memory = cast(T[])memory;
+        }
+
+        inout(T[]) memory() @safe inout
+        {
+            return this._memory;
+        }
+
+        Slice!T opSlice(size_t _)(size_t start, size_t end) return
+            => Slice!T(this._memory[start..end]);
+
+        static if(is(T == void))
+        {
+            Slice!NewT reinterpret(NewT)() @trusted
+            {
+                return Slice!NewT(cast(NewT[])this._memory);
+            }
+
+            const(Slice!NewT) reinterpret(NewT)() @trusted const
+            {
+                return Slice!NewT(cast(NewT[])this._memory);
+            }
+        }
+
+        bool mustNotOverlap(scope const Slice!T other) const @trusted
+        {
+            assert(
+                (this._memory.ptr + this._memory.length <= other._memory.ptr) ||
+                (other._memory.ptr + other._memory.length <= this._memory.ptr),
+                "bug: memory slices overlap"
+            );
+            return true;
+        }
+
+        bool mustBeContiguous(scope const Slice!T other) const @trusted
+        {
+            assert(
+                (this._memory.ptr + this._memory.length == other._memory.ptr) ||
+                (other._memory.ptr + other._memory.length == this._memory.ptr),
+                "bug: memory slices are not contiguous"
+            );
+            return true;
+        }
+    }
+
     private
     {
         enum CANARY_VALUE = 0xCC;
 
         void[] _userMemory;
-        void[] _userAndPaddingMemory;
         void[] _entireMemory;
         void*  _preGuardPage;
         void*  _postGuardPage;
@@ -101,18 +169,17 @@ struct SecureMemory
      +  `func` inside a variable first to see what's going wrong with it.
      +
      + Params:
-     +  func - The delegate to call. It will be passed two slices, the first being the user memory,
-     +         and the second being the user memory including the padding (if any).
+     +  func = The delegate to call.
      + ++/
-    void access(scope void delegate(scope void[], scope const void[] withPadding) @safe @nogc nothrow func) @safe @nogc nothrow // @suppress(dscanner.style.long_line)
+    void access(scope void delegate(scope void[]) @safe @nogc nothrow func) @safe @nogc nothrow // @suppress(dscanner.style.long_line)
     {
-        func(this._userAndPaddingMemory[0..this._userMemoryRequestedSize], this._userAndPaddingMemory);
+        func(this._userMemory[$-this._userMemoryRequestedSize..$]);
     }
 
     /// ditto
-    void access(scope void delegate(scope void[], scope const void[] withPadding) @safe nothrow func) @safe nothrow
+    void access(scope void delegate(scope void[]) @safe nothrow func) @safe nothrow
     {
-        func(this._userAndPaddingMemory[0..this._userMemoryRequestedSize], this._userAndPaddingMemory);
+        func(this._userMemory[$-this._userMemoryRequestedSize..$]);
     }
 
     @nogc nothrow:
@@ -122,7 +189,6 @@ struct SecureMemory
         if(this._entireMemory is null)
         {
             assert(this._userMemory is null, "bug: user memory is not null");
-            assert(this._userAndPaddingMemory is null, "bug: padding is not null");
             assert(this._preGuardPage is null, "bug: pre guard page is not null");
             assert(this._postGuardPage is null, "bug: post guard page is not null");
             return;
@@ -165,21 +231,16 @@ struct SecureMemory
     }
 
     /++
-     + Allocates a new SecureMemory struct, with the given length, with some additional padding
-     + if desired.
+     + Allocates a new SecureMemory struct, with the given length.
      +
      + Notes:
      +  Please see the struct documentation for more information on the memory layout.
      +
-     +  If the length is already a multiple of the pad boundary, padding will still be added as
-     +  a state of "no padding" is not supported outside of setting the pad boundary to 0.
-     +
      +  A length of 0 is valid, though not really recommended.
      +
      + Params:
-     +  memory      = The SecureMemory struct to allocate.
-     +  length      = The length of the user memory to allocate.
-     +  padBoundary = The boundary to align the padding to. If 0, no padding will be added.
+     +  memory  = The SecureMemory struct to allocate.
+     +  length  = The length of the user memory to allocate.
      +
      + Throws:
      +  If any of the syscalls fail, a Result will be thrown with the OS error code + message.
@@ -190,7 +251,6 @@ struct SecureMemory
     version(linux) static Result allocate(
         scope out SecureMemory memory, 
         size_t length,
-        size_t padBoundary = 0,
     ) @trusted
     {
         import core.sys.linux.errno         : errno;
@@ -200,16 +260,9 @@ struct SecureMemory
         import core.sys.posix.unistd        : sysconf, _SC_PAGESIZE;
         import juptune.core.internal.linux  : linuxErrorAsResult;
 
-        const minPadding = 
-            (padBoundary == 0) ? 0 
-                : (length % padBoundary == 0)
-                    ? padBoundary
-                    : padBoundary - (length % padBoundary);
-
         const pageSize          = sysconf(_SC_PAGESIZE);
-        const paddingSize       = (minPadding + (pageSize * (minPadding % pageSize > 0))) & ~(pageSize-1); // Round up to a valid page size if not already aligned.
         const userMemorySize    = (length + (pageSize * (length % pageSize > 0))) & ~(pageSize-1); // Round up to a valid page size if not already aligned.
-        const totalSize         = userMemorySize + (pageSize * 2) + paddingSize;
+        const totalSize         = userMemorySize + (pageSize * 2);
         assert(userMemorySize % pageSize == 0, "bug: user memory size is not page aligned");
         assert(totalSize % pageSize == 0, "bug: total size is not page aligned");
 
@@ -228,10 +281,8 @@ struct SecureMemory
         auto preGuardPtr    = entirePtr;
         auto postGuardPtr   = (entirePtr + totalSize) - pageSize;
         auto userMemory     = (entirePtr + pageSize)[0..userMemorySize];
-        auto paddingMemory  = (entirePtr + pageSize + userMemorySize)[0..paddingSize];
         assert(userMemory.ptr == (entirePtr + pageSize), "bug: user memory does not start at the right address");
-        assert(userMemory.ptr + userMemory.length == paddingMemory.ptr, "bug: user memory does not end at the right address"); // @suppress(dscanner.style.long_line)
-        assert(paddingMemory.ptr + paddingMemory.length == postGuardPtr, "bug: padding memory does not end at the right address"); // @suppress(dscanner.style.long_line)
+        assert(userMemory.ptr + userMemory.length == postGuardPtr, "bug: user memory does not end at the right address"); // @suppress(dscanner.style.long_line)
         assert(postGuardPtr + pageSize == entireMemory.ptr + entireMemory.length, "bug: post guard page does not end at the right address"); // @suppress(dscanner.style.long_line)
 
         bool unmapOnExit = true;
@@ -259,14 +310,6 @@ struct SecureMemory
         if(result != 0)
             return linuxErrorAsResult("Failed to lock memory", errno());
 
-        if(paddingMemory.length > 0)
-        {
-            (cast(ubyte[])paddingMemory)[0] = 0x80; // ISO/IEC 7816-4
-            result = mprotect(paddingMemory.ptr, paddingMemory.length, PROT_READ);
-            if(result != 0)
-                return linuxErrorAsResult("Failed to protect padding memory", errno());
-        }
-
         // Set unused memory to 0xCC, and used memory to 0x00.
         (cast(ubyte[])userMemory[0..$-length])[] = CANARY_VALUE;
         (cast(ubyte[])userMemory[$-length..$])[] = 0x00;
@@ -277,11 +320,6 @@ struct SecureMemory
         memory._postGuardPage           = postGuardPtr;
         memory._userMemoryRequestedSize = length;
         memory._currentProtection       = PROT_READ | PROT_WRITE;
-        memory._userAndPaddingMemory    = userMemory.ptr[
-            (userMemory.length - length)
-            ..
-            userMemory.length + minPadding
-        ];
 
         unmapOnExit = false;
         return Result.noError;
@@ -314,7 +352,7 @@ struct SecureMemory
      + memory.
      +
      + Assertions:
-     +  `other` must have the same length as this memory, not including any padding from this memory.
+     +  `other` must have the same length as this memory.
      +  There is no valid usecase for comparing secure memory of different lengths.
      +
      + Notes:
@@ -341,7 +379,7 @@ struct SecureMemory
         version(Juptune_LibSodium)
         {
             import juptune.crypto.libsodium : sodium_memcmp;
-            return sodium_memcmp(this._userAndPaddingMemory.ptr, other.ptr, other.length) == 0;
+            return sodium_memcmp(this.unsafeSlice.ptr, other.ptr, other.length) == 0;
         }
         else assert(false, "Not implemented - no crypto implementation was chosen at build time");
     }
@@ -353,9 +391,66 @@ struct SecureMemory
     }
 
     /// Unless you realllllly need this, just use `access` or `constantTimeCompare` instead.
-    inout(void)[] unsafeSlice() inout
+    inout(void)[] unsafeSlice() inout 
     {
         return this._userMemory[$-this._userMemoryRequestedSize..$];
+    }
+
+    /++
+     + Creates a `SecureMemory.Slice` from the specified memory range.
+     +
+     + Generally you should use `access` when possible to help prevent use-after-free bugs, but
+     + there are normal cases where code needs to access only parts of the secure memory without
+     + caring about the struct in its entirety.
+     +
+     + So to allow code to statically specify that they want a slice of `SecureMemory`, this overload
+     + is provided.
+     +
+     + This is not marked @safe or @trusted since there is no way to prevent the returned slice
+     + from outliving the `SecureMemory` struct, so the user code itself can only be @trusted at best.
+     + ++/
+    Slice!void opSlice(size_t _)(size_t start, size_t end) return
+        => Slice!void(this.unsafeSlice[start..end]);
+
+    /++
+     + Slices the memory into the specified slices, ensuring that the slices do not overlap.
+     +
+     + Assertions:
+     +  `lengths` and `slices` must be the same length.
+     +
+     +  The lengths must all be an exact multiple of `T.sizeof`.
+     +
+     +  The slices must all be non-null.
+     +
+     +  The total length of the slices cannot exceed the length of the memory.
+     +
+     +  Additionally there is an internal numeric overflow check.
+     +
+     + Notes:
+     +  `lengths[0]` matches with `slices[0]`, `lengths[1]` with `slices[1]`, etc...
+     +
+     + Params:
+     +  lengths = The lengths of the slices to create.
+     +  slices  = The individual slices to fill out.
+     + ++/
+    void contigiousSlice(T)(scope const size_t[] lengths, scope Slice!T*[] slices) const @trusted
+    in(lengths.length == slices.length, "bug: lengths and slices are not the same length")
+    {
+        import juptune.core.util : checkedAdd, resultAssert;
+
+        size_t offset = 0;
+        foreach(i, length; lengths)
+        {
+            assert(length % T.sizeof == 0, "bug: length is not a multiple of T.sizeof");
+            assert(slices[i] !is null, "bug: slice is null");
+            *slices[i] = Slice!void(cast(void[])this.unsafeSlice[offset..offset+length]).reinterpret!T;
+            checkedAdd(offset, length, offset).resultAssert;
+        }
+    }
+
+    size_t length() const
+    {
+        return this._userMemoryRequestedSize;
     }
 }
 
@@ -369,13 +464,12 @@ unittest
     // Testing that: allocate doesn't crash; we can access the entire requested range; dtor doesn't crash.
     SecureMemory mem;
     SecureMemory.allocate(mem, ubyte.max).resultAssert;
-    mem.access((scope voidMem, scope withPadding) @trusted @nogc nothrow
+    mem.access((scope voidMem) @trusted @nogc nothrow
     {
         auto memory = cast(ubyte[])voidMem;
         foreach(i, ref b; memory)
             b = cast(ubyte)i;
         assert(memory.length == ubyte.max, "bug: memory length is not correct");
-        assert(withPadding.length == voidMem.length, "bug: there shouldn't be any padding");
     });
 
     auto array = new ubyte[ubyte.max];
@@ -392,7 +486,6 @@ unittest
     SecureMemory mem;
     SecureMemory.allocate(mem, 0).resultAssert;
     assert(mem._userMemory.length == 0, "bug: user memory length is not correct");
-    assert(mem._userAndPaddingMemory.length == 0, "bug: there shouldn't be any padding");
 }
 
 @("SecureMemory - alloc page size")
@@ -404,54 +497,14 @@ version(linux) unittest
 
     SecureMemory mem;
     SecureMemory.allocate(mem, pageSize).resultAssert;
-    mem.access((scope voidMem, scope withPadding) @trusted @nogc nothrow
+    mem.access((scope voidMem) @trusted @nogc nothrow
     {
         auto memory = cast(ubyte[])voidMem;
         memory[] = 0xFF;
         assert(memory.length == pageSize, "bug: memory length is not correct");
-        assert(withPadding.length == voidMem.length, "bug: there shouldn't be any padding");
     });
 
     foreach(i, b; cast(ubyte[])mem.unsafeSlice)
         assert(b == 0xFF, "bug: memory content is not correct");
     assert(mem.unsafeSlice.length == pageSize, "bug: memory length is not correct");
-}
-
-@("SecureMemory - padding, when length is already aligned")
-unittest
-{
-    SecureMemory mem;
-    SecureMemory.allocate(mem, 32, 32).resultAssert;
-    mem.access((scope voidMem, scope withPadding) @trusted @nogc nothrow
-    {
-        assert(voidMem.ptr is withPadding.ptr, "bug: memory does not start at the right address");
-        assert(voidMem.length == 32, "bug: memory length is not correct");
-        assert(withPadding.length == 64, "bug: padding length is not correct");
-    });
-}
-
-@("SecureMemory - padding, when length is not aligned")
-unittest
-{
-    SecureMemory mem;
-    SecureMemory.allocate(mem, 16, 32).resultAssert;
-    mem.access((scope voidMem, scope withPadding) @trusted @nogc nothrow
-    {
-        assert(voidMem.ptr is withPadding.ptr, "bug: memory does not start at the right address");
-        assert(voidMem.length == 16, "bug: memory length is not correct");
-        assert(withPadding.length == 32, "bug: padding length is not correct");
-    });
-}
-
-@("SecureMemory - padding, when length is 0")
-unittest
-{
-    SecureMemory mem;
-    SecureMemory.allocate(mem, 0, 32).resultAssert;
-    mem.access((scope voidMem, scope withPadding) @trusted @nogc nothrow
-    {
-        assert(voidMem.ptr is withPadding.ptr, "bug: memory does not start at the right address");
-        assert(voidMem.length == 0, "bug: memory length is not correct");
-        assert(withPadding.length == 32, "bug: padding length is not correct");
-    });
 }

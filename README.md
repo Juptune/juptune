@@ -127,6 +127,7 @@ Required:
 
 Optionally:
 
+* act (used by Tilt to test our Github Actions)
 * clang (used by some DevOps scripts)
 * tilt
 
