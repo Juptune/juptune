@@ -186,33 +186,35 @@ struct AeadEncryptionContext(AeadAlgorithmT)
 }
 
 version(Juptune_LibSodium)
-struct AeadIetfChacha20Poly1305
+private struct SodiumAead(
+    size_t NonceLength, alias NonceLengthFunc,
+    size_t KeyLength,   alias KeyLengthFunc,
+    size_t ABytes,      alias ABytesFunc,
+    alias EncryptFunc,
+    alias DecryptFunc
+)
 {
     import juptune.crypto.memory : SecureMemory;
 
-    alias EncryptionContext = AeadEncryptionContext!AeadIetfChacha20Poly1305;
+    alias EncryptionContext = AeadEncryptionContext!(typeof(this));
 
-    enum NONCE_LENGTH = 12;
-    enum KEY_LENGTH   = 32;
-    enum ABYTES       = 16;
+    enum NONCE_LENGTH = NonceLength;
+    enum KEY_LENGTH   = KeyLength;
+    enum ABYTES       = ABytes;
 
     shared static this()
     {
-        import juptune.crypto.libsodium : 
-            crypto_aead_chacha20poly1305_ietf_npubbytes, 
-            crypto_aead_chacha20poly1305_ietf_abytes, 
-            crypto_aead_chacha20poly1305_ietf_keybytes;
         assert(
-            crypto_aead_chacha20poly1305_ietf_npubbytes() == NONCE_LENGTH,
-            "bug: crypto_aead_chacha20poly1305_ietf_npubbytes() is hard assumed to be 12"
+            NonceLengthFunc() == NONCE_LENGTH,
+            "bug: NonceLengthFunc() is different from hard assumed NONCE_LENGTH"
         );
         assert(
-            crypto_aead_chacha20poly1305_ietf_keybytes() == KEY_LENGTH,
-            "bug: crypto_aead_chacha20poly1305_ietf_keybytes() is hard assumed to be 32"
+            KeyLengthFunc() == KEY_LENGTH,
+            "bug: KeyLengthFunc() is different from hard assumed KEY_LENGTH"
         );
         assert(
-            crypto_aead_chacha20poly1305_ietf_abytes() == ABYTES,
-            "bug: crypto_aead_chacha20poly1305_ietf_abytes() is hard assumed to be 16"
+            ABytesFunc() == ABYTES,
+            "bug: ABytesFunc() is different from hard assumed ABYTES"
         );
     }
 
@@ -227,10 +229,8 @@ struct AeadIetfChacha20Poly1305
         scope out ubyte[] outC
     ) @trusted
     {
-        import juptune.crypto.libsodium : crypto_aead_chacha20poly1305_ietf_encrypt;
-
         ulong clen = c.length;
-        const result = crypto_aead_chacha20poly1305_ietf_encrypt(
+        const result = EncryptFunc(
             c.ptr, &clen,
             m.ptr, m.length,
             (ad.length == 0) ? null : ad.ptr, ad.length,
@@ -254,10 +254,8 @@ struct AeadIetfChacha20Poly1305
         scope out ubyte[] outSlice
     ) @trusted
     {
-        import juptune.crypto.libsodium : crypto_aead_chacha20poly1305_ietf_decrypt;
-
         ulong mlen = m.length;
-        const result = crypto_aead_chacha20poly1305_ietf_decrypt(
+        const result = DecryptFunc(
             m.ptr, &mlen,
             null,
             c.ptr, c.length,
@@ -292,65 +290,104 @@ struct AeadIetfChacha20Poly1305
     }
 }
 
+version (Juptune_LibSodium)
+{
+    import std.meta : AliasSeq;
+    import juptune.crypto.libsodium : 
+        crypto_aead_chacha20poly1305_ietf_npubbytes, 
+        crypto_aead_chacha20poly1305_ietf_abytes, 
+        crypto_aead_chacha20poly1305_ietf_keybytes,
+        crypto_aead_chacha20poly1305_ietf_encrypt,
+        crypto_aead_chacha20poly1305_ietf_decrypt,
+
+        crypto_aead_chacha20poly1305_npubbytes,
+        crypto_aead_chacha20poly1305_abytes,
+        crypto_aead_chacha20poly1305_keybytes,
+        crypto_aead_chacha20poly1305_encrypt,
+        crypto_aead_chacha20poly1305_decrypt
+    ;
+
+    alias AeadChacha20Poly1305 = SodiumAead!(
+        8, crypto_aead_chacha20poly1305_npubbytes,
+        32, crypto_aead_chacha20poly1305_keybytes,
+        16, crypto_aead_chacha20poly1305_abytes,
+        crypto_aead_chacha20poly1305_encrypt,
+        crypto_aead_chacha20poly1305_decrypt
+    );
+
+    alias AeadIetfChacha20Poly1305 = SodiumAead!(
+        12, crypto_aead_chacha20poly1305_ietf_npubbytes,
+        32, crypto_aead_chacha20poly1305_ietf_keybytes,
+        16, crypto_aead_chacha20poly1305_ietf_abytes,
+        crypto_aead_chacha20poly1305_ietf_encrypt,
+        crypto_aead_chacha20poly1305_ietf_decrypt
+    );
+
+    private alias ALL_AEAD_ALGORITHMS = AliasSeq!(AeadChacha20Poly1305, AeadIetfChacha20Poly1305);
+}
+
 /++++ Unittests ++++/
 
 version(unittest) import juptune.core.util : resultAssert;
 
-@("AeadIetfChacha20Poly1305 - basic")
-@nogc unittest
+static foreach(AlgorithmT; ALL_AEAD_ALGORITHMS)
 {
-    import std.algorithm         : all;
-    import juptune.crypto.memory : SecureMemory;
-    import juptune.crypto.rng    : cryptoFillBuffer;
+    @(AlgorithmT.stringof~" - basic encryption/decryption")
+    @nogc unittest
+    {
+        import std.algorithm         : all;
+        import juptune.crypto.memory : SecureMemory;
+        import juptune.crypto.rng    : cryptoFillBuffer;
 
-    SecureMemory mem;
-    SecureMemory.allocate(mem, 4096).resultAssert;
+        SecureMemory mem;
+        SecureMemory.allocate(mem, 4096).resultAssert;
 
-    SecureMemory.Slice!ubyte key, nonce, nonceBefore, plain, plainDecrypt, cipher;
-    mem.contigiousSlice!ubyte([
-        AeadIetfChacha20Poly1305.KEY_LENGTH,
-        AeadIetfChacha20Poly1305.NONCE_LENGTH,
-        AeadIetfChacha20Poly1305.NONCE_LENGTH,
-        50,
-        50,
-        50 + AeadIetfChacha20Poly1305.ABYTES
-    ], [
-        &key,
-        &nonce,
-        &nonceBefore,
-        &plain,
-        &plainDecrypt,
-        &cipher
-    ]);
+        SecureMemory.Slice!ubyte key, nonce, nonceBefore, plain, plainDecrypt, cipher;
+        mem.contigiousSlice!ubyte([
+            AlgorithmT.KEY_LENGTH,
+            AlgorithmT.NONCE_LENGTH,
+            AlgorithmT.NONCE_LENGTH,
+            50,
+            50,
+            50 + AlgorithmT.ABYTES
+        ], [
+            &key,
+            &nonce,
+            &nonceBefore,
+            &plain,
+            &plainDecrypt,
+            &cipher
+        ]);
 
-    cryptoFillBuffer(key.memory);
-    foreach(i, ref b; plain.memory)
-        b = cast(ubyte)i;
+        cryptoFillBuffer(key.memory);
+        foreach(i, ref b; plain.memory)
+            b = cast(ubyte)i;
 
-    auto ctx = AeadIetfChacha20Poly1305.EncryptionContext(nonce, key);
-    nonceBefore.memory[0..$] = nonce.memory[0..$];
+        auto ctx = AlgorithmT.EncryptionContext(nonce, key);
+        nonceBefore.memory[0..$] = nonce.memory[0..$];
 
-    ubyte[5] ad = [0, 1, 2, 3, 4];
-    ubyte[] cipherSlice;
-    ctx.encrypt(
-        plain, 
-        ad[], 
-        cipher.memory, 
-        cipherSlice
-    ).resultAssert;
-    assert(cipherSlice.length == 50 + AeadIetfChacha20Poly1305.ABYTES, "bug: cipherSlice length is not correct");
-    assert(!cipherSlice.all!(a => a == 0), "bug: cipherSlice is all 0");
-    assert(cipherSlice[0..50] != plain.memory[0..50], "bug: cipherSlice is not encrypted");
-    assert(nonce.memory[0..$] != nonceBefore.memory[0..$], "bug: nonce was not incremented");
+        ubyte[5] ad = [0, 1, 2, 3, 4];
+        ubyte[] cipherSlice;
+        ctx.encrypt(
+            plain, 
+            ad[], 
+            cipher.memory, 
+            cipherSlice
+        ).resultAssert;
+        assert(cipherSlice.length == 50 + AlgorithmT.ABYTES, "bug: cipherSlice length is not correct");
+        assert(!cipherSlice.all!(a => a == 0), "bug: cipherSlice is all 0");
+        assert(cipherSlice[0..50] != plain.memory[0..50], "bug: cipherSlice is not encrypted");
+        assert(nonce.memory[0..$] != nonceBefore.memory[0..$], "bug: nonce was not incremented");
 
-    nonce.memory[0..$] = nonceBefore.memory[0..$];
-    SecureMemory.Slice!ubyte plainSlice;
-    ctx.decrypt(
-        cipherSlice, 
-        ad[], 
-        plainDecrypt, 
-        plainSlice
-    ).resultAssert;
-    assert(plainSlice.memory[0..50] == plain.memory[0..50], "bug: plainSlice is not decrypted");
-    assert(nonce.memory[0..$] != nonceBefore.memory[0..$], "bug: nonce was not incremented");
+        nonce.memory[0..$] = nonceBefore.memory[0..$];
+        SecureMemory.Slice!ubyte plainSlice;
+        ctx.decrypt(
+            cipherSlice, 
+            ad[], 
+            plainDecrypt, 
+            plainSlice
+        ).resultAssert;
+        assert(plainSlice.memory[0..50] == plain.memory[0..50], "bug: plainSlice is not decrypted");
+        assert(nonce.memory[0..$] != nonceBefore.memory[0..$], "bug: nonce was not incremented");
+    }
 }
