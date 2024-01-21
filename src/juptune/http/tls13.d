@@ -4,12 +4,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
-module juptune.http;
+module juptune.http.tls13;
 
-public import 
-    juptune.http.common,
-    juptune.http.client,
-    juptune.http.tls13,
-    juptune.http.uri,
-    juptune.http.v1
-;
+import juptune.core.util : Result;
