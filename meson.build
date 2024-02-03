@@ -55,6 +55,11 @@ crypto_srcs = files(
     './src/juptune/crypto/rng.d',
 )
 
+data_srcs = files(
+    './src/juptune/data/base.d',
+    './src/juptune/data/package.d',
+)
+
 event_srcs = files(
     './src/juptune/event/fiber.d',
     './src/juptune/event/io.d',
@@ -80,9 +85,14 @@ juptune_core_dep = declare_dependency(
     d_module_versions: juptune_d_versions,
 )
 
+juptune_data_dep = declare_dependency(
+    sources: data_srcs,
+    dependencies: [juptune_core_dep],
+)
+
 juptune_crypto_dep = declare_dependency(
     sources: crypto_srcs,
-    dependencies: [juptune_core_dep, libsodium_dep],
+    dependencies: [juptune_core_dep, juptune_data_dep, libsodium_dep],
 )
 
 juptune_event_dep = declare_dependency(
@@ -96,7 +106,7 @@ juptune_http_dep = declare_dependency(
 )
 
 juptune_all_dep = declare_dependency(
-    dependencies: [juptune_core_dep, juptune_crypto_dep, juptune_event_dep, juptune_http_dep],
+    dependencies: [juptune_core_dep, juptune_crypto_dep, juptune_data_dep, juptune_event_dep, juptune_http_dep],
 )
 
 #### Executables ####
