@@ -12,7 +12,7 @@ local('''
 
 local_resource(
     'test',
-    cmd='meson test -C build',
+    cmd='meson test -C build || cat build/meson-logs/testlog.txt',
     deps=['meson.build', 'src/'],
     labels=['development']
 )

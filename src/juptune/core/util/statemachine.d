@@ -119,6 +119,13 @@ struct StateMachineStatic(
             assert(false, ErrorString);
     }
 
+    static if(is(TransitionContext == void*))
+    void mustTransition(StateEnum from, StateEnum to)()
+    {
+        void* _;
+        this.mustTransition!(from, to)(_);
+    }
+
     // TODO: This function returns a bool to make it easier to use with `in` guards.
     bool mustBeIn(StateEnum state)
     {
@@ -138,6 +145,11 @@ struct StateMachineStatic(
     bool isIn(StateEnum state)
     {
         return this.state == state;
+    }
+
+    StateEnum current() const
+    {
+        return this.state;
     }
 
     version(unittest) void forceState(StateEnum state)
