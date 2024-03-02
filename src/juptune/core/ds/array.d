@@ -18,10 +18,12 @@ struct ArrayBase(
     alias GetGrowSize,
     alias ShouldShrink,
     alias GetShrinkSize,
-    alias ValueT
+    alias ValueT_
 )
 {
     mixin Alloc.InjectState;
+
+    alias ValueT = ValueT_;
 
     private static struct Slice
     {
