@@ -462,7 +462,7 @@ struct String2
      + See_Also:
      +  `String2.slice`, `String2.access`
      + ++/
-    const(char)[] sliceMaybeFromStack() const
+    const(char)[] sliceMaybeFromStack() const scope return
     {
         return this.isBig ? this._payload.sliceConst : this._ssoData[0..this._ssoLength];
     }
@@ -487,7 +487,7 @@ struct String2
      + See_Also:
      +  `String2.sliceMaybeFromStack`, `String2.access`.
      + ++/
-    const(char)[] slice()
+    const(char)[] slice() scope return
     {
         // Force us to be a big string so we're not providing a slice onto the stack.
         if(this.length == 0)
