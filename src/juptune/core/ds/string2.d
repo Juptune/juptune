@@ -1,5 +1,44 @@
 module juptune.core.ds.string2;
 
+/++ 
+ + An immutable string implemenetation with small string optimization, focused on making
+ + it safe and efficient to pass around a string by value by trading off the ability to
+ + mutate the string.
+ +
+ + This struct is **not** thread safe.
+ +
+ + Design:
+ +  This struct will apply small string optimization (SSO) to store small strings in the
+ +  struct itself, and will allocate memory for larger strings (or under specific conditions).
+ +
+ +  The SSO length will be ((void*).sizeof * 3) - 1, which is 23 bytes on x86_64 for example.
+ +
+ +  This struct contains a ref counted payload, which is shared amongst copies of this struct.
+ +  This is to make it very easy to pass the struct around without worrying about allocations.
+ +
+ +  This struct will never expose a mutable slice to the underlying memory, as it is assumed
+ +  thet the string has already been fully constructed.
+ +
+ +  While this struct does provide a concat operation, it will always create a copy of the
+ +  string, and thus is very inefficient for large strings. This is by design, use `Array!char` instead.
+ +
+ +  To help avoid the need to provide direct access to the underlying slice (and risking escape),
+ +  this struct attempts to provide enough operator overloads to make it easy to work with, for things
+ +  like "String2 == char[]" operations.
+ +
+ +  Additionally there are 3 different ways to access the underlying slice, depending on use case and
+ +  safety concerns: (`String2.slice`, `String2.sliceMaybeFromStack`, `String2.access`).
+ +
+ + Performance:
+ +  Not yet measured to any reasonable degree, however logically it should be much more efficient than
+ +  the previous implementation which would do a full copy on every struct copy, and had gaping memory
+ +  safety holes.
+ +
+ + Safety:
+ +  The assumption is that any operation self contained within the struct's code is @safe,
+ +  and any operation that requires the underlying slice to be exposed is to be explicitly marked
+ +  as @trusted by the caller.
+ + ++/
 struct String2
 {
     import std.range : isInputRange, ElementEncodingType;
@@ -98,6 +137,24 @@ struct String2
         ubyte _ssoLength; // NOTE: >= 0 means small string. > than _ssodata.length means big string.
     }
 
+    /++
+     + A safer-ish way to access the underlying slice, by forcing it to go through a scoped delegate.
+     +
+     + This should be preferred over `String2.slice` when the underlying slice needs to be accessed,
+     + as it helps to ensure that the slice is not leaked.
+     +
+     + Notes:
+     +  Under the hood this function calls `slice`, which will force the string to become allocated
+     +  on the heap if small string optimization is in use. This is extra security to help prevent
+     +  stack corruption.
+     +
+     + Params:
+     +  RetT     = The return type of the accessor delegate, can be `void`.
+     +  accessor = The delegate to access the underlying slice.
+     +
+     + Returns:
+     +  Anything returned by the accessor delegate if `RetT` is not `void`.
+     + ++/
     auto access(RetT)(scope RetT delegate(scope const(char)[]) @safe accessor) @trusted
     {
         static if(is(RetT == void))
@@ -106,6 +163,7 @@ struct String2
             return accessor(this.slice);
     }
 
+    /// ditto.
     auto access(RetT)(scope RetT delegate(scope const(char)[]) @safe @nogc nothrow accessor) @trusted @nogc nothrow
     {
         static if(is(RetT == void))
@@ -120,6 +178,7 @@ struct String2
     // Immutable strings may exist in read-only memory, and thus cannot be circumvented like const strings.
     @disable this(scope ref return immutable String2 other);
 
+    /// Copy ctor - either increases the payload's ref count, or copies the small string into the stack buffer.
     this(scope ref return const String2 other) @trusted
     {
         if(this._payload !is null)
@@ -151,6 +210,16 @@ struct String2
         (cast(ubyte*)(&this))[0..String2.sizeof] = 0;
     }
 
+    /++
+     + Basic ctor that will copy the given string.
+     +
+     + Notes:
+     +  If possible, the string will be copied into the stack buffer (small string optimisation),
+     +  otherwise it will be allocated on the heap.
+     +
+     + Params:
+     +  str = The string to copy.
+     + ++/
     this(scope const(char)[] str) @safe
     {
         if(str.length <= this._ssoData.length)
@@ -159,6 +228,19 @@ struct String2
             this.setupBigString(str);
     }
 
+    /++
+     + Basic ctor that will copy the given char-based InputRange into the string.
+     +
+     + Notes:
+     +  The range will be walked twice in total, once to get the length, and once to copy the data.
+     +  If your range can only be walked once, use `Array!char.put` instead, and then convert it into a string
+     +  using `String2.fromDestroyingArray`.
+     +
+     +  If possible, the string will be copied into the stack buffer (small string optimisation),
+     +
+     + Params:
+     +  RangeT = The type of the range to copy.
+     + ++/
     this(RangeT)(scope RangeT range)
     if(isInputRange!RangeT && is(ElementEncodingType!RangeT == char))
     {
@@ -183,6 +265,26 @@ struct String2
             c = range.front;
     }
 
+    /++
+     + A named constructor for `String2` that will convert the given char-based `Array` into a string,
+     + and then destroy the array, effectively "moving" the array into a string.
+     +
+     + Notes:
+     +  At some point in the future I will implement an optimisation to make sure the array's memory
+     +  doesn't need to be copied, but for now it's just a simple alloc + copy, and is no different
+     +  than just passing the char slice to the `String2` ctor.
+     +
+     +  If possible, the string will be copied into the stack buffer (small string optimisation).
+     +
+     +  If it wasn't clear, `arr` will have its dtor called, as the planned optimisation will require
+     +  transfer of owernship of the array's underlying memory.
+     +
+     + Params:
+     +  arr = The array to convert into a string.
+     +
+     + Returns:
+     +  The string that was created from the array.
+     + ++/
     static String2 fromDestroyingArray(ArrayT)(scope ref ArrayT arr)
     if(isInstanceOf!(ArrayBase, ArrayT) && is(ArrayT.ValueT == char))
     {
@@ -191,6 +293,7 @@ struct String2
         return ret;
     }
 
+    // TODO: Document this once I figure out why the compiler isn't doing what the spec says it should.
     const(OpSlice) opSlice(size_t start, size_t end) @safe const
     in(start <= end, "Start index is greater than end index")
     in(end <= this.length, "End index is greater than the string length")
@@ -198,6 +301,7 @@ struct String2
         return OpSlice(start, end);
     }
 
+    // TODO: Document this once I figure out why the compiler isn't doing what the spec says it should.
     String2 opIndex(const OpSlice slice) @trusted const
     {
         if(slice.start > 0)
@@ -211,12 +315,22 @@ struct String2
         return ret;
     }
 
+    /// Simple [] operator to access the character at the given index.
     char opIndex(const size_t index) @trusted const
     in(index < this.length, "Index is out of bounds")
     {
         return this.sliceMaybeFromStack()[index];
     }
 
+    /++
+     + Concatenation operator.
+     +
+     + Notes:
+     +  This will always create a new string, and will never mutate the existing string.
+     +
+     +  If the string is small enough, it will be concatenated into the stack buffer, otherwise
+     +  it will be allocated on the heap.
+     + ++/
     template opBinary(string op)
     if(op == "~")
     {
@@ -232,6 +346,8 @@ struct String2
                 ret._ssoData[this._ssoLength..newLen] = rhs;
                 return ret;
             }
+            else if(this.isBig && this._payload !is null)
+                ret._payload.release();
 
             ret.markBig();
             ret._payload = Payload.create(newLen);
@@ -250,6 +366,15 @@ struct String2
     }
     private alias _opCat = opBinary!"~";
 
+    /++
+     + Concatenation assignment operator.
+     +
+     + Notes:
+     +  This will always create a new string, and will never mutate the existing string.
+     +
+     +  If the string is small enough, it will be concatenated into the stack buffer, otherwise
+     +  it will be allocated on the heap.
+     + ++/
     template opOpAssign(string op)
     if(op == "~")
     {
@@ -281,6 +406,9 @@ struct String2
     }
     private alias _opCatAssign = opOpAssign!"~";
 
+    /++
+     + Basic equality operator for common string types, including `char[]`, and `String2`.
+     + ++/
     bool opEquals(scope const(char)[] rhs) @trusted const
     {
         if(this.length != rhs.length)
@@ -289,18 +417,22 @@ struct String2
         return this.sliceMaybeFromStack() == rhs;
     }
 
+    /// ditto.
     bool opEquals(scope const String2 rhs) @trusted const
         => this.sliceMaybeFromStack() == rhs.sliceMaybeFromStack();
 
+    /// ditto.
     bool opEquals(scope const ref String2 rhs) @trusted const
         => this.sliceMaybeFromStack() == rhs.sliceMaybeFromStack();
 
+    /// Simple assignment operator that forwards to the appropriate ctor.
     void opAssign(CtorParam)(scope CtorParam param) @trusted
     if(!is(Unqual!CtorParam == String2))
     {
         this = String2(param);
     }
 
+    /// Hashes the contents of the string using MurmurHash3.
     uint toHash() @trusted const
     {
         import std.digest.murmurhash;
@@ -312,21 +444,60 @@ struct String2
         return bytes[0] << 24 | bytes[1] << 16 | bytes[2] << 8 | bytes[3];
     }
 
+    /++
+     + Provides access to the raw slice of the string, which may be on the stack or heap,
+     + depending on if Small String Optimisation is in use.
+     +
+     + Notes:
+     +  This function will never return a `null` slice, you should check if the slice's length is 0 instead.
+     +
+     +  This function is best used when you're *certain* that the returned slice will not escape and is
+     +  short lived, as the underlying payload may be released once the parent `String2` goes out of scope.
+     +
+     +  Please never pass the slice to a native C function, as the risk of stack corruption is too high.
+     +
+     + Returns:
+     +  A slice to the string's memory.
+     +
+     + See_Also:
+     +  `String2.slice`, `String2.access`
+     + ++/
     const(char)[] sliceMaybeFromStack() const
     {
         return this.isBig ? this._payload.sliceConst : this._ssoData[0..this._ssoLength];
     }
 
+    /++
+     + Provides access to the raw slice of the string, which will always be on the heap.
+     +
+     + Notes:
+     +  This function may return a `null` slice if the string is empty.
+     +
+     +  This function will promote the string to become a "Big" string if it wasn't already.
+     +  This means that it may allocate memory on the heap.
+     +
+     +  This function is best used when you're *certain* that the returned slice will not escape and is
+     +  short lived, as the underlying payload may be released once the parent `String2` goes out of scope.
+     +
+     +  This function is safer than `sliceMaybeFromStack` as it will always return a slice to the heap.
+     +
+     + Returns:
+     +  A slice to the string's memory.
+     +
+     + See_Also:
+     +  `String2.sliceMaybeFromStack`, `String2.access`.
+     + ++/
     const(char)[] slice()
     {
         // Force us to be a big string so we're not providing a slice onto the stack.
-        if(!this.isBig && this._ssoLength == 0)
+        if(this.length == 0)
             return null;
 
         this.moveToBigString();
         return this._payload.slice;
     }
 
+    /// The length of the string.
     size_t length() @safe const
     {
         return this.isBig ? this._length : this._ssoLength;
@@ -419,4 +590,20 @@ unittest
     str = String2.fromDestroyingArray(arr);
     assert(arr.length == 0);
     assert(str == "abc123");
+}
+
+@("String2 - copy ctor")
+unittest
+{
+    auto str = String2("smol");
+    auto str2 = str;
+    assert(str == str2);
+
+    str = "biiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiig";
+    str2 = str;
+    assert(str == str2);
+
+    str = String2.init;
+    str2 = str;
+    assert(str == str2);
 }
