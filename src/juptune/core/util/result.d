@@ -7,7 +7,7 @@
 module juptune.core.util.result;
 
 import core.attribute : mustuse;
-import juptune.core.ds.string;
+import juptune.core.ds : String, String2;
 
 @nogc nothrow:
 
@@ -17,16 +17,16 @@ alias InheritResults(alias Symbol) = getUDAs!(Symbol, Result);
 @mustuse
 struct Result
 {
-    int    errorCode;
-    string errorType;
-    string error;
-    String context;
-    string file;
-    string module_;
-    string function_;
-    size_t line;
+    int     errorCode;
+    string  errorType;
+    string  error;
+    String2 context;
+    string  file;
+    string  module_;
+    string  function_;
+    size_t  line;
 
-    void toString(OutputRange)(auto ref OutputRange range) const
+    void toString(OutputRange)(auto ref OutputRange range) const @trusted
     {
         import juptune.core.util.conv;
 
@@ -45,7 +45,7 @@ struct Result
         if(this.context.length)
         {
             range.put("\n");
-            range.put(this.context.slice);
+            range.put(this.context.sliceMaybeFromStack);
         }
     }
 
@@ -94,8 +94,8 @@ struct Result
     )
     (
         T      errorCode, 
-        string error   = null, 
-        String context = String.init
+        string error    = null, 
+        String2 context = String2.init
     ) 
     {
         enum R { none }
@@ -105,6 +105,36 @@ struct Result
         r.errorType = __traits(identifier, T); 
         r.error     = error;
         r.context   = context;
+
+        r.file      = FILE;
+        r.module_   = MODULE;
+        r.function_ = FUNCTION;
+        r.line      = LINE;
+
+        return r;
+    }
+
+    static Result make
+    (
+        T,
+        string FILE     = __FILE__, 
+        string MODULE   = __MODULE__, 
+        string FUNCTION = __PRETTY_FUNCTION__,
+        size_t LINE     = __LINE__
+    )
+    (
+        T      errorCode, 
+        string error, 
+        String context
+    ) @trusted
+    {
+        enum R { none }
+        auto r = Result(R.none);
+
+        r.errorCode = errorCode;
+        r.errorType = __traits(identifier, T); 
+        r.error     = error;
+        r.context   = String2(context.slice);
 
         r.file      = FILE;
         r.module_   = MODULE;

@@ -8,7 +8,7 @@ module juptune.core.internal.linux;
 
 version(linux):
 
-import juptune.core.ds   : String;
+import juptune.core.ds   : String2, Array;
 import juptune.core.util : Result;
 
 import core.stdc.stdio              : sscanf;
@@ -90,21 +90,21 @@ Result linuxErrorAsResult(string staticMessage, int errnum) @nogc nothrow
     if(errnum < 0)
         errnum = -errnum;
 
-    auto result = Result.make(cast(LinuxError)errnum, staticMessage);
-    result.context.length = LINUX_ERROR_BUFFER_SIZE;
-    result.context[0..$] = '\0';
+    Array!char msg;
+    msg.length = LINUX_ERROR_BUFFER_SIZE;
+    msg[0..$] = '\0';
 
-    scope mutablePtr = cast(char*)result.context.ptr; // Breaks the type system; but is safe to do this.
-    const staticMsg = strerror_r(errnum, mutablePtr, result.context.length-1); // - 1 so we can ensure a null terminator // @suppress(dscanner.suspicious.length_subtraction)
+    scope mutablePtr = cast(char*)msg.ptr; // Breaks the type system; but is safe to do this.
+    const staticMsg = strerror_r(errnum, mutablePtr, msg.length-1); // - 1 so we can ensure a null terminator // @suppress(dscanner.suspicious.length_subtraction)
 
     // Sometimes strerror_r returns a static string, sometimes it stores it in the buffer. What beautiful API design...
     if(staticMsg !is null && staticMsg !is mutablePtr)
     {
-        result.context.length = strlen(staticMsg);
-        mutablePtr[0..result.context.length] = staticMsg[0..result.context.length];
+        msg.length = strlen(staticMsg);
+        mutablePtr[0..msg.length] = staticMsg[0..msg.length];
     }
     else
-        result.context.length = strlen(result.context.ptr);
+        msg.length = strlen(msg.ptr);
 
-    return result;
+    return Result.make(cast(LinuxError)errnum, staticMessage, String2.fromDestroyingArray(msg));
 }

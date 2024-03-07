@@ -607,3 +607,22 @@ unittest
     str2 = str;
     assert(str == str2);
 }
+
+@("String2 - edge case - init == init")
+unittest
+{
+    assert(String2.init == String2.init);
+}
+
+@("String2 - edge case - rvalue == rvalue")
+unittest
+{
+    assert(String2("abc") == String2("abc"));
+
+    assert((){
+        import juptune.core.ds : Array;
+        Array!char arr;
+        arr.put("abc");
+        return String2.fromDestroyingArray(arr);
+    }() == String2("abc"));
+}
