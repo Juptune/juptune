@@ -30,6 +30,9 @@ module juptune.core.ds.string2;
  +  safety concerns: (`String2.slice`, `String2.sliceMaybeFromStack`, `String2.access`), as well as
  +  a safer but more limited way via the `String2.range` function.
  +
+ +  In the rare instances you need to pass the slice to a native C function, please note that
+ +  the underlying memory is null terminated (but not subslices of the payload).
+ +
  + Performance:
  +  Not yet measured to any reasonable degree, however logically it should be much more efficient than
  +  the previous implementation which would do a full copy on every struct copy, and had gaping memory
@@ -72,7 +75,7 @@ struct String2
 
             scope slice = payload.slice;
             memset(slice.ptr, char.init, slice.length);
-            *(slice.ptr + slice.length + 1) = 0; // Null terminator
+            *(slice.ptr + slice.length) = 0; // Null terminator
             return payload;
         }
 

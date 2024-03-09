@@ -133,7 +133,7 @@ juptune_all_unittest_exe = executable(
     'juptune-unittest', 
     './src/dummy_main.d',
     dependencies: [juptune_all_dep],
-    d_unittest: true,
+    d_unittest: true
 )
 
 #### Install ####
