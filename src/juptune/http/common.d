@@ -1,6 +1,6 @@
 module juptune.http.common;
 
-import juptune.core.ds : Array, String;
+import juptune.core.ds : Array, String2;
 
 private mixin template HttpMessageNoGCCommon()
 {
@@ -26,11 +26,13 @@ private mixin template HttpMessageNoGCCommon()
      + Notes:
      +  The key and value will be copied into a heap allocated string.
      +
+     +  The key and value types are templated, so that you can use any type supported by `String2`.
+     +
      + Params:
      +  key   = The name of the header to set.
      +  value = The value to set the header to.
      + ++/
-    void setHeader(scope const char[] key, scope const char[] value) @trusted // ditto todo as putBody
+    void setHeader(KeyT, ValueT)(scope KeyT key, scope ValueT value) @trusted // ditto todo as putBody
     {
         // NOTE: We don't have an ordered map implementation, so for now
         //       we'll just use an array + a linear search.
@@ -41,7 +43,7 @@ private mixin template HttpMessageNoGCCommon()
                 if(value.length == 0)
                     this._headers.remove(i);
                 else
-                    header._value = value;
+                    header._value = String2(value);
                 return;
             }
         }
@@ -53,6 +55,9 @@ private mixin template HttpMessageNoGCCommon()
     /++
      + Tries to get the header with the given name.
      +
+     + Notes:
+     +  The key type is templated, so that you can use any type supported by `String2`.
+     +
      + Params:
      +  key      = The name of the header to get.
      +  wasFound = Set to true if the header was found, false otherwise.
@@ -60,7 +65,7 @@ private mixin template HttpMessageNoGCCommon()
      + Returns:
      +  The header with the given name, or an empty header if it wasn't found.
      + ++/
-    HttpHeader tryGetHeader(scope const char[] key, scope out bool wasFound) @safe
+    HttpHeader tryGetHeader(KeyT)(scope KeyT key, scope out bool wasFound) @safe
     {
         foreach(ref header; this._headers[])
         {
@@ -84,20 +89,13 @@ private mixin template HttpMessageNoGCCommon()
 
 /++
  + Represents a single HTTP header.
- +
- + Notes:
- +  While this struct can be freely copied, please note that each copy will duplicate
- +  the underlying data. This is a tradeoff between easy @nogc usage and performance.
- +
- +  It can definitely be made better with the introduction of reference counting, but
- +  that's a task for another day.
  + ++/
 struct HttpHeader
 {
     private 
     {
-        String _name;
-        String _value;
+        String2 _name;
+        String2 _value;
     }
 
     /++ 
@@ -110,20 +108,27 @@ struct HttpHeader
      +
      +  The name and value will be copied into an internal string.
      +
+     +  If the name is of type `String2`, it will have its payload cloned into a new string as this ctor
+     +  needs to modify the string in place.
+     +
      + Params:
-     +  name  = The name of the header. This can be any type supported by `String`'s ctor.
-     +  value = The value of the header. This can be any type supported by `String`'s ctor.
+     +  name  = The name of the header. This can be any type supported by `String2`'s ctor.
+     +  value = The value of the header. This can be any type supported by `String2`'s ctor.
      + ++/
     this(NameT, ValueT)(scope NameT name, scope ValueT value) @trusted // @safe: The const removal is safe
     {
         import juptune.http.v1 : http1CanonicalHeaderNameInPlace;
 
-        this._name = String(name);
-        this._value = String(value);
+        this._value = String2(value);
+
+        static if(is(NameT == String2))
+            this._name = String2(name.sliceMaybeFromStack); // Clones the payload.
+        else
+            this._name = String2(name);
 
         // NOTE: While it would be nice to check the validation result, this
         //       should get caught in the writer anyway. The annoyance of constructors :(
-        scope nameSlice = cast(ubyte[])this._name[];
+        scope nameSlice = cast(ubyte[])this._name.sliceMaybeFromStack; // Breaks the type system, but this is the only copy at this point, so it's basically safe.
         http1CanonicalHeaderNameInPlace(nameSlice);
     }
 
@@ -135,18 +140,14 @@ struct HttpHeader
     }
 
     /// The name of the header.
-    ref const(String) name() scope return const @safe @nogc nothrow => this._name;
+    ref const(String2) name() scope return const @safe @nogc nothrow => this._name;
 
     /// The value of the header.
-    ref const(String) value() scope return const @safe @nogc nothrow => this._value;
+    ref const(String2) value() scope return const @safe @nogc nothrow => this._value;
 }
 
 /++
  + Represents a HTTP request with a method; headers; and a body.
- +
- + Notes:
- +  While this struct can be freely copied, please note that each copy will duplicate
- +  the underlying data. This is a tradeoff between easy @nogc usage and performance.
  + ++/
 struct HttpRequest
 {
@@ -154,8 +155,8 @@ struct HttpRequest
 
     private
     {
-        String _method;
-        String _path;
+        String2 _method;
+        String2 _path;
     }
 
     @nogc nothrow:
@@ -173,43 +174,39 @@ struct HttpRequest
      + Sets the method of the request.
      +
      + Notes:
-     +  The method will be copied into an internal string.
+     +  The method type is templated so that you can use any type supported by `String2`.
      +
      + Params:
      +  method = The method to set the request to.
      + ++/
-    void withMethod(scope const char[] method) @safe
+    void withMethod(MethodT)(scope MethodT method)
     {
-        this._method = method;
+        this._method = String2(method);
     }
 
     /++ 
      + Sets the path of the request.
      +
      + Notes:
-     +  The path will be copied into an internal string.
+     +  The path type is templated so that you can use any type supported by `String2`.
      +
      + Params:
      +  path = The path to set the request to.
      + ++/
-    void withPath(scope const char[] path) @safe
+    void withPath(PathT)(scope PathT path)
     {
-        this._path = path;
+        this._path = String2(path);
     }
 
     /// The method of the request.
-    ref const(String) method() scope return const @safe @nogc nothrow => this._method;
+    ref const(String2) method() scope return const @safe @nogc nothrow => this._method;
 
     /// The path of the request.
-    ref const(String) path() scope return const @safe @nogc nothrow => this._path;
+    ref const(String2) path() scope return const @safe @nogc nothrow => this._path;
 }
 
 /++
  + Represents a HTTP response with a status code + reason; headers; a body, and trailers.
- +
- + Notes:
- +  While this struct can be freely copied, please note that each copy will duplicate
- +  the underlying data. This is a tradeoff between easy @nogc usage and performance.
  + ++/
 struct HttpResponse
 {
@@ -218,7 +215,7 @@ struct HttpResponse
     private
     {
         uint   _status;
-        String _reason;
+        String2 _reason;
     }
 
     @nogc nothrow:
@@ -247,19 +244,19 @@ struct HttpResponse
      + Sets the reason of the response.
      +
      + Notes:
-     +  The reason will be copied into an internal string.
+     +  The reason type is templated so that you can use any type supported by `String2`.
      +
      + Params:
      +  reason = The reason to set the response to.
      + ++/
-    void withReason(scope const char[] reason) @safe
+    void withReason(ReasonT)(scope ReasonT reason)
     {
-        this._reason = reason;
+        this._reason = String2(reason);
     }
 
     /// The status of the response.
-    ref const(String) reason() scope return const @safe @nogc nothrow => this._reason;
+    ref const(String2) reason() scope return const @safe @nogc nothrow => this._reason;
 
     /// The reason of the response.
-    uint status() scope return const @safe @nogc nothrow => this._status;
+    uint status() const @safe @nogc nothrow => this._status;
 }

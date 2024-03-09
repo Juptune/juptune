@@ -47,8 +47,8 @@ module juptune.core.ds.string2;
  + ++/
 struct String2
 {
-    import std.range : isInputRange, ElementEncodingType;
-    import std.traits : isInstanceOf, Unqual;
+    import std.range       : isInputRange, ElementEncodingType;
+    import std.traits      : isInstanceOf, Unqual;
     import juptune.core.ds : ArrayBase;
 
     private static struct OpSlice { size_t start; size_t end; }
@@ -248,7 +248,7 @@ struct String2
      +  RangeT = The type of the range to copy.
      + ++/
     this(RangeT)(scope RangeT range)
-    if(isInputRange!RangeT && is(ElementEncodingType!RangeT == char))
+    if(isInputRange!RangeT && is(ElementEncodingType!RangeT == char) && !is(Unqual!RangeT == char[]))
     {
         import std.range : walkLength;
 
@@ -667,6 +667,10 @@ unittest
     arr.put("abc123");
     str = String2.fromDestroyingArray(arr);
     assert(arr.length == 0);
+    assert(str == "abc123");
+
+    // Test setting from raw string
+    str = "abc123";
     assert(str == "abc123");
 }
 

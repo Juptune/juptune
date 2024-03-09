@@ -136,7 +136,7 @@ final class HttpClientAdapter : IHttpClient
  + ++/
 struct HttpClient
 {
-    import juptune.core.ds      : Array, String;
+    import juptune.core.ds      : Array, String2;
     import juptune.event.io     : TcpSocket, IpAddress;
     import juptune.http.common  : HttpRequest, HttpResponse;
     import juptune.http.uri     : ScopeUri;
@@ -190,7 +190,7 @@ struct HttpClient
         bool                _isConnected;
         HttpClientVersion   _selectedVersion;
         bool                _lockClient;
-        String              _hostName;
+        String2             _hostName;
 
         invariant(_isConnected || _selectedVersion == HttpClientVersion.FAILSAFE, "bug: Incorrect state management");
         invariant(!_lockClient, "Attempted to use client while it was locked (or a bug where the lock wasn't released)"); // @suppress(dscanner.style.long_line)
@@ -248,23 +248,27 @@ struct HttpClient
     Result connect(IpAddress ip, scope const char[] host = null) @nogc nothrow
     in(!this._isConnected, "This client is already connected")
     {
+        Array!char hostName;
+
         if(host.length == 0)
         {
-            this._hostName.length = 0;
-            ip.toString(this._hostName);
+            hostName.reserve(64);
+            ip.toString(hostName);
         }
         else
         {
-            this._hostName = host;
+            hostName.reserve(host.length + 16);
+            hostName.put(host);
 
             if(ip.port != 80)
             {
                 import juptune.core.util : IntToCharBuffer, toBase10;
                 IntToCharBuffer port;
-                this._hostName ~= ":";
-                this._hostName ~= toBase10(ip.port, port);
+                hostName.put(":");
+                hostName.put(toBase10(ip.port, port));
             }
         }
+        this._hostName = String2.fromDestroyingArray(hostName);
 
         if(!this._socket.isOpen)
         {
@@ -494,7 +498,7 @@ struct HttpClient
 
 private struct Http1ClientImpl
 {
-    import juptune.core.ds      : String;
+    import juptune.core.ds      : String2;
     import juptune.event.io     : TcpSocket;
     import juptune.http.common  : HttpRequest, HttpResponse;
     
@@ -519,7 +523,7 @@ private struct Http1ClientImpl
     Result request(
         scope ref const HttpRequest request, 
         scope ref HttpResponse response,
-        scope ref const String defaultHost,
+        scope ref const String2 defaultHost,
         scope out bool closeConnection,
     ) @nogc
     in(writer != Http1Writer.init, "Http1Writer is not initialized")
@@ -557,7 +561,7 @@ private struct Http1ClientImpl
         scope out HttpResponse response,
         scope RequestFuncT bodyPutter, 
         scope ResponseFuncT bodyReader,
-        scope ref const String defaultHost,
+        scope ref const String2 defaultHost,
         scope out bool closeConnection,
     )
     in(writer != Http1Writer.init, "Http1Writer is not initialized")
@@ -592,10 +596,14 @@ private struct Http1ClientImpl
 
     Result sendHead(
         scope ref const HttpRequest request,
-        scope ref const String defaultHost
+        scope ref const String2 defaultHost
     ) @nogc
     {
-        auto result = this.writer.putRequestLine(request.method[], request.path[], Http1Version.http11);
+        auto result = this.writer.putRequestLine(
+            request.method.sliceMaybeFromStack, 
+            request.path.sliceMaybeFromStack, 
+            Http1Version.http11
+        );
         if(result.isError)
             return result;
 
@@ -603,7 +611,10 @@ private struct Http1ClientImpl
         bool hasEncodingHeader;
         foreach(ref header; request.headers)
         {
-            result = this.writer.putHeader(header.name[], header.value[]);
+            result = this.writer.putHeader(
+                header.name.sliceMaybeFromStack, 
+                header.value.sliceMaybeFromStack
+            );
             if(result.isError)
                 return result;
 
@@ -622,7 +633,7 @@ private struct Http1ClientImpl
 
         if(!hasHostHeader)
         {
-            result = this.writer.putHeader("Host", defaultHost[]);
+            result = this.writer.putHeader("Host", defaultHost.sliceMaybeFromStack);
             if(result.isError)
                 return result;
         }
@@ -834,7 +845,7 @@ import juptune.http.v1     : Http1Writer, Http1Reader, Http1Config;
 
 HttpRequest collectRequest(scope ref Http1Writer writer, scope ref Http1Reader reader) @nogc nothrow
 {
-    import juptune.core.ds : String;
+    import juptune.core.ds : String2, Array;
     import juptune.http.v1;
 
     HttpRequest request;
@@ -845,9 +856,9 @@ HttpRequest collectRequest(scope ref Http1Writer writer, scope ref Http1Reader r
         line.access((scope method, scope path) @trusted {
             request.withMethod(method);
         
-            String pathStr;
-            path.reconstruct(pathStr).resultAssert;
-            request.withPath(pathStr[]);
+            Array!char pathBuffer;
+            path.reconstruct(pathBuffer).resultAssert;
+            request.withPath(pathBuffer.slice);
         });
     }
 

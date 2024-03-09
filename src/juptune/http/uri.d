@@ -227,7 +227,7 @@ enum UriParseRules
  + ++/
 struct ScopeUri
 {
-    import juptune.core.ds : String;
+    import juptune.core.ds : Array;
 
     const(char)[] scheme; /// The scheme of the URI, e.g. "http", if one exists
     const(char)[] userInfo; /// The user info of the URI, e.g. "user:info", if one exists
@@ -290,7 +290,7 @@ struct ScopeUri
      + Returns:
      +  A `Result` indicating whether the reconstruction was successful or not.
      + ++/
-    Result reconstruct(scope out String result) @trusted @nogc nothrow const
+    Result reconstruct(scope out Array!char result) @trusted @nogc nothrow const
     {
         scope put = (scope const char[] slice) => result.put(slice);
         this.reconstructSink(put);
@@ -332,8 +332,8 @@ struct ScopeUri
 
     version(unittest) private void mustReconstruct() const
     {
-        import juptune.core.ds : String;
-        String sanityCheck;
+        import juptune.core.ds : Array;
+        Array!char sanityCheck;
         reconstruct(sanityCheck).resultAssert;
     }
 
