@@ -27,7 +27,8 @@ module juptune.core.ds.string2;
  +  like "String2 == char[]" operations.
  +
  +  Additionally there are 3 different ways to access the underlying slice, depending on use case and
- +  safety concerns: (`String2.slice`, `String2.sliceMaybeFromStack`, `String2.access`).
+ +  safety concerns: (`String2.slice`, `String2.sliceMaybeFromStack`, `String2.access`), as well as
+ +  a safer but more limited way via the `String2.range` function.
  +
  + Performance:
  +  Not yet measured to any reasonable degree, however logically it should be much more efficient than
@@ -38,6 +39,8 @@ module juptune.core.ds.string2;
  +  The assumption is that any operation self contained within the struct's code is @safe,
  +  and any operation that requires the underlying slice to be exposed is to be explicitly marked
  +  as @trusted by the caller.
+ +
+ +  This struct is only safe to move as long as there's no living slices to the string's SSO buffer.
  + ++/
 struct String2
 {
@@ -504,6 +507,74 @@ struct String2
     }
     alias opDollar = length;
 
+    /++
+     + Provides an input range over the string's characters.
+     +
+     + Notes:
+     +  This is a lot safer to use than `.slice` when using range algorithms,
+     +  as this range will keep the payload alive until the range is destroyed.
+     +
+     +  This function will promote the string to become a "Big" string if it wasn't already.
+     +
+     + Returns:
+     +  An input range over the string's characters.
+     + ++/
+    auto range() @trusted
+    {
+        static struct R
+        {
+            @safe @nogc nothrow:
+
+            Payload* payload;
+            const(char)[] slice;
+            bool empty;
+            size_t index;
+            char front;
+
+            this(Payload* payload) @trusted
+            {
+                this.payload = payload;
+                this.payload.acquire();
+                this.slice = payload.sliceConst; // To avoid contract asserts each time we call popFront.
+                this.popFront();
+            }
+
+            this(scope ref return R other) @trusted
+            {
+                this.payload = other.payload;
+                this.payload.acquire();
+                this.slice = other.slice;
+                this.empty = other.empty;
+                this.index = other.index;
+                this.front = other.front;
+            }
+
+            ~this() @trusted
+            {
+                if(payload !is null)
+                    payload.release();
+                (cast(ubyte*)(&this))[0..R.sizeof] = 0;
+            }
+
+            void popFront()
+            {
+                if(index == slice.length)
+                {
+                    empty = true;
+                    return;
+                }
+
+                front = slice[index++];
+            }
+        }
+
+        import std.range : isInputRange;
+        static assert(isInputRange!R);
+
+        this.moveToBigString();
+        return R(this._payload);
+    }
+
     private bool isBig() @safe const
     {
         return this._ssoLength > this._ssoData.length;
@@ -625,4 +696,38 @@ unittest
         arr.put("abc");
         return String2.fromDestroyingArray(arr);
     }() == String2("abc"));
+}
+
+@("String2 - ref counting")
+unittest
+{
+    auto s1 = String2("abc");
+    s1.moveToBigString();
+    auto s2 = s1;
+
+    assert(s1._payload is s2._payload);
+    assert(s1._payload.refCount == 2);
+    s1.__xdtor();
+    assert(s2._payload.refCount == 1);
+}
+
+@("String2 - range")
+unittest
+{
+    auto s = String2("abc");
+    auto r = s.range;
+
+    assert(s._payload !is null);
+    assert(s._payload is r.payload);
+    assert(s._payload.refCount == 2);
+
+    auto r2 = r;
+    assert(r2.payload.refCount == 3);
+    r2.__xdtor();
+    assert(r.payload.refCount == 2);
+    s.__xdtor();
+    assert(r.payload.refCount == 1);
+
+    import std.algorithm : equal;
+    assert(r.equal("abc"));
 }
