@@ -268,7 +268,11 @@ struct String2
         }
 
         foreach(ref c; str)
+        {
+            debug assert(!range.empty, "Range is shorter than expected");
             c = range.front;
+            range.popFront();
+        }
     }
 
     /++
