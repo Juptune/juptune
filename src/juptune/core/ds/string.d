@@ -19,6 +19,7 @@ version(X86_64)
 else
     private enum UseSSO = false;
 
+// deprecated("Use String2 instead - this will eventually be removed and String2 will be renamed to String.")
 struct String
 {
     /++

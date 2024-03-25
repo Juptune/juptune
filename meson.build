@@ -110,6 +110,12 @@ juptune_all_dep = declare_dependency(
     dependencies: [juptune_core_dep, juptune_crypto_dep, juptune_data_dep, juptune_event_dep, juptune_http_dep],
 )
 
+juptune_test_dep = declare_dependency(
+    sources: './src/dummy_main.d',
+    dependencies: [juptune_all_dep],
+    d_unittest: true,
+)
+
 #### Executables ####
 
 examples = {
@@ -131,9 +137,7 @@ alias_target('examples', example_exes)
 
 juptune_all_unittest_exe = executable(
     'juptune-unittest', 
-    './src/dummy_main.d',
-    dependencies: [juptune_all_dep],
-    d_unittest: true
+    dependencies: [juptune_test_dep],
 )
 
 #### Install ####
@@ -159,7 +163,3 @@ pkgc.generate(
 #### Tests ####
 
 test('juptune-unittest', juptune_all_unittest_exe)
-
-#### Subdirs ####
-
-subdir('./devops/pkg/opensuse-rpm')

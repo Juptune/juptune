@@ -22,7 +22,7 @@
 %define meson_buildtype release
 
 Name:           juptune
-Version:        @JUPTUNE_VERSION@
+Version:        0.0.0
 Release:        0
 Summary:        Async I/O framework for D
 License:        MPL-2.0
@@ -54,7 +54,7 @@ The %{name}-devel package contains libraries and header files for
 developing applications that use %{name}.
 
 %prep
-%autosetup -p1
+%setup -q
 
 # For some reason, `osc build` is adding in a bad `--flto=auto` flag which LDC2 doesn't support.
 # This doesn't happen with a raw `rpmbuild`. It's simple enough to fix though - we just won't use the meson setup macro.
