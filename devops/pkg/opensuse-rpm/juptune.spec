@@ -28,7 +28,7 @@ Summary:        Async I/O framework for D
 License:        MPL-2.0
 Group:          System/Libraries
 URL:            https://github.com/Juptune/juptune
-Source0:        juptune-%{version}.tar.gz
+Source0:        juptune-%{version}.tar
 BuildRequires:  ldc
 BuildRequires:  ldc-phobos-devel
 BuildRequires:  ldc-runtime-devel
