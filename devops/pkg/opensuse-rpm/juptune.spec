@@ -30,8 +30,7 @@ Group:          System/Libraries
 URL:            https://github.com/Juptune/juptune
 Source0:        juptune-%{version}.tar
 BuildRequires:  ldc
-BuildRequires:  ldc-phobos-devel
-BuildRequires:  ldc-runtime-devel
+BuildRequirc-runtime-devel
 BuildRequires:  meson
 BuildRequires:  pkgconfig
 BuildRequires:  pkgconfig(libsodium)
