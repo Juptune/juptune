@@ -113,7 +113,6 @@ juptune_all_dep = declare_dependency(
 juptune_test_dep = declare_dependency(
     sources: './src/dummy_main.d',
     dependencies: [juptune_all_dep],
-    d_unittest: true,
 )
 
 #### Executables ####
@@ -138,6 +137,7 @@ alias_target('examples', example_exes)
 juptune_all_unittest_exe = executable(
     'juptune-unittest', 
     dependencies: [juptune_test_dep],
+    d_unittest: true,
 )
 
 #### Install ####
