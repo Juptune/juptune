@@ -12,8 +12,7 @@ Only Linux is supported, and that likely won't ever change.
 
 This library is super alpha, please don't use it for any serious work.
 
-The latest Github release will contain packages for a few Linux distros, however if you want the latest changes or
-if there's no release for your distro, you can manually pull down and build Juptune:
+There's a few distros which Juptune already has packages for, but if you still want to build it locally then:
 
 ```bash
 your-package-manager install meson
@@ -34,7 +33,7 @@ You can technically get this to work with dub as well, but honestly I don't care
 
 | Package Name(s)             | Distro              | Status |
 | --------------------------- | ------------------- | ------ |
-| `juptune`, `juptune-devel`  | OpenSUSE Tumbleweed | [![build result](https://build.opensuse.org/projects/home:bchatha/packages/juptune/badge.svg?type=default)](https://build.opensuse.org/package/show/home:bchatha/juptune) |
+| `juptune`, `juptune-devel`  | OpenSUSE Tumbleweed | [![build result](https://build.opensuse.org/projects/home:bchatha:juptune/packages/juptune/badge.svg?type=default)](https://build.opensuse.org/package/show/home:bchatha:juptune/juptune) |
 
 # Features
 
@@ -130,6 +129,18 @@ Optionally:
 * act (used by Tilt to test our Github Actions)
 * clang (used by some DevOps scripts)
 * tilt
+
+## Packaging
+
+### OpenSUSE
+
+The .spec file for the OpenSUSE RPM build is located at [devops/pkg/opensuse-rpm/juptune.spec](./devops/pkg/opensuse-rpm/juptune.spec).
+
+The main development project on OBS (Open Build Service) is [home:bchatha:juptune](https://build.opensuse.org/project/show/home:bchatha:juptune), and the root package name for this repo is simply `juptune`.
+
+OBS' Github webhook integration is enabled, and the uses the common Juptune org-wide [workflow](https://github.com/Juptune/distribution/blob/master/open-build-service/workflows.yml). Please review the distribution repo's README for more information on how the workflow... works.
+
+Juptune is not currently part of the core distribution project.
 
 # Examples
 
