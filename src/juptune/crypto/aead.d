@@ -290,9 +290,9 @@ private struct SodiumAead(
     }
 }
 
+import std.meta : AliasSeq;
 version (Juptune_LibSodium)
 {
-    import std.meta : AliasSeq;
     import juptune.crypto.libsodium : 
         crypto_aead_chacha20poly1305_ietf_npubbytes, 
         crypto_aead_chacha20poly1305_ietf_abytes, 
@@ -324,6 +324,10 @@ version (Juptune_LibSodium)
     );
 
     private alias ALL_AEAD_ALGORITHMS = AliasSeq!(AeadChacha20Poly1305, AeadIetfChacha20Poly1305);
+}
+else
+{
+    private alias ALL_AEAD_ALGORITHMS = AliasSeq!();
 }
 
 /++++ Unittests ++++/
