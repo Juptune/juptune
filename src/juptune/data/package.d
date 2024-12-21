@@ -7,5 +7,6 @@
 module juptune.data;
 
 public import 
-    juptune.data.base
+    juptune.data.base,
+    juptune.data.buffer
 ;

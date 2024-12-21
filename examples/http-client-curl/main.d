@@ -51,9 +51,9 @@ void curl()
     // Print the response to stdout.
     import std.stdio : writefln;
 
-    writefln("%s %s", response.status, response.reason[]);
+    writefln("%s %s", response.status, response.reason.sliceMaybeFromStack);
     foreach(ref header; response.headers[])
-        writefln("%s: %s", header.name[], header.value[]);
+        writefln("%s: %s", header.name.sliceMaybeFromStack, header.value.sliceMaybeFromStack);
     writefln("\n%s", cast(char[])response.body[]);
 }
 

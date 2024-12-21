@@ -18,3 +18,12 @@ if(isUnsigned!T)
     result = a + b;
     return Result.noError;
 }
+
+Result checkedMul(T)(T a, T b, out T result)
+if(isUnsigned!T)
+{
+    if(b > (T.max / a) + (T.max % a > 0 ? 1 : 0))
+        return Result.make(CheckedError.overflow, "overflow");
+    result = a * b;
+    return Result.noError;
+}
