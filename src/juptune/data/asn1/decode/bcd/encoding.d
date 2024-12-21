@@ -77,14 +77,10 @@ struct Asn1LongLength
     ulong length() const
     in(this.isAtMost64Bits(), "The amount of bytes is too large to represent as a ulong - please check with isAtMost64Bits or amountOfBytes") // @suppress(dscanner.style.long_line)
     {
-        import std.bitmanip : swapEndian;
-
         ulong result = 0;
         foreach (ubyte b; _lengthBytes)
             result = (result << 8) | b;
 
-        version(LittleEndian)
-            result = swapEndian(result);
         return result;
     }
 }
@@ -164,16 +160,11 @@ struct Asn1Integer
     Result asInt(IntT)(scope out IntT result) @nogc
     if(isIntegral!IntT)
     {
-        import std.bitmanip : swapEndian;
-
         if(this._value.length > IntT.sizeof)
             return Result.make(Asn1DecodeError.integerOverBits, "Integer value is too large to fit into a native integer type"); // @suppress(dscanner.style.long_line)
 
         foreach(b; this._value)
             result = (result << 8) | b;
-
-        version(LittleEndian)
-            result = swapEndian(result);
 
         return Result.noError;
     }
@@ -757,8 +748,6 @@ private struct Asn1ObjectIdentifierImpl(bool IsRelative)
     ) @nogc
     in(data.length > 0, "data is empty, likely a missing check from the caller's end")
     {
-        import std.bitmanip : swapEndian;
-
         size_t cursor;
         ulong result;
         
@@ -769,11 +758,7 @@ private struct Asn1ObjectIdentifierImpl(bool IsRelative)
         }
 
         if(cursor * 7 <= typeof(result).sizeof * 8)
-        {
-            version(LittleEndian)
-                result = swapEndian(result);
             outResult = result;
-        }
 
         return data[0..cursor];
     }
@@ -861,15 +846,13 @@ Result asn1DecodeIdentifier(Asn1Ruleset ruleset)(
     scope out Asn1Identifier ident
 ) @safe @nogc nothrow
 {
-    import std.bitmanip : swapEndian;
-
     ubyte initialByte;
     if(!mem.readU8(initialByte))
         return Result.make(Asn1DecodeError.eof, "Ran out of bytes when reading initial byte of identifier");
 
     // ISO/IEC 8825-1:2021 8.1.2.2
     const class_    = cast(Asn1Identifier.Class)(initialByte >> 6);
-    const encoding  = cast(Asn1Identifier.Encoding)(initialByte & 0b0010_0000);
+    const encoding  = cast(Asn1Identifier.Encoding)((initialByte >> 5) & 1);
     const shortTag  = initialByte & 0b0001_1111;
 
     if(shortTag <= 30)
@@ -897,8 +880,6 @@ Result asn1DecodeIdentifier(Asn1Ruleset ruleset)(
         }
     } while(tagByte & 0b1000_0000);
 
-    version(LittleEndian)
-        longTag = swapEndian(longTag);
     ident = Asn1Identifier(class_, encoding, longTag);
     return Result.noError;
 }
@@ -978,4 +959,106 @@ in(length != Asn1Length.init, "The length must be initialized")
             return Result.noError;
         }
     );
+}
+
+/++++ Unittests ++++/
+
+@("Asn1Identifier - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+    
+    static struct T
+    {
+        ubyte[] data;
+        Asn1Identifier expected;
+        Nullable!Asn1DecodeError expectedError;
+    }
+
+    alias cl = Asn1Identifier.Class;
+    alias en = Asn1Identifier.Encoding;
+    const cases = [
+        "class - universal": T(
+            [0b0000_0000],
+            Asn1Identifier(cl.universal, en.primitive, 0)
+        ),
+        "class - application": T(
+            [0b0100_0000],
+            Asn1Identifier(cl.application, en.primitive, 0)
+        ),
+        "class - contextSpecific": T(
+            [0b1000_0000],
+            Asn1Identifier(cl.contextSpecific, en.primitive, 0)
+        ),
+        "class - private": T(
+            [0b1100_0000],
+            Asn1Identifier(cl.private_, en.primitive, 0)
+        ),
+
+        "encoding - primitive": T(
+            [0b1100_1111],
+            Asn1Identifier(cl.private_, en.primitive, 0b1111)
+        ),
+        "encoding - constructed": T(
+            [0b0010_0000],
+            Asn1Identifier(cl.universal, en.constructed, 0)
+        ),
+
+        "tag - short 0": T(
+            [0b0000_0000],
+            Asn1Identifier(cl.universal, en.primitive, 0)
+        ),
+        "tag - short 15": T(
+            [0b0000_1111],
+            Asn1Identifier(cl.universal, en.primitive, 15)
+        ),
+        "tag - short 30": T(
+            [0b0001_1110],
+            Asn1Identifier(cl.universal, en.primitive, 30)
+        ),
+
+        "tag - long 31": T(
+            [0b0001_1111, 0b0001_1111],
+            Asn1Identifier(cl.universal, en.primitive, 31)
+        ),
+        "tag - long all ones, 1 byte": T(
+            [0b0001_1111, 0b0111_1111],
+            Asn1Identifier(cl.universal, en.primitive, 0b0111_1111)
+        ),
+        "tag - long all ones, 2 bytes": T(
+            [0b0001_1111, 0b1111_1111, 0b0111_1111],
+            Asn1Identifier(cl.universal, en.primitive, 0b0011_1111_1111_1111)
+        ),
+        "tag - long all ones, 3 bytes": T(
+            [0b0001_1111, 0b1111_1111, 0b1111_1111, 0b0111_1111],
+            Asn1Identifier(cl.universal, en.primitive, 0b0001_1111_1111_1111_1111_1111)
+        ),
+    ];
+
+    foreach(name, test; cases)
+    {
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Asn1Identifier identifier;
+            auto result = asn1DecodeIdentifier!(Asn1Ruleset.der)(mem, identifier);
+            
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(identifier == test.expected, format("\n  Got: %s\n  Expected: %s", identifier, test.expected));
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
 }

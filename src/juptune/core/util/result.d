@@ -217,3 +217,29 @@ void resultAssert(Result result)
     
     assert(false, slice);
 }
+
+version(unittest) void resultAssertSameCode(Result got, Result expected)
+in(got.isError && expected.isError, "Both results must be errors")
+{
+    import juptune.core.ds   : Array, String;
+    import juptune.core.util : toStringSink;
+
+    if(got.errorCode != expected.errorCode || got.errorType != expected.errorType)
+    {
+        Array!char msg;
+        msg.put("Result mismatch!\n");
+        
+        msg.put("  Got: ");
+        got.errorCode.toStringSink(msg);
+        msg.put(" of type ");
+        msg.put(got.errorType);
+        
+        msg.put("\n  Wanted: ");
+        expected.errorCode.toStringSink(msg);
+        msg.put(" of type ");
+        msg.put(expected.errorType);
+
+        // Since this function is only ever used in unittests, we can bypass the global @nogc of this module.
+        debug assert(false, "" ~ msg.slice);
+    }
+}
