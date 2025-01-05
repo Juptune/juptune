@@ -51,6 +51,8 @@ struct Asn1Identifier
 
 struct Asn1LongLength
 {
+    import std.traits : isUnsigned;
+
     enum MIN_BYTES = 1;
     enum MAX_BYTES = 127;
 
@@ -59,22 +61,34 @@ struct Asn1LongLength
         const(ubyte)[] _lengthBytes;
     }
 
-    @safe @nogc nothrow pure:
+    @safe nothrow pure:
 
-    static Asn1LongLength fromUnownedBytes(const ubyte[] lengthBytes)
+    // version(unittest) since I don't know how I want to handle constructing things manually yet, but I need this for testing at the very least.
+    version(unittest) static Asn1LongLength fromNumberGC(T)(T number)
+    if(isUnsigned!T)
+    {
+        import std.bitmanip : nativeToBigEndian;
+        auto bytes = nativeToBigEndian(number).dup;
+        while(bytes.length > 0 && bytes[0] == 0) // Encode in least amount of bytes
+            bytes = bytes[1..$];
+
+        return Asn1LongLength.fromUnownedBytes(bytes);
+    }
+
+    static Asn1LongLength fromUnownedBytes(const ubyte[] lengthBytes) @nogc
     in(lengthBytes.length >= MIN_BYTES && lengthBytes.length <= MAX_BYTES, "The amount of bytes must be between 1 and 127") // @suppress(dscanner.style.long_line)
     {
         return Asn1LongLength(lengthBytes);
     }
 
-    const(ubyte)[] lengthBytes() const => _lengthBytes; // TODO: Note that this is always in big endian.
+    const(ubyte)[] lengthBytes() const @nogc => _lengthBytes; // TODO: Note that this is always in big endian.
     
-    bool isAtMost64Bits() const
+    bool isAtMost64Bits() const @nogc
     {
         return this._lengthBytes.length <= 8;
     }
 
-    ulong length() const
+    ulong length() const @nogc
     in(this.isAtMost64Bits(), "The amount of bytes is too large to represent as a ulong - please check with isAtMost64Bits or amountOfBytes") // @suppress(dscanner.style.long_line)
     {
         ulong result = 0;
@@ -102,8 +116,14 @@ struct Asn1Bool
         this._value = value;
     }
 
-    static Result fromDecoding(Asn1Ruleset ruleset)(scope ref MemoryReader mem, scope out Asn1Bool result)
+    static Result fromDecoding(Asn1Ruleset ruleset)(
+        scope ref MemoryReader mem, 
+        scope out Asn1Bool result,
+        const Asn1Identifier ident
+    )
     {
+        if(ident.encoding == Asn1Identifier.Encoding.constructed)
+            return Result.make(Asn1DecodeError.booleanIsConstructed, "Booleans cannot be constructed - ISO/IEC 8825-1:2021 8.2.1"); // @suppress(dscanner.style.long_line)
         if(mem.bytesLeft != 1)
             return Result.make(Asn1DecodeError.booleanInvalidEncoding, "Boolean value must be exactly one byte long under BER ruleset - ISO/IEC 8825-1:2021 8.2.1"); // @suppress(dscanner.style.long_line)
 
@@ -136,6 +156,18 @@ struct Asn1Integer
 
     @trusted nothrow: // TODO: Look into why array's dtor is unsafe/untrusted // @suppress(dscanner.trust_too_much)
 
+    // version(unittest) since I don't know how I want to handle constructing things manually yet, but I need this for testing at the very least.
+    version(unittest) static Asn1Integer fromNumberGC(T)(T number)
+    if(isIntegral!T)
+    {
+        import std.bitmanip : nativeToBigEndian;
+        auto bytes = nativeToBigEndian(number).dup;
+        while(bytes.length > 0 && bytes[0] == 0) // Encode in least amount of bytes
+            bytes = bytes[1..$];
+
+        return Asn1Integer.fromUnownedBytes(bytes);
+    }
+
     static Asn1Integer fromUnownedBytes(const(ubyte)[] bytes) @nogc @trusted nothrow
     {
         return Asn1Integer(bytes);
@@ -143,15 +175,26 @@ struct Asn1Integer
 
     static Result fromDecoding(Asn1Ruleset ruleset)(
         scope ref MemoryReader mem, 
-        scope out Asn1Integer result
+        scope out Asn1Integer result,
+        const Asn1Identifier ident
     )
     {
+        if(ident.encoding == Asn1Identifier.Encoding.constructed)
+            return Result.make(Asn1DecodeError.integerIsConstructed, "Integers cannot be constructed - ISO/IEC 8825-1:2021 8.3.1"); // @suppress(dscanner.style.long_line)
         if(mem.bytesLeft == 0)
             return Result.make(Asn1DecodeError.integerInvalidEncoding, "Integers require at least one byte under BER ruleset - ISO/IEC 8825-1:2021 8.3.1"); // @suppress(dscanner.style.long_line)
 
         const(ubyte)[] bytes;
         if(!mem.readBytes(mem.bytesLeft, bytes))
             return Result.make(Asn1DecodeError.eof, "Ran out of bytes when reading integer value");
+
+        if(bytes.length > 1)
+        {
+            const allZero = (bytes[0] == 0) && ((bytes[1] >> 7) == 0); 
+            const allOne  = (bytes[0] == 0xFF) && ((bytes[1] >> 7) == 1); 
+            if(allZero || allOne)
+                return Result.make(Asn1DecodeError.integerInvalidEncoding, "Integers must be encoded using the least amount of bytes - ISO/IEC 8825-1:2021 8.3.2"); // @suppress(dscanner.style.long_line)
+        }
 
         result = Asn1Integer.fromUnownedBytes(bytes);
         return Result.noError;
@@ -160,8 +203,11 @@ struct Asn1Integer
     Result asInt(IntT)(scope out IntT result) @nogc
     if(isIntegral!IntT)
     {
-        if(this._value.length > IntT.sizeof)
-            return Result.make(Asn1DecodeError.integerOverBits, "Integer value is too large to fit into a native integer type"); // @suppress(dscanner.style.long_line)
+        if((this._value.length * 7) > (IntT.sizeof * 8))
+        {
+            enum Error = "Integer value is too large to fit into a native "~IntT.stringof;
+            return Result.make(Asn1DecodeError.integerOverBits, Error); // @suppress(dscanner.style.long_line)
+        }
 
         foreach(b; this._value)
             result = (result << 8) | b;
@@ -219,7 +265,7 @@ struct Asn1BitString
     
         static if(ruleset == Asn1Ruleset.der)
         {
-            if(bytes.length > 1 && (bytes[$-1] & (0xFF >> unusedBits)) != 0)
+            if(bytes.length > 1 && (bytes[$-1] & (0xFF >> (8 - unusedBits))) != 0)
                 return Result.make(Asn1DecodeError.bitstringInvalidEncoding, "The unused bits in a bit string must be zero - ISO/IEC 8825-1:2021 11.2.1"); // @suppress(dscanner.style.long_line)
             if(bytes.length > 1 && bytes[$-1] == 0)
                 return Result.make(Asn1DecodeError.bitstringInvalidEncoding, "The last byte of a non-empty bit string must not be zero - ISO/IEC 8825-1:2021 11.2.2"); // @suppress(dscanner.style.long_line)
@@ -271,12 +317,18 @@ struct Asn1Real
 
     @trusted nothrow: // @suppress(dscanner.trust_too_much)
 
-    static Asn1Real plusZero() @nogc
+    private static Asn1Real fromSpecial(Special special) @nogc
     {
         Asn1Real fp;
-        fp._special = Special.plusZeroNoContentBytes;
+        fp._special = special;
         return fp;
     }
+
+    static Asn1Real plusZero() @nogc => fromSpecial(Special.plusZeroNoContentBytes);
+    static Asn1Real plusInfinity() @nogc => fromSpecial(Special.plusInfinity);
+    static Asn1Real minusInfinity() @nogc => fromSpecial(Special.minusInfinity);
+    static Asn1Real notANumber() @nogc => fromSpecial(Special.notANumber);
+    static Asn1Real minusZero() @nogc => fromSpecial(Special.minusZero);
 
     static Result fromDecoding(Asn1Ruleset ruleset)(
         scope ref MemoryReader mem, 
@@ -288,7 +340,10 @@ struct Asn1Real
             return Result.make(Asn1DecodeError.realInvalidEncoding, "Real numbers cannot be constructed under BER ruleset - ISO/IEC 8825-1:2021 8.5.1"); // @suppress(dscanner.style.long_line)
 
         if(mem.bytesLeft == 0)
-            return Asn1Real.plusZero(); // I think this is how to interpret ISO/IEC 8825-1:2021 8.5.2?
+        {
+            result = Asn1Real.plusZero();
+            return Result.noError;
+        }
         
         ubyte headerByte;
         if(!mem.readU8(headerByte))
@@ -304,10 +359,30 @@ struct Asn1Real
         return Result.make(Asn1DecodeError.realInvalidEncoding, "Could not detect (supported) real number encoding.");
     }
 
-    Result calculate(scope out double number) @nogc
+    Result asDouble(scope out double number) @nogc
     {
         import std.math : pow;
         import juptune.core.util.maths : checkedAdd, checkedMul;
+
+        final switch(this._special) with(Special)
+        {
+            case notSpecial: break;
+            case plusInfinity:
+                number = double.infinity;
+                return Result.noError;
+            case minusInfinity:
+                number = -double.infinity;
+                return Result.noError;
+            case notANumber:
+                number = double.nan;
+                return Result.noError;
+            case minusZero:
+                number = -0;
+                return Result.noError;
+            case plusZeroNoContentBytes:
+                number = +0;
+                return Result.noError;
+        }
 
         ulong base;
         final switch(this._base) with(Base)
@@ -337,20 +412,20 @@ struct Asn1Real
         auto mulResult = checkedMul(abstractMantissa, cast(ulong)factor, mantissa);
         if(mulResult.isError)
             return mulResult;
-
+        
         number = cast(double)mantissa * cast(double)exponent * cast(double)sign;
         return Result.noError;
     }
 
-    private Result fromDecodingBinary(Asn1Ruleset ruleset)(
+    private static Result fromDecodingBinary(Asn1Ruleset ruleset)(
         scope ref MemoryReader mem, 
         scope ref Asn1Real result,
         const ubyte header,
     )
     {
-        result._isNegative = (header & 0b0100_0000) == 1;
-        result._base = cast(Base)(header & 0b0011_0000);
-        result._scalingFactor = header & 0b0000_1100;
+        result._isNegative = (header & 0b0100_0000) != 0;
+        result._base = cast(Base)((header & 0b0011_0000) >> 4);
+        result._scalingFactor = (header & 0b0000_1100) >> 2;
         if(result._base == Base._reserved_)
             return Result.make(Asn1DecodeError.realInvalidEncoding, "Reserved base encoding in real number - ISO/IEC 8825-1:2021 8.5.7.2"); // @suppress(dscanner.style.long_line)
     
@@ -367,8 +442,10 @@ struct Asn1Real
                 exponentLength = 3;
                 break;
             case 0b11:
-                if(!mem.readU8(exponentLength))
+                ubyte length;
+                if(!mem.readU8(length))
                     return Result.make(Asn1DecodeError.eof, "Ran out of bytes when reading real number exponent length"); // @suppress(dscanner.style.long_line)
+                exponentLength = length;
                 break;
         }
 
@@ -415,14 +492,14 @@ struct Asn1Real
                 
                 const notZero = !hasAbstractMantissa || !abstractMantissaIsZero;
                 if(notZero && abstractMantissaIsEven)
-                    return Result.make(Asn1DecodeError.realInvalidDerEncoding, "Under DER, the abstract mantissa either be 0 or odd when using base 2 binary encoding - ISO/IEC 8825-1:2021 11.3.2"); // @suppress(dscanner.style.long_line)
+                    return Result.make(Asn1DecodeError.realInvalidDerEncoding, "Under DER, the abstract mantissa either be 0 or odd when using base 2 binary encoding - ISO/IEC 8825-1:2021 11.3.1"); // @suppress(dscanner.style.long_line)
             }
         }
 
         return Result.noError;
     }
 
-    private Result fromDecodingDecimal(Asn1Ruleset ruleset)(
+    private static Result fromDecodingDecimal(Asn1Ruleset ruleset)(
         scope ref MemoryReader mem, 
         scope ref Asn1Real result,
         const ubyte header,
@@ -437,7 +514,7 @@ struct Asn1Real
         return Result.make(Asn1DecodeError.notImplemented, "Not implemented yet");
     }
 
-    private Result fromSpecialEncoding(Asn1Ruleset ruleset)(
+    private static Result fromSpecialEncoding(Asn1Ruleset ruleset)(
         scope ref MemoryReader mem, 
         scope ref Asn1Real result,
         const ubyte header,
@@ -450,26 +527,24 @@ struct Asn1Real
         switch(content) with(Special)
         {
             case plusInfinity:
-                this._special = plusInfinity;
-                break;
+                result._special = plusInfinity;
+                return Result.noError;
 
             case minusInfinity:
-                this._special = minusInfinity;
-                break;
+                result._special = minusInfinity;
+                return Result.noError;
 
             case notANumber:
-                this._special = notANumber;
-                break;
+                result._special = notANumber;
+                return Result.noError;
 
             case minusZero:
-                this._special = minusZero;
-                break;
+                result._special = minusZero;
+                return Result.noError;
 
             default:
                 return Result.make(Asn1DecodeError.realUnsupportedSpecialEncoding, "Unknown SpecialRealValue - ISO/IEC 8825-1:2021 8.5.9"); // @suppress(dscanner.style.long_line)
         }
-
-        return Result.make(Asn1DecodeError.notImplemented, "Not implemented yet");
     }
 }
 
@@ -654,7 +729,7 @@ private struct Asn1ObjectIdentifierImpl(bool IsRelative)
     )
     {
         if(ident.encoding == Asn1Identifier.Encoding.constructed)
-            return Result.make("Object Identifiers cannot be constructed - ISO/IEC 8825-1:2021 8.19.1");
+            return Result.make(Asn1DecodeError.oidIsConstructed, "Object Identifiers cannot be constructed - ISO/IEC 8825-1:2021 8.19.1");
 
         // It doesn't explicitly say how to handle when length == 0, so I guess allow it?
         if(mem.bytesLeft == 0)
@@ -666,8 +741,17 @@ private struct Asn1ObjectIdentifierImpl(bool IsRelative)
 
         static if(!IsRelative)
         {
-            const first = data[0] / 40;
-            const second = data[0] % 40;
+            ubyte first, second;
+            if(data[0] >= 80)
+            {
+                first = 2;
+                second = cast(ubyte)(data[0] - 80);
+            }
+            else
+            {
+                first = cast(ubyte)(data[0] / 40);
+                second = cast(ubyte)(data[0] % 40);
+            }
             result = typeof(this).fromUnownedBytes(first, second, data[1..$]);
             data = data[1..$];
         }
@@ -680,6 +764,7 @@ private struct Asn1ObjectIdentifierImpl(bool IsRelative)
             const slice = next7BitInt(data, _);
             if(slice[0] == 0x80)
                 return Result.make(Asn1DecodeError.oidInvalidEncoding, "Object Identifier subidentifiers cannot start with 0x80 as the first byte - ISO/IEC 8825-1:2021 8.19.3"); // @suppress(dscanner.style.long_line)
+            data = data[slice.length..$];
         }
 
         return Result.noError;
@@ -751,11 +836,11 @@ private struct Asn1ObjectIdentifierImpl(bool IsRelative)
         size_t cursor;
         ulong result;
         
-        while(cursor < data.length && (data[cursor++] & 0b1000_0000))
+        do
         {
             result <<= 7;
-            result |= (data[cursor-1] & 0b0111_1111);
-        }
+            result |= (data[cursor] & 0b0111_1111);
+        } while(cursor < data.length && (data[cursor++] & 0b1000_0000));
 
         if(cursor * 7 <= typeof(result).sizeof * 8)
             outResult = result;
@@ -791,7 +876,7 @@ enum Asn1DecodeError
     notImplemented,
     
     identifierTagTooLong,
-    identifierTagInvalidDerEncoding,
+    identifierTagInvalidEncoding,
     
     componentLengthReserved,
     componentLengthIndefiniteUnderDer,
@@ -800,10 +885,12 @@ enum Asn1DecodeError
     
     booleanInvalidEncoding,
     booleanInvalidDerEncoding,
+    booleanIsConstructed,
     
     integerInvalidEncoding,
     integerInvalidDerEncoding,
     integerOverBits,
+    integerIsConstructed,
     
     bitstringIsConstructedUnderDer,
     bitstringInvalidEncoding,
@@ -867,17 +954,15 @@ Result asn1DecodeIdentifier(Asn1Ruleset ruleset)(
     int counter;
     do
     {
-        if(counter++ >= 10) // We can left shift by 7, 9 times before overflowing
+        if(counter >= 9) // We can left shift by 7, 9 times before overflowing
             return Result.make(Asn1DecodeError.identifierTagTooLong, "Encoding of identifier long form tag is too long"); // @suppress(dscanner.style.long_line)
         if(!mem.readU8(tagByte))
             return Result.make(Asn1DecodeError.eof, "Ran out of bytes when reading long form tag byte of identifier");
-        longTag = (longTag << 7) | (tagByte & 0b0111_1111);
+        if(counter == 0 && (tagByte & 0b0111_1111) == 0)
+            return Result.make(Asn1DecodeError.identifierTagInvalidEncoding, "The first byte of the identifier long form tag must not have its first 7 bits as zero - ISO/IEC 8825-1:2021 8.1.2.4.2.c"); // @suppress(dscanner.style.long_line)
 
-        static if(ruleset == Asn1Ruleset.der)
-        {
-            if(tagByte == 0b1000_0000)
-                return Result.make(Asn1DecodeError.identifierTagInvalidDerEncoding, "Invalid encoding of identifier long form tag under DER ruleset - ISO/IEC 8825-1:2021 10.1"); // @suppress(dscanner.style.long_line)
-        }
+        longTag = (longTag << 7) | (tagByte & 0b0111_1111);
+        counter++;
     } while(tagByte & 0b1000_0000);
 
     ident = Asn1Identifier(class_, encoding, longTag);
@@ -925,7 +1010,7 @@ Result asn1DecodeLength(Asn1Ruleset ruleset)(
     static if(ruleset == Asn1Ruleset.der)
     {
         if(lengthByteCount == 1 && lengthBytesResult[0] <= 0x7F)
-            return Result.make(Asn1DecodeError.componentLengthInvalidDerEncoding, "Invalid encoding of component length under DER ruleset - ISO/IEC 8825-1:2021 10.1"); // @suppress(dscanner.style.long_line)
+            return Result.make(Asn1DecodeError.componentLengthInvalidDerEncoding, "Invalid encoding of component length under DER ruleset, values of <=127 must use the short form of encoding - ISO/IEC 8825-1:2021 10.1"); // @suppress(dscanner.style.long_line)
     }
 
     length = Asn1Length(Asn1LongLength.fromUnownedBytes(lengthBytesResult));
@@ -975,10 +1060,23 @@ unittest
         ubyte[] data;
         Asn1Identifier expected;
         Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, Asn1Identifier expected)
+        {
+            this.data = data;
+            this.expected = expected;
+        }
+
+        this(ubyte[] data, Asn1DecodeError error)
+        {
+            this.data = data;
+            this.expectedError = error;
+        }
     }
 
     alias cl = Asn1Identifier.Class;
     alias en = Asn1Identifier.Encoding;
+    alias err = Asn1DecodeError;
     const cases = [
         "class - universal": T(
             [0b0000_0000],
@@ -998,8 +1096,8 @@ unittest
         ),
 
         "encoding - primitive": T(
-            [0b1100_1111],
-            Asn1Identifier(cl.private_, en.primitive, 0b1111)
+            [0b1101_1101],
+            Asn1Identifier(cl.private_, en.primitive, 0b1_1101)
         ),
         "encoding - constructed": T(
             [0b0010_0000],
@@ -1035,6 +1133,28 @@ unittest
             [0b0001_1111, 0b1111_1111, 0b1111_1111, 0b0111_1111],
             Asn1Identifier(cl.universal, en.primitive, 0b0001_1111_1111_1111_1111_1111)
         ),
+        "tag - long alternating, 3 bytes": T(
+            [0b0001_1111, 0b1101_0101, 0b1010_1010, 0b0101_0101],
+            Asn1Identifier(cl.universal, en.primitive, 0b0001_0101_0101_0101_0101_0101)
+        ),
+
+        "tag error - long form must be in minimal amount of octets - 8.1.2.4.2.c": T(
+            [0b0001_1111, 0b1000_0000, 0b0111_1111],
+            err.identifierTagInvalidEncoding
+        ),
+        "tag error - long form must fit into a native 64-bit int": T(
+            [0b0001_1111, 0b1000_0001,0b1000_0001,0b1000_0001,0b1000_0001,0b1000_0001,0b1000_0001,0b1000_0001,0b1000_0001,0b1000_0001,0b0000_0001], // @suppress(dscanner.style.long_line)
+            err.identifierTagTooLong
+        ),
+
+        "eof error - initial read": T(
+            [],
+            err.eof
+        ),
+        "eof error - reading long tag": T(
+            [0b0001_1111, 0b1000_0001],
+            err.eof
+        ),
     ];
 
     foreach(name, test; cases)
@@ -1050,13 +1170,1011 @@ unittest
             {
                 if(test.expectedError.isNull)
                     result.resultAssert();
-                resultAssertSameCode(result, Result.make(test.expectedError.get));
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
                 continue;
             }
             else if(!test.expectedError.isNull)
                 assert(false, "Expected an error, but didn't get one.");
 
             assert(identifier == test.expected, format("\n  Got: %s\n  Expected: %s", identifier, test.expected));
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1Length - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.sumtype       : match;
+    import std.typecons      : Nullable;
+    
+    static struct T
+    {
+        ubyte[] data;
+        Asn1Length expected;
+        Nullable!Asn1DecodeError expectedError;
+        ulong expectedLongLength;
+
+        this(ubyte[] data, Asn1ShortLength expected)
+        {
+            this.data = data;
+            this.expected = expected;
+        }
+
+        this(ubyte[] data, Asn1LongLength expected, ulong expectedAsLong)
+        {
+            this.data = data;
+            this.expected = expected;
+            this.expectedLongLength = expectedAsLong;
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, bool _compileIsStupid)
+        {
+            this.data = data;
+            this.expectedError = error;
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "short - 8.1.3.4 example": T(
+            [0b0010_0110],
+            38
+        ),
+        "short - all 7 bits": T(
+            [0b0111_1111],
+            127
+        ),
+
+        "long - 8.1.3.5 example": T(
+            [0b1000_0001, 0b1100_1001],
+            Asn1LongLength.fromNumberGC(201u), 201u
+        ),
+        "long - DEADBEEF": T(
+            [0b1000_0100, 0xDE, 0xAD, 0xBE, 0xEF],
+            Asn1LongLength.fromNumberGC(0xDEADBEEFu), 0xDEADBEEFu
+        ),
+        "long - 128 should be ok": T(
+            [0b1000_0001, 128],
+            Asn1LongLength.fromNumberGC(128u), 128u
+        ),
+
+        "long error - all 1s can't be used": T(
+            [0b1111_1111],
+            err.componentLengthReserved, true
+        ),
+        "long error DER - bytes must be encoded in minimum amount of bytes": T(
+            [0b1000_0001, 127], // The short form should've been used for a value <= 127
+            err.componentLengthInvalidDerEncoding, true
+        ),
+
+        "eof - initial read": T(
+            [],
+            err.eof, true
+        ),
+        "eof - not enough long bytes": T(
+            [0b1111_1110],
+            err.eof, true
+        ),
+    ];
+
+    foreach(name, test; cases)
+    {
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Asn1Length length;
+            auto result = asn1DecodeLength!(Asn1Ruleset.der)(mem, length);
+            
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(length == test.expected, format("\n  Got: %s\n  Expected: %s", length, test.expected));
+            
+            length.match!(
+                (Asn1LongLength ll) { // Double checking that the decoder actually works
+                    if(ll.isAtMost64Bits)
+                        assert(ll.length == test.expectedLongLength);
+                },
+                (_){}
+            );
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("asn1ReadContentBytes")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+    
+    static struct T
+    {
+        ubyte[] data;
+        ubyte[] expected;
+        Asn1Length length;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, ubyte[] expected, Asn1ShortLength length)
+        {
+            this.data = data;
+            this.expected = expected;
+            this.length = length;
+        }
+
+        this(ubyte[] data, ubyte[] expected, Asn1LongLength length)
+        {
+            this.data = data;
+            this.expected = expected;
+            this.length = length;
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1ShortLength length)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.length = length;
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1LongLength length)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.length = length;
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "short - full": T([0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4, 5], 6),
+        "short - partial": T([0, 1, 2, 3, 4, 5], [0, 1, 2], 3),
+        "short error - too many": T([0], err.eof, 2),
+
+        "long - full": T([0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4, 5], Asn1LongLength.fromNumberGC(6u)),
+        "long - partial": T([0, 1, 2, 3, 4, 5], [0, 1, 2], Asn1LongLength.fromNumberGC(3u)),
+        "long error - too many": T([0], err.eof, Asn1LongLength.fromNumberGC(2u)),
+        "long error - length too long": T([0], err.componentLengthOver64Bits, Asn1LongLength.fromUnownedBytes([0,0,0,0,0,0,0,0,0])), // @suppress(dscanner.style.long_line)
+    ];
+
+    foreach(name, test; cases)
+    {
+        try
+        {
+            MemoryReader content;
+            auto mem = MemoryReader(test.data);
+            auto result = asn1ReadContentBytes(mem, test.length , content);
+            
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            const(ubyte)[] gotContent;
+            assert(content.readBytes(content.bytesLeft, gotContent));
+
+            assert(gotContent == test.expected, format("\n  Got: %s\n  Expected: %s", gotContent, test.expected));
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1Bool - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+    
+    static struct T
+    {
+        ubyte[] data;
+        Asn1Bool expected;
+        bool expectedBool;
+        Asn1Identifier ident;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, Asn1Bool expected, bool expectedBool)
+        {
+            this.data = data;
+            this.expected = expected;
+            this.expectedBool = expectedBool;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                Asn1Identifier.Encoding.primitive, 
+                0
+            );
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1Identifier.Encoding encoding = Asn1Identifier.Encoding.primitive)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                encoding, 
+                0
+            );
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "false": T([0], Asn1Bool(0), false),
+        "true": T([0xFF], Asn1Bool(0xFF), true),
+
+        "error - bool must only be 1 byte long": T([0, 0], err.booleanInvalidEncoding),
+        "error - bool must only be 1 byte long (0 case)": T([], err.booleanInvalidEncoding),
+        "error - must not be constructed": T([0], err.booleanIsConstructed, Asn1Identifier.Encoding.constructed),
+        "error DER - true can only be 0xFF": T([0xFE], err.booleanInvalidDerEncoding),
+    ];
+
+    foreach(name, test; cases)
+    {
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Asn1Bool obj;
+            auto result = Asn1Bool.fromDecoding!(Asn1Ruleset.der)(mem, obj, test.ident);
+
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(obj == test.expected, format("\n  Got: %s\n  Expected: %s", obj, test.expected));
+            assert(obj.asBool == test.expectedBool);
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1Integer - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+    
+    static struct T
+    {
+        ubyte[] data;
+        Asn1Integer expected;
+        ulong expectedAsLong;
+        Asn1Identifier ident;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, Asn1Integer expected, ulong expectedAsLong)
+        {
+            this.data = data;
+            this.expected = expected;
+            this.expectedAsLong = expectedAsLong;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                Asn1Identifier.Encoding.primitive, 
+                0
+            );
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1Identifier.Encoding encoding = Asn1Identifier.Encoding.primitive)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                encoding, 
+                0
+            );
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "1 byte": T([127], Asn1Integer.fromNumberGC(127), 127),
+        "2 bytes": T([1, 0], Asn1Integer.fromNumberGC(256), 256),
+
+        "error - eof on initial read": T([], err.integerInvalidEncoding),
+        "error - must not be constructed": T([], err.integerIsConstructed, Asn1Identifier.Encoding.constructed),
+        "error - must be encoded in minimum amount of bytes (0 case)": T([0, 0b0111_1111], err.integerInvalidEncoding),
+        "error - must be encoded in minimum amount of bytes (1 case)": T([0xFF, 0b1000_0000], err.integerInvalidEncoding), // @suppress(dscanner.style.long_line)
+    ];
+
+    foreach(name, test; cases)
+    {
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Asn1Integer obj;
+            auto result = Asn1Integer.fromDecoding!(Asn1Ruleset.der)(mem, obj, test.ident);
+
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(obj == test.expected, format("\n  Got: %s\n  Expected: %s", obj, test.expected));
+            
+            ulong got;
+            obj.asInt!ulong(got).resultAssert;
+            assert(got == test.expectedAsLong, format("\n  Got: %s\n  Expected: %s", got, test.expectedAsLong));
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1BitString - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+    
+    static struct T
+    {
+        ubyte[] data;
+        Asn1BitString expected;
+        Asn1Identifier ident;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, Asn1BitString expected)
+        {
+            this.data = data;
+            this.expected = expected;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                Asn1Identifier.Encoding.primitive, 
+                0
+            );
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1Identifier.Encoding encoding = Asn1Identifier.Encoding.primitive)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                encoding, 
+                0
+            );
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "empty string": T([0], Asn1BitString.fromUnownedBytes([], 0)),
+        "7 unused bits": T([0x07, 0b1000_0000], Asn1BitString.fromUnownedBytes([0b1000_0000], 1)),
+        "multiple bytes": T([0x00, 0xDE, 0xAD, 0xBE, 0xEF], Asn1BitString.fromUnownedBytes([0xDE, 0xAD, 0xBE, 0xEF], 32)), // @suppress(dscanner.style.long_line)
+
+        "error DER - must not be constructed": T([], err.bitstringIsConstructedUnderDer, Asn1Identifier.Encoding.constructed), // @suppress(dscanner.style.long_line)
+        "error - must have at least one byte": T([], err.bitstringInvalidEncoding),
+        "error - unused bits must be <= 7": T([0x08], err.bitstringInvalidEncoding),
+        "error - unused bits must be 0 for empty strings": T([0x01], err.bitstringInvalidEncoding),
+        "error DER - unused bits must be set to 0": T([0x07, 0xFF], err.bitstringInvalidEncoding),
+        "error DER - the last byte must not be 0": T([0x00, 0x00], err.bitstringInvalidEncoding),
+    ];
+
+    foreach(name, test; cases)
+    {
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Asn1BitString obj;
+            auto result = Asn1BitString.fromDecoding!(Asn1Ruleset.der)(mem, obj, test.ident);
+
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(obj == test.expected, format("\n  Got: %s\n  Expected: %s", obj, test.expected));
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1Real - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+    
+    static struct T
+    {
+        ubyte[] data;
+        Asn1Real expected;
+        double expectedDouble;
+        Asn1Identifier ident;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, Asn1Real expected, double expectedAsDouble)
+        {
+            this.data = data;
+            this.expected = expected;
+            this.expectedDouble = expectedAsDouble;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                Asn1Identifier.Encoding.primitive, 
+                0
+            );
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1Identifier.Encoding encoding = Asn1Identifier.Encoding.primitive)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                encoding, 
+                0
+            );
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    alias base = Asn1Real.Base;
+    alias spec = Asn1Real.Special;
+    const cases = [
+        // https://www.oss.com/asn1/resources/asn1-made-simple/asn1-quick-reference/real.html
+        "quick reference example (DER-ified)": T(
+            [0x80, 0x01, 0x05], // DER requires the mantissa to be odd, so the example has to shift by 1
+            Asn1Real(base.base2, false, 0, [1], [0x05], spec.notSpecial),
+            10.0
+        ),
+        "negative sign": T(
+            [0b1_1_00_00_00, 0x01, 0x05],
+            Asn1Real(base.base2, true, 0, [1], [0x05], spec.notSpecial),
+            -10.0
+        ),
+
+        "special - plus zero": T([], Asn1Real.plusZero, +0),
+        "special - plus infinity": T(
+            [0b0100_0000, 0b0100_0000],
+            Asn1Real.plusInfinity,
+            +double.infinity
+        ),
+        "special - minus infinity": T(
+            [0b0100_0000, 0b0100_0001],
+            Asn1Real.minusInfinity,
+            -double.infinity
+        ),
+        "special - NaN": T(
+            [0b0100_0000, 0b0100_0010],
+            Asn1Real.notANumber,
+            double.nan
+        ),
+        "special - minus zero": T(
+            [0b0100_0000, 0b0100_0011],
+            Asn1Real.minusZero,
+            -0
+        ),
+
+        "error - must not be constructed": T([], err.realInvalidEncoding, Asn1Identifier.Encoding.constructed),
+    ];
+
+    foreach(name, test; cases)
+    {
+        import std.algorithm : canFind;
+
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Asn1Real obj;
+            auto result = Asn1Real.fromDecoding!(Asn1Ruleset.der)(mem, obj, test.ident);
+
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            double value;
+            obj.asDouble(value).resultAssert;
+            
+            if(!name.canFind("NaN")) // NaN can never equal NaN in D
+                assert(value == test.expectedDouble, format("\n  Got: %s\n  Expected: %s", value, test.expectedDouble));
+            
+            assert(obj == test.expected, format("\n  Got: %s\n  Expected: %s", obj, test.expected));
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1OctetString - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+    
+    static struct T
+    {
+        ubyte[] data;
+        Asn1OctetString expected;
+        Asn1Identifier ident;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, Asn1OctetString expected)
+        {
+            this.data = data;
+            this.expected = expected;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                Asn1Identifier.Encoding.primitive, 
+                0
+            );
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1Identifier.Encoding encoding = Asn1Identifier.Encoding.primitive)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                encoding, 
+                0
+            );
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "happy path": T(
+            ['D', 'E', 'A', 'D', 'B', 'E', 'E', 'F'],
+            Asn1OctetString.fromUnownedBytes(['D', 'E', 'A', 'D', 'B', 'E', 'E', 'F']),
+        ),
+
+        "error DER - must not be constructed": T([], err.octetstringIsConstructedUnderDer, Asn1Identifier.Encoding.constructed), // @suppress(dscanner.style.long_line)
+    ];
+
+    foreach(name, test; cases)
+    {
+        import std.algorithm : canFind;
+
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Asn1OctetString obj;
+            auto result = Asn1OctetString.fromDecoding!(Asn1Ruleset.der)(mem, obj, test.ident);
+
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(obj == test.expected, format("\n  Got: %s\n  Expected: %s", obj, test.expected));
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1Null - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+    
+    static struct T
+    {
+        ubyte[] data;
+        Asn1Null expected;
+        Asn1Identifier ident;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, Asn1Null expected)
+        {
+            this.data = data;
+            this.expected = expected;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                Asn1Identifier.Encoding.primitive, 
+                0
+            );
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1Identifier.Encoding encoding = Asn1Identifier.Encoding.primitive)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                encoding, 
+                0
+            );
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "happy path": T([], Asn1Null()),
+        "error - must not have content bytes": T([0], err.nullHasContentBytes),
+        "error - must not be constructed": T([], err.nullIsConstructed, Asn1Identifier.Encoding.constructed),
+    ];
+
+    foreach(name, test; cases)
+    {
+        import std.algorithm : canFind;
+
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Asn1Null obj;
+            auto result = Asn1Null.fromDecoding!(Asn1Ruleset.der)(mem, obj, test.ident);
+
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(obj == test.expected, format("\n  Got: %s\n  Expected: %s", obj, test.expected));
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1Primitive - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+
+    alias Primivite = Asn1Primitive!"unittest";
+    
+    static struct T
+    {
+        ubyte[] data;
+        Primivite expected;
+        Asn1Identifier ident;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, Primivite expected)
+        {
+            this.data = data;
+            this.expected = expected;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                Asn1Identifier.Encoding.primitive, 
+                0
+            );
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1Identifier.Encoding encoding = Asn1Identifier.Encoding.primitive)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                encoding, 
+                0
+            );
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "happy path": T([0xDE, 0xAD, 0xBE, 0xEF], Primivite.fromUnownedBytes([0xDE, 0xAD, 0xBE, 0xEF])),
+        "error - must not be constructed": T([], err.primitiveIsConstructed, Asn1Identifier.Encoding.constructed),
+    ];
+
+    foreach(name, test; cases)
+    {
+        import std.algorithm : canFind;
+
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Primivite obj;
+            auto result = Primivite.fromDecoding!(Asn1Ruleset.der)(mem, obj, test.ident);
+
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(obj == test.expected, format("\n  Got: %s\n  Expected: %s", obj, test.expected));
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1Construction - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+
+    alias Construct = Asn1Construction!"unittest";
+    
+    static struct T
+    {
+        ubyte[] data;
+        Construct expected;
+        Asn1Identifier ident;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, Construct expected)
+        {
+            this.data = data;
+            this.expected = expected;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                Asn1Identifier.Encoding.constructed, 
+                0
+            );
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1Identifier.Encoding encoding = Asn1Identifier.Encoding.constructed) // @suppress(dscanner.style.long_line)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                encoding, 
+                0
+            );
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "happy path": T([0xDE, 0xAD, 0xBE, 0xEF], Construct.fromUnownedBytes([0xDE, 0xAD, 0xBE, 0xEF])),
+        "error - must not be primitive": T([], err.constructionIsPrimitive, Asn1Identifier.Encoding.primitive),
+    ];
+
+    foreach(name, test; cases)
+    {
+        import std.algorithm : canFind;
+
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Construct obj;
+            auto result = Construct.fromDecoding!(Asn1Ruleset.der)(mem, obj, test.ident);
+
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(obj == test.expected, format("\n  Got: %s\n  Expected: %s", obj, test.expected));
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1ObjectIdentifier - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+
+    static struct T
+    {
+        ubyte[] data;
+        Asn1Identifier ident;
+        ulong[] expectedIds;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, ulong[] expectedIds)
+        {
+            this.data = data;
+            this.expectedIds = expectedIds;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                Asn1Identifier.Encoding.primitive, 
+                0
+            );
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1Identifier.Encoding encoding = Asn1Identifier.Encoding.primitive)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                encoding, 
+                0
+            );
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "quick reference example": T(
+            [0x28, 0xC2, 0x7B, 0x02, 0x01], // https://www.oss.com/asn1/resources/asn1-made-simple/asn1-quick-reference/object-identifier.html
+            [1, 0, 8571, 2, 1],
+        ),
+
+        // It doesn't make sense to me how this encoding is reached,
+        // is the recommendation example wrong here? 
+        // "recommendation example": T(
+        //     [0x88, 0x37, 0x03],
+        //     [2, 999, 3]
+        // ),
+
+        "internet example": T(
+            [0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D], // https://luca.ntop.org/Teaching/Appunti/asn1.html
+            [1, 2, 840, 113_549]
+        ),
+
+        "error - must not be constructed": T([], err.oidIsConstructed, Asn1Identifier.Encoding.constructed),
+    ];
+
+    foreach(name, test; cases)
+    {
+        import std.algorithm : canFind, equal;
+
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Asn1ObjectIdentifier obj;
+            auto result = Asn1ObjectIdentifier.fromDecoding!(Asn1Ruleset.der)(mem, obj, test.ident);
+
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(obj.components.equal(test.expectedIds), format("\n  Got: %s\n  Expected: %s", obj.components, test.expectedIds)); // @suppress(dscanner.style.long_line)
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1RelativeObjectIdentifier - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+
+    static struct T
+    {
+        ubyte[] data;
+        Asn1Identifier ident;
+        ulong[] expectedIds;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, ulong[] expectedIds)
+        {
+            this.data = data;
+            this.expectedIds = expectedIds;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                Asn1Identifier.Encoding.primitive, 
+                0
+            );
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1Identifier.Encoding encoding = Asn1Identifier.Encoding.primitive)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                encoding, 
+                0
+            );
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "recommendation example": T(
+            [0xC2, 0x7B, 0x03, 0x02],
+            [8571, 3, 2],
+        ),
+
+        "error - must not be constructed": T([], err.oidIsConstructed, Asn1Identifier.Encoding.constructed),
+    ];
+
+    foreach(name, test; cases)
+    {
+        import std.algorithm : canFind, equal;
+
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Asn1RelativeObjectIdentifier obj;
+            auto result = Asn1RelativeObjectIdentifier.fromDecoding!(Asn1Ruleset.der)(mem, obj, test.ident);
+
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(obj.components.equal(test.expectedIds), format("\n  Got: %s\n  Expected: %s", obj.components, test.expectedIds)); // @suppress(dscanner.style.long_line)
         }
         catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
             assert(false, "\n["~name~"]: "~err.msg);

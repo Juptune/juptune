@@ -218,7 +218,7 @@ void resultAssert(Result result)
     assert(false, slice);
 }
 
-version(unittest) void resultAssertSameCode(Result got, Result expected)
+version(unittest) void resultAssertSameCode(ExpectedErrorT)(Result got, Result expected)
 in(got.isError && expected.isError, "Both results must be errors")
 {
     import juptune.core.ds   : Array, String;
@@ -230,12 +230,18 @@ in(got.isError && expected.isError, "Both results must be errors")
         msg.put("Result mismatch!\n");
         
         msg.put("  Got: ");
-        got.errorCode.toStringSink(msg);
+        if(got.isErrorType!ExpectedErrorT)
+            (cast(ExpectedErrorT)got.errorCode).toStringSink(msg);
+        else
+            got.errorCode.toStringSink(msg);
         msg.put(" of type ");
         msg.put(got.errorType);
         
         msg.put("\n  Wanted: ");
-        expected.errorCode.toStringSink(msg);
+        if(expected.isErrorType!ExpectedErrorT)
+            (cast(ExpectedErrorT)expected.errorCode).toStringSink(msg);
+        else
+            expected.errorCode.toStringSink(msg);
         msg.put(" of type ");
         msg.put(expected.errorType);
 
