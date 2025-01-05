@@ -10,22 +10,40 @@ import juptune.core.util : Result;
 import juptune.data.buffer : MemoryReader;
 import std.sumtype : SumType; // Temporary until D finally gets a built-in sum type, hence making one ourselves is a waste of time
 
+/++
+ + Represents the identifier byte(s) of an ASN.1 record.
+ +
+ + This type holds no references to external memory.
+ + ++/
 struct Asn1Identifier
 {
+    /// The class, as defined by ASN.1
     enum Class : ubyte // Note: NOT a flag enum - each value is distinct
     {
-        universal       = 0b00,
-        application     = 0b01,
+        /// The tag is well-defined across all ASN.1 encodings.
+        universal = 0b00,
+
+        /// The tag has a specific meaning to a specific/particular set of applications.
+        application = 0b01,
+
+        /// The tag has a unique meaning under a very specific context that isn't general enough for `application` or `private_`.
         contextSpecific = 0b10,
-        private_        = 0b11
+
+        /// The tag has a private organisation-wide meaning that's common across all of its tooling/applications.
+        private_ = 0b11
     }
 
+    /// How to interpet the content bytes.
     enum Encoding : ubyte
     {
-        primitive   = 0b0,
+        /// The content bytes are in a bespoke format, and likely need a specailised decoder.
+        primitive = 0b0,
+
+        /// The content bytes contain other ASN.1 records, and don't neccesarily need a decoder (beyond mapping them to D types properly).
         constructed = 0b1
     }
-
+    
+    /// Type used to store the tag number
     alias Tag = ulong;
 
     private
@@ -37,6 +55,12 @@ struct Asn1Identifier
 
     @safe @nogc nothrow pure const:
 
+    /++ 
+     + Params:
+     +   _class   = The tag's class.
+     +   encoding = The content bytes' encoding.
+     +   tag      = The tag itself.
+     +/
     this(Class _class, Encoding encoding, Tag tag)
     {
         this._class     = _class;
@@ -44,11 +68,22 @@ struct Asn1Identifier
         this._tag       = tag;
     }
 
+    /// Returns: The tag's class.
     Class class_() => _class;
+
+    /// Returns: The content byte's encoding.
     Encoding encoding() => _encoding;
+
+    /// Returns: The numerical tag itself.
     Tag tag() =>_tag;
 }
 
+/++
+ + Represents the length of an ASN.1 record in the "long form", which can encode
+ + very, very large numbers.
+ +
+ + This type contains slices to exteral memory, so please be aware of data lifetimes.
+ + ++/
 struct Asn1LongLength
 {
     import std.traits : isUnsigned;
@@ -75,21 +110,59 @@ struct Asn1LongLength
         return Asn1LongLength.fromUnownedBytes(bytes);
     }
 
+    /++ 
+     + Constructs an `Asn1LongLength` using a slice to external memory - this memory containing the raw length bytes
+     + used within an encoded ASN.1 record.
+     +
+     + Notes:
+     +  This constructor does NOT take ownership of the given memory slice. This means the returned struct
+     +  MUST NOT outlive the underlying source of memory.
+     + 
+     + Params:
+     +   lengthBytes = The raw length bytes.
+     +
+     + Returns: 
+     +   An `Asn1LongLength` that uses the provided length bytes.
+     +/
     static Asn1LongLength fromUnownedBytes(const ubyte[] lengthBytes) @nogc
     in(lengthBytes.length >= MIN_BYTES && lengthBytes.length <= MAX_BYTES, "The amount of bytes must be between 1 and 127") // @suppress(dscanner.style.long_line)
     {
         return Asn1LongLength(lengthBytes);
     }
 
-    const(ubyte)[] lengthBytes() const @nogc => _lengthBytes; // TODO: Note that this is always in big endian.
+    /++ 
+     + Notes:
+     +  As per the ASN.1 encoding, these bytes are always in big endian order.
+     +
+     + Returns:
+     +  The raw length bytes for this length.
+     +/
+    const(ubyte)[] lengthBytes() const @nogc => _lengthBytes;
     
+    /++
+     + Determines whether this length can be converted into a native 64-bit number.
+     +
+     + User code should always check this, as ASN.1 lengths can go up to 1024 bits.
+     + 
+     + Returns:
+     +  `true` if this length can be converted into a 64-bit number, or `false` if it's too large to do so.
+     + ++/
     bool isAtMost64Bits() const @nogc
     {
         return this._lengthBytes.length <= 8;
     }
 
+    /++
+     + Converts the raw length bytes into a native ulong.
+     +
+     + Assertions:
+     +  `isAtMost64Bits` must return `true`.
+     +
+     + Returns:
+     +  The length as a native ulong.
+     + ++/
     ulong length() const @nogc
-    in(this.isAtMost64Bits(), "The amount of bytes is too large to represent as a ulong - please check with isAtMost64Bits or amountOfBytes") // @suppress(dscanner.style.long_line)
+    in(this.isAtMost64Bits(), "The amount of bytes is too large to represent as a ulong - please use isAtMost64Bits to check") // @suppress(dscanner.style.long_line)
     {
         ulong result = 0;
         foreach (ubyte b; _lengthBytes)
@@ -99,9 +172,17 @@ struct Asn1LongLength
     }
 }
 
+/// Represents the length of an ASN.1 record in its "short form".
 alias Asn1ShortLength = ubyte;
+
+/// A SumType used to represent either version of an ASN.1 record's length.
 alias Asn1Length = SumType!(Asn1ShortLength, Asn1LongLength);
 
+/++
+ + Represents an ASN.1 BOOLEAN.
+ +
+ + This type does not contain references to external memory.
+ + ++/
 struct Asn1Bool
 {
     private
@@ -116,6 +197,24 @@ struct Asn1Bool
         this._value = value;
     }
 
+    /++
+     + Decodes the passed in ASN.1 content bytes.
+     +
+     + Params:
+     +  mem    = A MemoryReader *only* containing the content bytes for the ASN.1 record.
+     +  result = The decoded result.
+     +  ident  = The decoded ASN.1 identifier for this record.
+     +
+     + Throws:
+     +  `Asn1DecodeError.booleanIsConstructed` if the given `ident` describes a constructed encoding.
+     +
+     +  `Asn1DecodeError.booleanInvalidDerEncoding` for all all other DER spec violations.
+     +
+     +  `Asn1DecodeError.booleanInvalidEncoding` for all other BER spec violations.
+     +
+     + Returns:
+     +  A `Result` depicting whether an error occured - the error string will contain verbose details.
+     + ++/
     static Result fromDecoding(Asn1Ruleset ruleset)(
         scope ref MemoryReader mem, 
         scope out Asn1Bool result,
@@ -141,10 +240,18 @@ struct Asn1Bool
         return Result.noError;
     }
 
+    /// Returns: The `Asn1Boolean` as a native bool.
     bool asBool() pure const => _value != 0;
+
+    /// Returns: The underlying byte as encoding within ASN.1
     ubyte value() pure const => _value;
 }
 
+/++
+ + Represents an ASN.1 INTEGER.
+ +
+ + This type contains slices to exteral memory, so please be aware of data lifetimes.
+ + ++/
 struct Asn1Integer
 {
     import std.traits : isIntegral;
@@ -168,11 +275,41 @@ struct Asn1Integer
         return Asn1Integer.fromUnownedBytes(bytes);
     }
 
+    /++ 
+     + Constructs an `Asn1Integer` using a slice to external memory - this memory containing the raw bytes
+     + used within an encoded ASN.1 record.
+     +
+     + Notes:
+     +  This constructor does NOT take ownership of the given memory slice. This means the returned struct
+     +  MUST NOT outlive the underlying source of memory.
+     + 
+     + Params:
+     +   bytes = The raw bytes.
+     +
+     + Returns: 
+     +   An `Asn1Integer` that uses the provided length bytes.
+     +/
     static Asn1Integer fromUnownedBytes(const(ubyte)[] bytes) @nogc @trusted nothrow
     {
         return Asn1Integer(bytes);
     }
 
+    /++
+     + Decodes the passed in ASN.1 content bytes.
+     +
+     + Params:
+     +  mem    = A MemoryReader *only* containing the content bytes for the ASN.1 record.
+     +  result = The decoded result.
+     +  ident  = The decoded ASN.1 identifier for this record.
+     +
+     + Throws:
+     +  `Asn1DecodeError.integerIsConstructed` if the given `ident` describes a constructed encoding.
+     +
+     +  `Asn1DecodeError.booleanInvalidEncoding` for all other BER spec violations.
+     +
+     + Returns:
+     +  A `Result` depicting whether an error occured - the error string will contain verbose details.
+     + ++/
     static Result fromDecoding(Asn1Ruleset ruleset)(
         scope ref MemoryReader mem, 
         scope out Asn1Integer result,
@@ -199,14 +336,26 @@ struct Asn1Integer
         result = Asn1Integer.fromUnownedBytes(bytes);
         return Result.noError;
     }
-
+    
+    /++
+     + Converts the raw bytes into a native integer.
+     +
+     + Params:
+     +  result = The resulting integer.
+     +
+     + Throws:
+     +  `Asn1DecodeError.integerOverBits` if the wanted `IntT` is too small to hold the decoded value.
+     +
+     + Returns:
+     +  A `Result` depicting if the conversion was possible.
+     + ++/
     Result asInt(IntT)(scope out IntT result) @nogc
     if(isIntegral!IntT)
     {
         if((this._value.length * 7) > (IntT.sizeof * 8))
         {
             enum Error = "Integer value is too large to fit into a native "~IntT.stringof;
-            return Result.make(Asn1DecodeError.integerOverBits, Error); // @suppress(dscanner.style.long_line)
+            return Result.make(Asn1DecodeError.integerOverBits, Error);
         }
 
         foreach(b; this._value)
@@ -217,6 +366,12 @@ struct Asn1Integer
 }
 
 // TODO: It'd be nice to have a generic BitString type. The one in Phobos uses the GC of course...
+
+/++
+ + Represents an ASN.1 BIT STRING.
+ +
+ + This type contains slices to exteral memory, so please be aware of data lifetimes.
+ + ++/
 struct Asn1BitString
 {
     private
@@ -226,13 +381,47 @@ struct Asn1BitString
     }
 
     @trusted nothrow: // @suppress(dscanner.trust_too_much)
-
+    
+    /++ 
+     + Constructs an `Asn1BitString` using a slice to external memory.
+     +
+     + Notes:
+     +  This constructor does NOT take ownership of the given memory slice. This means the returned struct
+     +  MUST NOT outlive the underlying source of memory.
+     +
+     +  Additional validation (e.g. those specified by DER) are not performed by this constructor.
+     + 
+     + Params:
+     +   bytes    = The bytes containing the bit string.
+     +   bitCount = The amount of bits contained within the bit string.
+     +
+     + Returns: 
+     +   An `Asn1Integer` that uses the provided length bytes.
+     +/
     static Asn1BitString fromUnownedBytes(const(ubyte)[] bytes, size_t bitCount) @nogc
     in(bytes.length * 8 >= bitCount, "The bit count must be less than or equal to the amount of bits in the byte array") // @suppress(dscanner.style.long_line)
     {
         return Asn1BitString(bytes, bitCount);
     }
 
+    /++
+     + Decodes the passed in ASN.1 content bytes.
+     +
+     + Params:
+     +  mem    = A MemoryReader *only* containing the content bytes for the ASN.1 record.
+     +  result = The decoded result.
+     +  ident  = The decoded ASN.1 identifier for this record.
+     +
+     + Throws:
+     +  `Asn1DecodeError.bitstringIsConstructedUnderDer` if the given `ident` describes a constructed encoding when using DER encoding.
+     +
+     +  `Asn1DecodeError.bitstringInvalidDerEncoding` for all other DER spec violations.
+     +
+     +  `Asn1DecodeError.bitstringInvalidEncoding` for all other BER spec violations.
+     +
+     + Returns:
+     +  A `Result` depicting whether an error occured - the error string will contain verbose details.
+     + ++/
     static Result fromDecoding(Asn1Ruleset ruleset)(
         scope ref MemoryReader mem, 
         scope out Asn1BitString result,
@@ -266,9 +455,9 @@ struct Asn1BitString
         static if(ruleset == Asn1Ruleset.der)
         {
             if(bytes.length > 1 && (bytes[$-1] & (0xFF >> (8 - unusedBits))) != 0)
-                return Result.make(Asn1DecodeError.bitstringInvalidEncoding, "The unused bits in a bit string must be zero - ISO/IEC 8825-1:2021 11.2.1"); // @suppress(dscanner.style.long_line)
+                return Result.make(Asn1DecodeError.bitstringInvalidDerEncoding, "The unused bits in a bit string must be zero - ISO/IEC 8825-1:2021 11.2.1"); // @suppress(dscanner.style.long_line)
             if(bytes.length > 1 && bytes[$-1] == 0)
-                return Result.make(Asn1DecodeError.bitstringInvalidEncoding, "The last byte of a non-empty bit string must not be zero - ISO/IEC 8825-1:2021 11.2.2"); // @suppress(dscanner.style.long_line)
+                return Result.make(Asn1DecodeError.bitstringInvalidDerEncoding, "The last byte of a non-empty bit string must not be zero - ISO/IEC 8825-1:2021 11.2.2"); // @suppress(dscanner.style.long_line)
         }
 
         const bitCount = ((bytes.length - 1) * 8) - unusedBits; // @suppress(dscanner.suspicious.length_subtraction)
@@ -279,6 +468,11 @@ struct Asn1BitString
     size_t bitCount() const => _bitCount;
 }
 
+/++
+ + Represents an ASN.1 REAL.
+ +
+ + This type contains slices to exteral memory, so please be aware of data lifetimes.
+ + ++/
 struct Asn1Real
 {
     enum Base : ubyte
@@ -324,12 +518,42 @@ struct Asn1Real
         return fp;
     }
 
+    /// Returns: a new `Asn1Real` that represents +0
     static Asn1Real plusZero() @nogc => fromSpecial(Special.plusZeroNoContentBytes);
+    /// Returns: a new `Asn1Real` that represents +double.infinity
     static Asn1Real plusInfinity() @nogc => fromSpecial(Special.plusInfinity);
+    /// Returns: a new `Asn1Real` that represents -double.infinity
     static Asn1Real minusInfinity() @nogc => fromSpecial(Special.minusInfinity);
+    /// Returns: a new `Asn1Real` that represents double.nan
     static Asn1Real notANumber() @nogc => fromSpecial(Special.notANumber);
+    /// Returns: a new `Asn1Real` that represents -0
     static Asn1Real minusZero() @nogc => fromSpecial(Special.minusZero);
 
+    /++
+     + Decodes the passed in ASN.1 content bytes.
+     +
+     + Notes:
+     +  Currently no decimal encoding forms are supported due to lack of dev time spent on it.
+     +
+     + Params:
+     +  mem    = A MemoryReader *only* containing the content bytes for the ASN.1 record.
+     +  result = The decoded result.
+     +  ident  = The decoded ASN.1 identifier for this record.
+     +
+     + Throws:
+     +  `Asn1DecodeError.realIsConstructed` if the given `ident` describes a constructed encoding.
+     +
+     +  `Asn1DecodeError.realUnsupportedDecimalEncoding` if decimal encoding is used, and specifies a format that's not recognised.
+     +
+     +  `Asn1DecodeError.realUnsupportedSpecialEncoding` if special encoding is used, and specifies a special value that's not recognised.
+     +
+     +  `Asn1DecodeError.realInvalidDerEncoding` for all other DER spec violations.
+     +
+     +  `Asn1DecodeError.realInvalidEncoding` for all other BER spec violations.
+     +
+     + Returns:
+     +  A `Result` depicting whether an error occured - the error string will contain verbose details.
+     + ++/
     static Result fromDecoding(Asn1Ruleset ruleset)(
         scope ref MemoryReader mem, 
         scope out Asn1Real result,
@@ -337,7 +561,7 @@ struct Asn1Real
     )
     {
         if(ident.encoding == Asn1Identifier.Encoding.constructed)
-            return Result.make(Asn1DecodeError.realInvalidEncoding, "Real numbers cannot be constructed under BER ruleset - ISO/IEC 8825-1:2021 8.5.1"); // @suppress(dscanner.style.long_line)
+            return Result.make(Asn1DecodeError.realIsConstructed, "Real numbers cannot be constructed under BER ruleset - ISO/IEC 8825-1:2021 8.5.1"); // @suppress(dscanner.style.long_line)
 
         if(mem.bytesLeft == 0)
         {
@@ -358,7 +582,31 @@ struct Asn1Real
 
         return Result.make(Asn1DecodeError.realInvalidEncoding, "Could not detect (supported) real number encoding.");
     }
-
+    
+    /++
+     + Converts the raw bytes into native double.
+     +
+     + Notes:
+     +  ASN.1's `PLUS-INFINITY` is equal to `+double.infinity` in D.
+     +
+     +  ASN.1's `MINUS-INFINITY` is equal to `-double.infinity` in D.
+     +
+     +  This function uses checked maths in order to catch overflows (but not underflows... yet).
+     +
+     +  If you're getting the wrong value back, it's a lot more likely that this function is buggy rather than
+     +  your input being incorrect, feel free to raise an issue since I'm not very good at proving my own maths.
+     +
+     + Params:
+     +  number = The resulting number.
+     +
+     + Throws:
+     +  `CheckedError.overflow` if there was an overflow when decoding the number.
+     +
+     +  Anything that `Asn1Integer.asInt` can throw, as it is used internally to decode parts of the real value.
+     +
+     + Returns:
+     +  A `Result` depicting whether an error occured - the error string will contain verbose details.
+     + ++/
     Result asDouble(scope out double number) @nogc
     {
         import std.math : pow;
@@ -548,6 +796,11 @@ struct Asn1Real
     }
 }
 
+/++
+ + Represents an ASN.1 OCTET STRING.
+ +
+ + This type contains slices to exteral memory, so please be aware of data lifetimes.
+ + ++/
 struct Asn1OctetString
 {
     private
@@ -557,11 +810,38 @@ struct Asn1OctetString
 
     @trusted nothrow: // @suppress(dscanner.trust_too_much)
 
+    /++ 
+     + Constructs an `Asn1OctetString` using a slice to external memory.
+     +
+     + Notes:
+     +  This constructor does NOT take ownership of the given memory slice. This means the returned struct
+     +  MUST NOT outlive the underlying source of memory.
+     + 
+     + Params:
+     +   data = The raw bytes of the octet string.
+     +
+     + Returns: 
+     +   An `Asn1OctetString` that uses the provided length bytes.
+     +/
     static Asn1OctetString fromUnownedBytes(const(ubyte)[] data) @nogc
     {
         return Asn1OctetString(data);
     }
 
+    /++
+     + Decodes the passed in ASN.1 content bytes.
+     +
+     + Params:
+     +  mem    = A MemoryReader *only* containing the content bytes for the ASN.1 record.
+     +  result = The decoded result.
+     +  ident  = The decoded ASN.1 identifier for this record.
+     +
+     + Throws:
+     +  `Asn1DecodeError.octetstringIsConstructedUnderDer` if the given `ident` describes a constructed encoding when using DER.
+     +
+     + Returns:
+     +  A `Result` depicting whether an error occured - the error string will contain verbose details.
+     + ++/
     static Result fromDecoding(Asn1Ruleset ruleset)(
         scope ref MemoryReader mem, 
         scope out Asn1OctetString result,
@@ -587,11 +867,33 @@ struct Asn1OctetString
         return Result.noError;
     }
 
+    /// Returns: All the bytes making up the octet string
     const(ubyte)[] data() @nogc => this._data;
 }
 
+/++
+ + Represents an ASN.1 NULL.
+ +
+ + This type holds no references to external memory.
+ + ++/
 struct Asn1Null
-{
+{    
+    /++
+     + Decodes the passed in ASN.1 content bytes.
+     +
+     + Params:
+     +  mem    = A MemoryReader *only* containing the content bytes for the ASN.1 record.
+     +  result = The decoded result.
+     +  ident  = The decoded ASN.1 identifier for this record.
+     +
+     + Throws:
+     +  `Asn1DecodeError.nullIsConstructed` if the given `ident` describes a constructed encoding.
+     +
+     +  `Asn1DecodeError.nullHasContentBytes` if `mem` contains any bytes.
+     +
+     + Returns:
+     +  A `Result` depicting whether an error occured - the error string will contain verbose details.
+     + ++/
     static Result fromDecoding(Asn1Ruleset ruleset)(
         scope ref MemoryReader mem, 
         scope out Asn1Null result,
@@ -607,6 +909,13 @@ struct Asn1Null
     }
 }
 
+/++
+ + Represents an ASN.1 primitive record with an unknown format.
+ +
+ + This type is templated so that custom types can be defined, to keep things type safe.
+ +
+ + This type contains slices to exteral memory, so please be aware of data lifetimes.
+ + ++/
 struct Asn1Primitive(string TypeName)
 {
     private
@@ -647,6 +956,13 @@ struct Asn1Primitive(string TypeName)
     const(ubyte)[] data() @nogc => this._data;
 }
 
+/++
+ + Represents an ASN.1 constructed record with an unknown format.
+ +
+ + This type is templated so that custom types can be defined, to keep things type safe.
+ +
+ + This type contains slices to exteral memory, so please be aware of data lifetimes.
+ + ++/
 struct Asn1Construction(string TypeName)
 {
     private
@@ -687,7 +1003,8 @@ struct Asn1Construction(string TypeName)
     const(ubyte)[] data() @nogc => this._data;
 }
 
-private struct Asn1ObjectIdentifierImpl(bool IsRelative)
+// Public for documentation generation, please use the aliases instead.
+struct Asn1ObjectIdentifierImpl(bool IsRelative)
 {
     import std.typecons : Nullable;
     
@@ -722,6 +1039,22 @@ private struct Asn1ObjectIdentifierImpl(bool IsRelative)
         }
     }
 
+    /++
+     + Decodes the passed in ASN.1 content bytes.
+     +
+     + Params:
+     +  mem    = A MemoryReader *only* containing the content bytes for the ASN.1 record.
+     +  result = The decoded result.
+     +  ident  = The decoded ASN.1 identifier for this record.
+     +
+     + Throws:
+     +  `Asn1DecodeError.oidIsConstructed` if the given `ident` describes a constructed encoding.
+     +
+     +  `Asn1DecodeError.oidInvalidEncoding` for all other BER spec violations.
+     +
+     + Returns:
+     +  A `Result` depicting whether an error occured - the error string will contain verbose details.
+     + ++/
     static Result fromDecoding(Asn1Ruleset ruleset)(
         scope ref MemoryReader mem, 
         scope out typeof(this) result,
@@ -729,7 +1062,7 @@ private struct Asn1ObjectIdentifierImpl(bool IsRelative)
     )
     {
         if(ident.encoding == Asn1Identifier.Encoding.constructed)
-            return Result.make(Asn1DecodeError.oidIsConstructed, "Object Identifiers cannot be constructed - ISO/IEC 8825-1:2021 8.19.1");
+            return Result.make(Asn1DecodeError.oidIsConstructed, "Object Identifiers cannot be constructed - ISO/IEC 8825-1:2021 8.19.1"); // @suppress(dscanner.style.long_line)
 
         // It doesn't explicitly say how to handle when length == 0, so I guess allow it?
         if(mem.bytesLeft == 0)
@@ -770,7 +1103,17 @@ private struct Asn1ObjectIdentifierImpl(bool IsRelative)
         return Result.noError;
     }
 
-    auto components() @nogc scope
+    /++
+     + Creates a ulong InputRange where each item is an individual componet from
+     + the decoded object identifier.
+     +
+     + e.g. For the identifier `1.2.4391.2`, you'd get a range of `[1, 2, 4391, 2]`.
+     +
+     + Notes:
+     +  This range contains the same slice as the parent struct, so please make sure the range does not outlive
+     +  the underlying memory source.
+     + ++/
+    auto components() @nogc scope return
     {
         alias OID = typeof(this);
         static struct R
@@ -849,7 +1192,18 @@ private struct Asn1ObjectIdentifierImpl(bool IsRelative)
     }
 }
 
+/++
+ + Represents an ASN.1 OBJECT IDENTIFIER.
+ +
+ + This type contains slices to exteral memory, so please be aware of data lifetimes.
+ + ++/
 alias Asn1ObjectIdentifier = Asn1ObjectIdentifierImpl!false;
+
+/++
+ + Represents an ASN.1 RELATIVE-OID.
+ +
+ + This type contains slices to exteral memory, so please be aware of data lifetimes.
+ + ++/
 alias Asn1RelativeObjectIdentifier = Asn1ObjectIdentifierImpl!true;
 
 /**
@@ -858,60 +1212,82 @@ alias Asn1RelativeObjectIdentifier = Asn1ObjectIdentifierImpl!true;
         8.22 - ^^
 **/
 
+/// Represents the decoded identifier and length bytes of an ASN.1 record.
 struct Asn1ComponentHeader
 {
+    /// The identifier.
     Asn1Identifier identifier;
+    
+    /// The length, either short or long.
     Asn1Length length;
 }
 
+/// Used to describe which ruleset to apply during decoding/encoding.
 enum Asn1Ruleset
 {
+    /// Use the DER binary ruleset - this ruleset ensures there is only ever one possible representation for any distinct value.
     der,
 }
 
+/// A `Result` error enum.
 enum Asn1DecodeError
 {
     none,
-    eof,
-    notImplemented,
+    eof,            /// Ran out of bytes.
+    notImplemented, /// Functionality not implemented yet TODO: I need to replace some asserts with this.
     
-    identifierTagTooLong,
-    identifierTagInvalidEncoding,
+    identifierTagTooLong,           /// Identifier tag has too many bytes.
+    identifierTagInvalidEncoding,   /// Identifer violates the spec in some way.
     
-    componentLengthReserved,
-    componentLengthIndefiniteUnderDer,
-    componentLengthInvalidDerEncoding,
-    componentLengthOver64Bits,
+    componentLengthReserved,            /// Content length uses a reserved value.
+    componentLengthIndefiniteUnderDer,  /// Content length uses the indefinite form under DER, which is not allowed.
+    componentLengthInvalidDerEncoding,  /// Content length violates a DER-specific constraint.
+    componentLengthOver64Bits,          /// Content length is more than 64-bits, so can't be represented natively.
     
-    booleanInvalidEncoding,
-    booleanInvalidDerEncoding,
-    booleanIsConstructed,
+    booleanInvalidEncoding,     /// Boolean violates the spec in some way.
+    booleanInvalidDerEncoding,  /// Boolean violates a DER-specific constraint.
+    booleanIsConstructed,       /// Boolean is marked as constructed.
     
-    integerInvalidEncoding,
-    integerInvalidDerEncoding,
-    integerOverBits,
-    integerIsConstructed,
+    integerInvalidEncoding,     /// Integer violates the spec in some way.
+    integerInvalidDerEncoding,  /// Integer violates a DER-specific constraint.
+    integerOverBits,            /// Integer is too large to be represented by a native D integral type.
+    integerIsConstructed,       /// Integer is marked as constructed.
     
-    bitstringIsConstructedUnderDer,
-    bitstringInvalidEncoding,
+    bitstringIsConstructedUnderDer, /// Bit string is marked as constructed under DER, which is not allowed.
+    bitstringInvalidEncoding,       /// Bit string violates the spec in some way.
+    bitstringInvalidDerEncoding,    /// Bit string violates a DER-specific constraint.
 
-    realInvalidEncoding,
-    realInvalidDerEncoding,
-    realUnsupportedDecimalEncoding,
-    realUnsupportedSpecialEncoding,
+    realIsConstructed,              /// Real is marked as constructed.
+    realInvalidEncoding,            /// Real violates the spec in some way.
+    realInvalidDerEncoding,         /// Real violates a DER-specific constraint.
+    realUnsupportedDecimalEncoding, /// Real contains an unrecognised decimal encoding.
+    realUnsupportedSpecialEncoding, /// Real contains an unrecognised special value.
 
-    octetstringIsConstructedUnderDer,
+    octetstringIsConstructedUnderDer, /// Octet string is marked as constructed under DER, which is not allowed.
 
-    nullIsConstructed,
-    nullHasContentBytes,
+    nullIsConstructed,      /// Null is marked as constructed under DER, which is not allowed.
+    nullHasContentBytes,    /// Null contains content bytes.
 
-    constructionIsPrimitive,
-    primitiveIsConstructed,
+    constructionIsPrimitive, /// Generic construction is marked as primitive.
+    primitiveIsConstructed,  /// Generic primitive is marked as constructed.
 
-    oidInvalidEncoding,
-    oidIsConstructed,
+    oidInvalidEncoding, /// OID violates the spec in some way.
+    oidIsConstructed,   /// OID is marked as constructed.
 }
 
+/++
+ + Decodes a component header from the given ASN.1 data stream.
+ +
+ + Params:
+ +  mem    = The ASN.1 data stream. It will automatically be advanced to the content bytes.
+ +  header = The decoded header.
+ +
+ + Throws:
+ +  Anything that `asn1DecodeIdentifier` and `asn1DecodeLength` can throw.
+ +
+ + Returns:
+ +  A `Result` if decoding failed.
+ + ++/
 Result asn1DecodeComponentHeader(Asn1Ruleset ruleset)(
     scope ref MemoryReader mem, 
     scope out Asn1ComponentHeader header
@@ -928,6 +1304,23 @@ Result asn1DecodeComponentHeader(Asn1Ruleset ruleset)(
     return Result.noError;
 }
 
+/++
+ + Decodes an identifier from the given ASN.1 data stream.
+ +
+ + Params:
+ +  mem   = The ASN.1 data stream. It will automatically be advanced to the length bytes.
+ +  ident = The decoded identifier.
+ +
+ + Throws:
+ +  `Asn1DecodeError.eof` if there are less bytes than expected.
+ +
+ +  `Asn1DecodeError.identifierTagTooLong` if the long-form tag contains too many bytes to fit into a ulong.
+ +
+ +  `Asn1DecodeError.identifierTagInvalidEncoding` for any other violations.
+ +
+ + Returns:
+ +  A `Result` if decoding failed.
+ + ++/
 Result asn1DecodeIdentifier(Asn1Ruleset ruleset)(
     scope ref MemoryReader mem, 
     scope out Asn1Identifier ident
@@ -969,6 +1362,25 @@ Result asn1DecodeIdentifier(Asn1Ruleset ruleset)(
     return Result.noError;
 }
 
+/++
+ + Decodes a record length from the given ASN.1 data stream.
+ +
+ + Params:
+ +  mem    = The ASN.1 data stream. It will automatically be advanced to the content bytes.
+ +  length = The decoded length.
+ +
+ + Throws:
+ +  `Asn1DecodeError.eof` if there are less bytes than expected.
+ +
+ +  `Asn1DecodeError.componentLengthReserved` if the length contains a reserved value.
+ +
+ +  `Asn1DecodeError.componentLengthIndefiniteUnderDer` when the indefinite length form is used under DER.
+ +
+ +  `Asn1DecodeError.componentLengthInvalidDerEncoding` for any other DER-specific violations.
+ +
+ + Returns:
+ +  A `Result` if decoding failed.
+ + ++/
 Result asn1DecodeLength(Asn1Ruleset ruleset)(
     scope ref MemoryReader mem, 
     scope out Asn1Length length
@@ -1017,6 +1429,30 @@ Result asn1DecodeLength(Asn1Ruleset ruleset)(
     return Result.noError;
 }
 
+/++
+ + Creates a new memory reader, from the parent ASN.1 data stream, that contains
+ + the content bytes for a record.
+ +
+ + This new reader is suitable for passing into the various `fromDecoding` functions provided by the primitive types
+ + in this module.
+ +
+ + Notes:
+ +  The new reader is created from a non-copied slice from the parent reader, so the new reader must not outlive the
+ +  parent reader.
+ +
+ + Params:
+ +  mem           = The ASN.1 data stream. It will automatically be advanced to the next non-nested record.
+ +  length        = The length of the current record to read in.
+ +  contentReader = The newly made reader which will only contain the content bytes of the current record.
+ +
+ + Throws:
+ +  `Asn1DecodeError.eof` if there are less bytes than expected.
+ +
+ +  `Asn1DecodeError.componentLengthOver64Bits` if the length is long-form and does not fit into a native D integer.
+ +
+ + Returns:
+ +  A `Result` if reading failed.
+ + ++/
 Result asn1ReadContentBytes(
     scope ref MemoryReader mem,
     const Asn1Length length,
@@ -1582,8 +2018,8 @@ unittest
         "error - must have at least one byte": T([], err.bitstringInvalidEncoding),
         "error - unused bits must be <= 7": T([0x08], err.bitstringInvalidEncoding),
         "error - unused bits must be 0 for empty strings": T([0x01], err.bitstringInvalidEncoding),
-        "error DER - unused bits must be set to 0": T([0x07, 0xFF], err.bitstringInvalidEncoding),
-        "error DER - the last byte must not be 0": T([0x00, 0x00], err.bitstringInvalidEncoding),
+        "error DER - unused bits must be set to 0": T([0x07, 0xFF], err.bitstringInvalidDerEncoding),
+        "error DER - the last byte must not be 0": T([0x00, 0x00], err.bitstringInvalidDerEncoding),
     ];
 
     foreach(name, test; cases)
@@ -1689,7 +2125,7 @@ unittest
             -0
         ),
 
-        "error - must not be constructed": T([], err.realInvalidEncoding, Asn1Identifier.Encoding.constructed),
+        "error - must not be constructed": T([], err.realIsConstructed, Asn1Identifier.Encoding.constructed),
     ];
 
     foreach(name, test; cases)
