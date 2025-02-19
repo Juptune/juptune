@@ -1222,7 +1222,7 @@ struct Asn1ComponentHeader
     Asn1Length length;
 }
 
-/// Used to describe which ruleset to apply during decoding/encoding.
+/// Used to describe which ruleset to apply during decoding.
 enum Asn1Ruleset
 {
     /// Use the DER binary ruleset - this ruleset ensures there is only ever one possible representation for any distinct value.

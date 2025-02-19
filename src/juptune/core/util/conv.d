@@ -410,7 +410,7 @@ NumT fromBase10(NumT)(const(char)[] str, out string error)
     }
 
     NumT result = cast(NumT)firstDigit;
-    uint exponent = 10;
+    ulong exponent = 10;
     while(cursor >= 0)
     {
         if(cursor == 0 && str[cursor] == '-')

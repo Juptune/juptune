@@ -57,11 +57,16 @@ crypto_srcs = files(
 )
 
 data_srcs = files(
+    './src/juptune/data/alphabet.d',
     './src/juptune/data/base.d',
     './src/juptune/data/buffer.d',
     './src/juptune/data/package.d',
 
+    './src/juptune/data/asn1/constraints.d',
     './src/juptune/data/asn1/decode/bcd/encoding.d',
+    './src/juptune/data/asn1/lang/ast.d',
+    './src/juptune/data/asn1/lang/common.d',
+    './src/juptune/data/asn1/lang/lexer.d',
 )
 
 event_srcs = files(
