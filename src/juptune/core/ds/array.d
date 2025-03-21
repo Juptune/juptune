@@ -267,7 +267,7 @@ struct ArrayBase(
         MurmurHash3!32 hasher;
         hasher.start();
 
-        static if(__traits(hasMember, ValueT, "toHash"))
+        static if(__traits(hasMember, ValueT, "toHash") && __traits(compiles, this[0].toHash()))
         {
             foreach(i; 0..this.length)
             {

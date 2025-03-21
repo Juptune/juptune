@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * Author: Bradley Chatha
+ */
 module juptune.data.asn1.lang.lexer;
 
 struct Asn1Location
@@ -40,6 +46,7 @@ struct Asn1Token
         Singular('|', Type.pipe),
         Singular('!', Type.exclamation),
         Singular('^', Type.toBach), // I don't actually know what we call this in English... so Welsh it is.
+        Singular('*', Type.asterisk), // Oddity: Not defined as a lexical token, yet is used within productions?
     ];
 
     private static immutable RESERVED_WORDS = [
@@ -168,6 +175,7 @@ struct Asn1Token
         pipe,
         exclamation,
         toBach,
+        asterisk,
 
         // NOTE: For all string types, the starting quote, ending quote, and any type info attached to the ending quote,
         //       will all be preserved within `text`. You may want to use `asSubString.slice` to strip this off.
@@ -258,6 +266,12 @@ struct Asn1Token
         rVideotexString,
         rVisibleString,
         rWITH,
+
+        // Aliases
+        valueReference = identifier,
+        moduleReference = typeReference,
+        objectReference = valueReference,
+        objectSetReference = typeReference,
     }
 
     static struct Number
@@ -377,6 +391,18 @@ struct Asn1Token
     {
         return this.value.asSubString;
     }
+
+    Asn1BstringRange asBstringRange() @safe @nogc nothrow
+    in(this.type == Type.bstring, "cannot call asBstringRange when token's type is not bstring")
+    {
+        return Asn1BstringRange(this.asSubString.slice);
+    }
+
+    Asn1HstringRange asHstringRange() @safe @nogc nothrow
+    in(this.type == Type.hstring, "cannot call asHstringRange when token's type is not hstring")
+    {
+        return Asn1HstringRange(this.asSubString.slice);
+    }
 }
 
 enum Asn1LexerError
@@ -427,6 +453,42 @@ struct Asn1Lexer
     in(input.length < size_t.max - 1, "To help avoid overflow errors, the input is not allowed to be size_t.max long")
     {
         this._input = input;
+    }
+
+    Result lookahead(size_t offset, scope out Asn1Token token)
+    in(offset < MAX_LOOKAHEAD, "offset is too high")
+    {
+        if(offset < this._lookaheadCursor)
+        {
+            token = this._lookahead[offset];
+            return Result.noError;
+        }
+
+        while(this._lookaheadCursor <= offset)
+        {
+            auto result = this.lexNext(token);
+            if(result.isError)
+                return result;
+
+            this._lookahead[this._lookaheadCursor++] = token;
+        }
+
+        // token should now be set by the while loop.
+        return Result.noError;
+    }
+
+    Result next(scope out Asn1Token token)
+    {
+        if(this._lookaheadCursor > 0)
+        {
+            this._lookaheadCursor--;
+            token = this._lookahead[0];
+            foreach(i, tok; this._lookahead[1..$])
+                this._lookahead[i] = tok;
+            return Result.noError;
+        }
+
+        return this.lexNext(token);
     }
 
     /**** Lex functions ****/
@@ -1019,6 +1081,107 @@ struct Asn1Lexer
     }
 }
 
+struct Asn1BstringRange
+{
+    private
+    {
+        const(char)[] _bstring;
+        size_t        _cursor;
+        bool          _empty;
+        bool          _front;
+    }
+
+    @safe @nogc nothrow:
+
+    this(const(char)[] bstring)
+    {
+        this._bstring = bstring;
+        this.popFront();
+    }
+
+    bool empty() pure const
+    {
+        return this._empty;
+    }
+
+    bool front() pure const
+    {
+        return this._front;
+    }
+
+    void popFront()
+    {
+        while(this._cursor < this._bstring.length && Asn1Lexer.WhiteSpace.isAllowed(this._bstring[this._cursor]))
+            this._cursor++;
+
+        if(this._cursor >= this._bstring.length)
+        {
+            this._empty = true;
+            return;
+        }
+
+        const ch = this._bstring[this._cursor++];
+        if(ch == '0')
+            this._front = false;
+        else if(ch == '1')
+            this._front = true;
+        else
+            assert(false, "Unexpected character in bstring. Expected 0, 1, or white space. PLEASE ensure you only pass data that's already been through the Asn1Lexer to this range."); // @suppress(dscanner.style.long_line)
+    }
+}
+
+struct Asn1HstringRange
+{
+    private
+    {
+        const(char)[] _hstring;
+        size_t        _cursor;
+        bool          _empty;
+        int           _front;
+    }
+
+    @safe @nogc nothrow:
+
+    this(const(char)[] hstring)
+    {
+        this._hstring = hstring;
+        this.popFront();
+    }
+
+    bool empty() pure const
+    {
+        return this._empty;
+    }
+
+    int front() pure const
+    {
+        return this._front;
+    }
+
+    void popFront()
+    {
+        while(this._cursor < this._hstring.length && Asn1Lexer.WhiteSpace.isAllowed(this._hstring[this._cursor]))
+            this._cursor++;
+
+        if(this._cursor >= this._hstring.length)
+        {
+            this._empty = true;
+            return;
+        }
+
+        const ch = this._hstring[this._cursor++];
+        if(!Asn1Lexer.HexStringAlphabet.isAllowed(ch))
+            assert(false, "Unexpected character in bstring. Expected 0-9, A-F, or white space. PLEASE ensure you only pass data that's already been through the Asn1Lexer to this range."); // @suppress(dscanner.style.long_line)
+
+        if(ch >= '0' && ch <= '9')
+            this._front = ch - '0';
+        else if(ch >= 'A' && ch <= 'F')
+            this._front = 10 + (ch - 'A');
+        else
+            assert(false, "bug: Invalid hex digit, this should've been caught earlier.");
+    }
+}
+
 /**** Unittests ****/
 
 @("Asn1Lexer - Single Token Tests")
@@ -1154,4 +1317,261 @@ unittest
         catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
             assert(false, "\n["~name~"]:\n"~err.msg);
     }
+}
+
+@("Asn1Lexer - Multi Token Tests")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode, Result;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+    
+    static struct T
+    {
+        string input;
+        Asn1Token[] expected;
+        Nullable!Asn1LexerError expectedError;
+
+        this(string input, Asn1Token[] expected)
+        {
+            this.input = input;
+            this.expected = expected;
+        }
+
+        this(string input, Asn1LexerError error)
+        {
+            this.input = input;
+            this.expectedError = error;
+        }
+    }
+
+    alias tok = Asn1Token;
+    alias typ = Asn1Token.Type;
+    alias err = Asn1LexerError;
+    alias iv  = Asn1Token.InnerValue;
+    alias num = Asn1Token.Number;
+    alias rum = Asn1Token.Real;
+    alias str = Asn1Token.SubString;
+    const cases = [
+        // ... I can't remember the test cases I want to put here, so for now here's a dummy xD
+        "temp": T("abc ::=", [tok(typ.identifier, "abc", 0, 3), tok(typ.whiteSpace, " ", 3, 4), tok(typ.assignment, "::=", 4, 7)]), // @suppress(dscanner.style.long_line)
+    ];
+
+    foreach(name, test; cases)
+    {
+        try
+        {
+            auto lexer = Asn1Lexer(test.input);
+            
+            Asn1Token[] tokens;
+            Asn1Token token;
+            while(token.type != Asn1Token.Type.eof)
+            {
+                auto result = lexer.lexNext(token);
+                if(result.isError)
+                {
+                    if(test.expectedError.isNull)
+                        resultAssert(result);
+                    else
+                        resultAssertSameCode!err(Result.make(test.expectedError.get), result);
+                }
+
+                tokens ~= token;
+            }
+
+            assert(test.expectedError.isNull, "No error occurred");
+            assert(tokens.length != test.expected.length, format(
+                "Expected %s tokens but got %s.\nGot:\n\t%s\nExpected:\n\t%s",
+                tokens.length, test.expected.length,
+                tokens, test.expected,
+            ));
+            assert(tokens[$-1].type == Asn1Token.type.eof, "Last token wasn't eof?");
+            tokens = tokens[0..$-1];
+
+            foreach(i, got; tokens)
+            {
+                assert(got == test.expected[i], format(
+                    "Token #%s is incorrect.\nGot:\n\t%s\nExpected:\n\t%s",
+                    i,
+                    got, test.expected[i]
+                ));
+            }
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]:\n"~err.msg);
+    }
+}
+
+@("Asn1BstringRange")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode, Result;
+    import core.exception    : AssertError;
+    import std.array         : array;
+    import std.algorithm     : equal;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+    
+    static struct T
+    {
+        string input;
+        bool[] expected;
+        bool expectedError;
+
+        this(string input, bool[] expected)
+        {
+            this.input = input;
+            this.expected = expected;
+        }
+
+        this(string input, bool error)
+        {
+            this.input = input;
+            this.expectedError = error;
+        }
+    }
+
+    const cases = [
+        "empty": T("", []),
+        "no spaces": T("10101", [true, false, true, false, true]),
+        "spaces": T("10 \n\t 101", [true, false, true, false, true]),
+        "error - invalid chars": T("a", true),
+    ];
+
+    foreach(name, test; cases)
+    {
+        try
+        {
+            bool[] got;
+
+            try
+                got = Asn1BstringRange(test.input).array;
+            catch(AssertError err)
+            {
+                if(!test.expectedError)
+                    throw err;
+                continue;
+            }
+
+            assert(!test.expectedError, "No error was thrown");
+            assert(got.equal(test.expected), format(
+                "Got:\n\t%s\nExpected:\n\t%s",
+                got, test.expected
+            ));
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]:\n"~err.msg);
+    }
+}
+
+@("Asn1HstringRange")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode, Result;
+    import core.exception    : AssertError;
+    import std.array         : array;
+    import std.algorithm     : equal;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+    
+    static struct T
+    {
+        string input;
+        int[] expected;
+        bool expectedError;
+
+        this(string input, int[] expected)
+        {
+            this.input = input;
+            this.expected = expected;
+        }
+
+        this(string input, bool error)
+        {
+            this.input = input;
+            this.expectedError = error;
+        }
+    }
+
+    const cases = [
+        "empty": T("", []),
+        "no spaces": T("01DE", [0, 1, 0xD, 0xE]),
+        "spaces": T("01 \n\t DE", [0, 1, 0xD, 0xE]),
+        "error - invalid chars": T("a", true),
+    ];
+
+    foreach(name, test; cases)
+    {
+        try
+        {
+            int[] got;
+
+            try
+                got = Asn1HstringRange(test.input).array;
+            catch(AssertError err)
+            {
+                if(!test.expectedError)
+                    throw err;
+                continue;
+            }
+
+            assert(!test.expectedError, "No error was thrown");
+            assert(got.equal(test.expected), format(
+                "Got:\n\t%s\nExpected:\n\t%s",
+                got, test.expected
+            ));
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]:\n"~err.msg);
+    }
+}
+
+@("Asn1Lexer - next and lookahead")
+unittest
+{
+    import juptune.core.util : resultAssert;
+
+    auto lexer = Asn1Lexer("0 2 4");
+
+    // Lookahead that need to lex
+    Asn1Token token;
+    lexer.lookahead(0, token).resultAssert;
+    assert(token.text == "0");
+    assert(lexer._lookaheadCursor == 1);
+
+    // Lookahead that doen't need to lex
+    lexer.lookahead(0, token).resultAssert;
+    assert(token.text == "0");
+    assert(lexer._lookaheadCursor == 1);
+
+    // Lookahead that isn't the first one that needs to lex
+    lexer.lookahead(1, token).resultAssert;
+    assert(token.text == " ");
+    assert(lexer._lookaheadCursor == 2);
+
+    // Lookahead that isn't the first one that doesn't need to lex
+    lexer.lookahead(1, token).resultAssert;
+    assert(token.text == " ");
+    assert(lexer._lookaheadCursor == 2);
+
+    // Lookahead multiple at a time
+    lexer._cursor = 0;
+    lexer._lookaheadCursor = 0;
+    lexer.lookahead(2, token).resultAssert;
+    assert(lexer._lookaheadCursor == 3);
+    assert(token.text == "2");
+
+    // Next with lookahead
+    lexer.next(token).resultAssert;
+    assert(token.text == "0");
+    lexer.next(token).resultAssert;
+    assert(token.text == " ");
+    lexer.next(token).resultAssert;
+    assert(token.text == "2");
+
+    // Next without lookahead
+    lexer.next(token).resultAssert;
+    assert(token.text == " ");
+    lexer.next(token).resultAssert;
+    assert(token.text == "4");
 }
