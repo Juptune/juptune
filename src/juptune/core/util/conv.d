@@ -112,7 +112,6 @@ unittest
     assert(E.a.to!String == "a");
 }
 
-@Result(ConvError.generic)
 bool to(BoolT : bool, ValueT)(scope auto ref ValueT value, scope ref Result result)
 {
     result = Result.noError;
@@ -132,7 +131,6 @@ bool to(BoolT : bool, ValueT)(scope auto ref ValueT value, scope ref Result resu
     }
 }
 
-@Result(ConvError.generic)
 NumT to(NumT, ValueT)(scope auto ref ValueT value, ref Result result, const size_t base = 10)
 if(__traits(isIntegral, NumT) && !is(NumT == bool))
 {
@@ -160,7 +158,6 @@ unittest
     assert(String("-120").to!byte(err) == -120);
 }
 
-@Result(ConvError.generic)
 Result to(NumT, ValueT)(ValueT value, out NumT output, const size_t base = 10)
 if(__traits(isIntegral, NumT))
 {
@@ -229,9 +226,11 @@ if(is(StructT == struct) && isOutputRange!(OutputT, const(char)[]))
 
 string enumToString(EnumT)(EnumT value)
 {
+    import std.meta : NoDuplicates;
+
     final switch(value)
     {
-        static foreach(i, member; EnumMembers!EnumT)
+        static foreach(i, member; NoDuplicates!(EnumMembers!EnumT))
             case member:
                 return __traits(allMembers, EnumT)[i];
     }

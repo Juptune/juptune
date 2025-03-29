@@ -15,17 +15,42 @@ private alias NodeAllocator = AllocatorList!(
     Mallocator
 );
 
+struct Asn1Location
+{
+    size_t start;
+    size_t end;
+}
+
 struct Asn1ParserContext
 {
     import juptune.data.asn1.lang.ast : Asn1BaseNode;
+    import juptune.core.ds            : Array, String2;
+    import juptune.core.util          : Result;
 
     @disable this(this){}
 
     NodeAllocator allocator;
+    Array!Asn1BaseNode nodesToDtor;
+
+    @nogc nothrow:
+
+    ~this()
+    {
+        foreach(node; this.nodesToDtor)
+            node.dispose(); // Allows things like List nodes to free their Array resources.
+
+        this.allocator.__xdtor();
+        this.nodesToDtor.__xdtor();
+    }
 
     NodeT allocNode(NodeT : Asn1BaseNode, CtorArgs...)(auto ref CtorArgs args)
     {
         import std.experimental.allocator : make;
-        return make!NodeT(this.allocator, args);
+        auto node = make!NodeT(this.allocator, args);
+
+        static if(__traits(hasMember, NodeT, "_MustBeDtored"))
+            this.nodesToDtor.put(node);
+
+        return node;
     }
 }

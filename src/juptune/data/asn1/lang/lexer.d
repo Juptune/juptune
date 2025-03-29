@@ -6,11 +6,7 @@
  */
 module juptune.data.asn1.lang.lexer;
 
-struct Asn1Location
-{
-    size_t start;
-    size_t end;
-}
+import juptune.data.asn1.lang.common : Asn1Location;
 
 struct Asn1Token
 {
@@ -125,7 +121,7 @@ struct Asn1Token
         "UNION": Type.rUNION,
         "UNIQUE": Type.rUNIQUE,
         "UNIVERSAL": Type.rUNIVERSAL,
-        "UniveralString": Type.rUniveralString,
+        "UniversalString": Type.rUniversalString,
         "UTCTime": Type.rUTCTime,
         "UTF8String": Type.rUTF8String,
         "VideotexString": Type.rVideotexString,
@@ -260,7 +256,7 @@ struct Asn1Token
         rUNION,
         rUNIQUE,
         rUNIVERSAL,
-        rUniveralString,
+        rUniversalString,
         rUTCTime,
         rUTF8String,
         rVideotexString,
@@ -272,6 +268,7 @@ struct Asn1Token
         moduleReference = typeReference,
         objectReference = valueReference,
         objectSetReference = typeReference,
+        todo,
     }
 
     static struct Number
@@ -403,6 +400,45 @@ struct Asn1Token
     {
         return Asn1HstringRange(this.asSubString.slice);
     }
+
+    static string suggestionForType(Type type) @safe @nogc nothrow
+    {
+        final switch(type) with(Type)
+        {
+            case FAILSAFE: assert(false, "bug: attempted to use FAILSAFE");
+            case eof: return "EOF";
+
+            case identifier: return "my-identifier";
+            case typeReference: return "My-Type-Reference";
+            case number: return "12345";
+            case realNumber: return "3.14";
+            case whiteSpace: return "\\t";
+            case oneLineComment: return "-- comment";
+            case multiLineComment: return "/* comment */";
+            case quotationMark: return "\"";
+            case apostrophe: return "'";
+            case bstring: return "'1010'B";
+            case hstring: return "'F00'H";
+            case cstring: return "'Foo'";
+
+            static foreach(name, value; RESERVED_WORDS)
+            {
+                case value: return name;
+            }
+
+            static foreach(name, value; SINGULAR_OPS)
+            {
+                case value.type:
+                    enum Str = ""~value.ch;
+                    return Str;
+            }
+
+            static foreach(name, value; COMPOUND_OPS)
+            {
+                case value.type: return value.chars;
+            }
+        }
+    }
 }
 
 enum Asn1LexerError
@@ -442,6 +478,7 @@ struct Asn1Lexer
     {
         const(char)[] _input;
         size_t _cursor;
+        ulong _tokensRead;
 
         Asn1Token[MAX_LOOKAHEAD] _lookahead;
         size_t _lookaheadCursor;
@@ -491,6 +528,16 @@ struct Asn1Lexer
         return this.lexNext(token);
     }
 
+    size_t cursor()
+    {
+        return this._cursor;
+    }
+
+    ulong tokensRead()
+    {
+        return this._tokensRead;
+    }
+
     /**** Lex functions ****/
 
     private Result lexNext(scope out Asn1Token token)
@@ -503,6 +550,7 @@ struct Asn1Lexer
             token = this.makeToken(Asn1Location(this._cursor, this._cursor), Asn1Token.Type.eof);
             return Result.noError;
         }
+        this._tokensRead++;
 
         const left = this.charsLeft;
         const ch0 = this.peekAt(0);
@@ -527,6 +575,8 @@ struct Asn1Lexer
         else if(this.tryLexNextSingularOperator(token))
             return Result.noError;
 
+        this._tokensRead--;
+        
         Array!char context;
         this.buildError(context, Asn1Location(this._cursor));
         return Result.make(Asn1LexerError.invalidCharacter, "Invalid character found - it's not the start character for any known token", String2.fromDestroyingArray(context)); // @suppress(dscanner.style.long_line)
@@ -551,8 +601,7 @@ struct Asn1Lexer
 
         Asn1Location location;
         auto result = this.readUntil!(
-            (ch) => WhiteSpace.isAllowed(ch), "When reading identifier/typeReference",
-            (ch) => IdentifierAlphabet.isAllowed(ch), "only letter; digits, and hyphens can be used in identifiers/typeReferences - 11.2.1 & 11.3 ISO/IEC 8824-1:2003" // @suppress(dscanner.style.long_line)
+            (ch) => !IdentifierAlphabet.isAllowed(ch), "only letter; digits, and hyphens can be used in identifiers/typeReferences - 11.2.1 & 11.3 ISO/IEC 8824-1:2003" // @suppress(dscanner.style.long_line)
         )(this, location, AllowEof.yes); // @suppress(dscanner.style.long_line)
         if(result.isError)
             return result;
@@ -564,7 +613,8 @@ struct Asn1Lexer
             return Result.make(Asn1LexerError.identifierEndsWithHyphen, "Identifiers/typeReferences cannot end with a hyphen - 11.2.1 & 11.3 ISO/IEC 8824-1:2003", String2.fromDestroyingArray(context)); // @suppress(dscanner.style.long_line)
         }
 
-        const reserved = ((cast(string)token.text) in Asn1Token.RESERVED_WORDS); // Should be @safe still, the lookup shouldn't preserve token.text in any way.
+        const text = this._input[location.start..location.end];
+        const reserved = ((cast(string)text) in Asn1Token.RESERVED_WORDS); // Should be @safe still, the lookup shouldn't preserve token.text in any way.
         token = this.makeToken(
             location, 
             (reserved !is null)
@@ -782,7 +832,7 @@ struct Asn1Lexer
         if(this.eof)
         {
             Array!char context;
-            this.buildError(context, Asn1Location(this._cursor));
+            this.buildError(context, Asn1Location(location.start, this._cursor));
             return Result.make(Asn1LexerError.eof, "Unterminated typed string, hit EOF before finding closing quote", String2.fromDestroyingArray(context)); // @suppress(dscanner.style.long_line)
         }
 
@@ -1026,13 +1076,34 @@ struct Asn1Lexer
 
     /**** Other helpers ****/
 
+    Result makeError(ErrorT, Args...)(
+        ErrorT error,
+        string message,
+        const Asn1Location location, 
+        scope const Args args,
+    )
+    {
+        import juptune.core.ds : Array, String2;
+
+        Array!char buffer;
+        this.buildError(buffer, location, args);
+        auto result = Result.make(error, message, String2.fromDestroyingArray(buffer));
+
+        version(unittest) debug
+        {
+            import std.stdio : writeln;
+            writeln(result.error, " -> ", result.context.sliceMaybeFromStack);
+        }
+
+        return result;
+    }
+
     void buildError(Range, Args...)(
         scope ref Range range,
         const Asn1Location location, 
         scope const Args args,
     )
     {
-        import juptune.core.ds   : Array;
         import juptune.core.util : toStringSink;
 
         range.put("input[");
@@ -1230,13 +1301,11 @@ unittest
         "typeReference - numbers": T("F00", tok(typ.typeReference, "F00", 0, 3)),
         "typeReference - hyphens": T("F00-bAR-b4z", tok(typ.typeReference, "F00-bAR-b4z", 0, 11)),
         "typeReference error - ends with hyphen": T("F-", err.identifierEndsWithHyphen),
-        "typeReference error - invalid character": T("F*", err.invalidCharacter),
 
         "identifier - letters": T("foo", tok(typ.identifier, "foo", 0, 3)),
         "identifier - numbers": T("f00", tok(typ.identifier, "f00", 0, 3)),
         "identifier - hyphens": T("f00-bAR-b4z", tok(typ.identifier, "f00-bAR-b4z", 0, 11)),
         "identifier error - ends with hyphen": T("f-", err.identifierEndsWithHyphen),
-        "identifier error - invalid character": T("f*", err.invalidCharacter),
 
         "comment single - empty, eof terminated": T("--", tok(typ.oneLineComment, "--", 0, 2)),
         "comment single - empty, hyphen terminated": T("----", tok(typ.oneLineComment, "----", 0, 4)),

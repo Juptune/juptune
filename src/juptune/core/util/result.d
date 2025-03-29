@@ -51,8 +51,6 @@ struct Result
 
     @nogc nothrow @safe:
 
-    /// For UDAs only please.
-    this(T)(T errorCode)if(!is(T == typeof(this))){ this.errorCode = errorCode; this.errorType = __traits(identifier, T); } // @suppress(dscanner.style.long_line)
     @disable this();
 
     this(ref return Result other) 
@@ -98,8 +96,7 @@ struct Result
         String2 context = String2.init
     ) 
     {
-        enum R { none }
-        auto r = Result(R.none);
+        auto r = Result.noError;
 
         r.errorCode = errorCode;
         r.errorType = __traits(identifier, T); 
@@ -128,8 +125,7 @@ struct Result
         String context
     ) @trusted
     {
-        enum R { none }
-        auto r = Result(R.none);
+        auto r = Result.noError;
 
         r.errorCode = errorCode;
         r.errorType = __traits(identifier, T); 
@@ -164,6 +160,10 @@ struct Result
         this.errorCode = errorCode;
         this.errorType = __traits(identifier, T); 
     }
+
+    // Allows if(auto result = ...) { onError }
+    bool opCast(T)() // @suppress(dscanner.suspicious.object_const)
+    if (is(T == bool)) => this.isError;
 }
 
 template then(Funcs...)

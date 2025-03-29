@@ -67,6 +67,7 @@ data_srcs = files(
     './src/juptune/data/asn1/lang/ast.d',
     './src/juptune/data/asn1/lang/common.d',
     './src/juptune/data/asn1/lang/lexer.d',
+    './src/juptune/data/asn1/lang/parser.d',
 )
 
 event_srcs = files(

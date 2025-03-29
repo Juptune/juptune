@@ -263,6 +263,7 @@ enum Asn1NodeType // For faster/easier to write type checks, instead of using ca
     ParameterizedObjectAssignment,
     ParameterizedObjectSetAssignment,
     ParameterList,
+    ParameterListValues, // Not part of spec
     Parameter,
     ParamGovernor,
     Governor,
@@ -278,6 +279,7 @@ enum Asn1NodeType // For faster/easier to write type checks, instead of using ca
     ParameterizedObjectSet,
     ParameterizedObject,
     ActualParameterList,
+    ActualParameterListValues,
     ActualParameter,
 
     GeneralConstraint,
@@ -292,9 +294,9 @@ enum Asn1NodeType // For faster/easier to write type checks, instead of using ca
     ComponentIdList,
     ContentsConstraint,
 
-    EXPLICIT_NODES,
-    IMPLICIT_NODES,
-    AUTOMATIC_NODES,
+    EXPLICIT_TAGS,
+    IMPLICIT_TAGS,
+    AUTOMATIC_TAGS,
     EXTENSIBILITY_IMPLIED,
     EXPORTS_ALL,
     ASTERISK, // "*"
@@ -303,7 +305,7 @@ enum Asn1NodeType // For faster/easier to write type checks, instead of using ca
     FALSE,
     INTEGER,
     PLUS_INFINITY,
-    NEGATIVE_INFINITY,
+    MINUS_INFINITY,
     BIT_STRING,
     UNIVERSAL,
     APPLICATION,
@@ -406,6 +408,9 @@ private mixin template OneOf(Asn1NodeType MyType, NodeTypes...)
     NodeT asNode(NodeT)() @safe
     out(n; n !is null, "bug: Node is null?")
     {
+        static immutable ErrorMsg = "This node is not of type "~NodeT.stringof;
+        assert(this.isNode!NodeT, ErrorMsg);
+
         enum Index = oneOfIndexOf!NodeT;
         return this._oneOfValue[Index];
     }
@@ -425,6 +430,8 @@ private mixin template Token(Asn1Token.Type MustBeType, Asn1NodeType AstType)
     {
         Asn1Token _token;
     }
+
+    enum TokenT = MustBeType;
 
     @nogc nothrow:
 
@@ -448,6 +455,8 @@ private mixin template Container(Asn1NodeType MyType, NodeTypes...)
     {
         NodeTypes _containerValues;
     }
+
+    alias ContainerNodeTypes = NodeTypes;
 
     @nogc nothrow:
 
@@ -483,10 +492,14 @@ private mixin template List(Asn1NodeType MyType, ItemT)
 {
     import juptune.core.ds : Array;
 
+    enum _MustBeDtored = true;
+
     private
     {
         Array!ItemT _items;
     }
+
+    @nogc nothrow:
 
     this()
     {
@@ -494,6 +507,11 @@ private mixin template List(Asn1NodeType MyType, ItemT)
     }
 
     ref typeof(_items) items() => this._items;
+
+    override void dispose()
+    {
+        this._items.__xdtor();
+    }
 }
 
 /**** Nodes ****/
@@ -514,29 +532,32 @@ abstract class Asn1BaseNode
     {
         return this._nodeType;
     }
+
+    void dispose() @nogc nothrow {}
 }
 
 final class Asn1StaticNode(Asn1NodeType MyType) : Asn1BaseNode
 {
-    this() @safe @nogc nothrow pure
+    Asn1Token token;
+
+    this(Asn1Token token) @safe @nogc nothrow pure
     {
         super(MyType);
+        this.token = token;
     }
-
-    __gshared instance = new typeof(this)();
 }
 
 /*** Special nodes ***/
 
 alias Asn1EmptyNode = Asn1StaticNode!(Asn1NodeType.empty);
-alias Asn1ExplicitTagsNode = Asn1StaticNode!(Asn1NodeType.EXPLICIT_NODES);
-alias Asn1ImplicitTagsNode = Asn1StaticNode!(Asn1NodeType.IMPLICIT_NODES);
-alias Asn1AutomaticTagsNode = Asn1StaticNode!(Asn1NodeType.AUTOMATIC_NODES);
+alias Asn1ExplicitTagsNode = Asn1StaticNode!(Asn1NodeType.EXPLICIT_TAGS);
+alias Asn1ImplicitTagsNode = Asn1StaticNode!(Asn1NodeType.IMPLICIT_TAGS);
+alias Asn1AutomaticTagsNode = Asn1StaticNode!(Asn1NodeType.AUTOMATIC_TAGS);
 alias Asn1ExtensibilityImpliedNode = Asn1StaticNode!(Asn1NodeType.EXTENSIBILITY_IMPLIED);
 alias Asn1ExportsAllNode = Asn1StaticNode!(Asn1NodeType.EXPORTS_ALL);
 alias Asn1AsteriskNode = Asn1StaticNode!(Asn1NodeType.ASTERISK);
 alias Asn1PlusInfinityNode = Asn1StaticNode!(Asn1NodeType.PLUS_INFINITY);
-alias Asn1NegativeInfinityNode = Asn1StaticNode!(Asn1NodeType.NEGATIVE_INFINITY);
+alias Asn1MinusInfinityNode = Asn1StaticNode!(Asn1NodeType.MINUS_INFINITY);
 alias Asn1ElipsisNode = Asn1StaticNode!(Asn1NodeType.ELIPSIS);
 alias Asn1UniversalNode = Asn1StaticNode!(Asn1NodeType.UNIVERSAL);
 alias Asn1ApplicationNode = Asn1StaticNode!(Asn1NodeType.APPLICATION);
@@ -737,29 +758,16 @@ final class Asn1DefinitiveObjIdComponentNode : Asn1BaseNode
 // DefinitiveNumberForm ::= number
 final class Asn1DefinitiveNumberFormNode : Asn1BaseNode
 {
-    mixin Token!(Asn1Token.Type.number, Asn1NodeType.DefinitiveNumberForm);
+    mixin Container!(Asn1NodeType.DefinitiveNumberForm, Asn1NumberTokenNode);
 }
 
 // DefinitiveNameAndNumberForm ::= identifier "(" DefinitiveNumberForm ")"
 final class Asn1DefinitiveNameAndNumberFormNode : Asn1BaseNode
 {
-    private
-    {
-        Asn1Token _identifier;
-        Asn1DefinitiveNumberFormNode _number;
-    }
-
-    this(Asn1Token identifier, Asn1DefinitiveNumberFormNode number)
-    in(identifier.type == Asn1Token.Type.identifier, "parameter 'identifier' must be of type identifier")
-    in(number, "parameter 'number' is null")
-    {
-        this._identifier = identifier;
-        this._number = number;
-        super(Asn1NodeType.DefinitiveNameAndNumberForm);
-    }
-
-    Asn1Token identifier() @safe @nogc nothrow pure => this._identifier;
-    Asn1DefinitiveNumberFormNode number() @safe @nogc nothrow pure => this._number;
+    mixin Container!(Asn1NodeType.DefinitiveNameAndNumberForm,
+        Asn1IdentifierTokenNode,
+        Asn1DefinitiveNumberFormNode,
+    );
 }
 
 /++
@@ -794,12 +802,12 @@ final class Asn1ExtensionDefaultNode : Asn1BaseNode
 
 /++
     ModuleBody ::=
-        Exports Imports AssignmentList
+        [Case1] Exports Imports AssignmentList
         | empty
  ++/
 final class Asn1ModuleBodyNode : Asn1BaseNode
 {
-    final static class Data : Asn1BaseNode
+    final static class Case1 : Asn1BaseNode
     {
         mixin Container!(Asn1NodeType.FAILSAFE,
             Asn1ExportsNode,
@@ -809,7 +817,7 @@ final class Asn1ModuleBodyNode : Asn1BaseNode
     }
 
     mixin OneOf!(Asn1NodeType.ModuleBody,
-        Data,
+        Case1,
         Asn1EmptyNode,
     );
 }
@@ -844,13 +852,13 @@ final class Asn1SymbolsExportedNode : Asn1BaseNode
 
 /++
     Imports ::=
-        IMPORTS SymbolsExported ";"
+        IMPORTS SymbolsImported ";"
         | empty
  ++/
 final class Asn1ImportsNode : Asn1BaseNode
 {
     mixin OneOf!(Asn1NodeType.Imports,
-        Asn1SymbolsExportedNode,
+        Asn1SymbolsImportedNode,
         Asn1EmptyNode,
     );
 }
@@ -1085,18 +1093,31 @@ final class Asn1AbsoluteReferenceNode : Asn1BaseNode
 /++
     ItemSpec ::=
         typereference
-        | ItemId "." ComponentId
+        [Case2] | ItemId "." ComponentId
  ++/
 final class Asn1ItemSpecNode : Asn1BaseNode
 {
-    final static class ItemIdCase : Asn1BaseNode
+    final static class Case2 : Asn1BaseNode
     {
-        mixin List!(Asn1NodeType.ItemId, Asn1ItemSpecNode);
+        mixin Container!(Asn1NodeType.FAILSAFE,
+            Asn1ItemIdNode,
+            Asn1ComponentIdNode,
+        );
     }
 
     mixin OneOf!(Asn1NodeType.ItemSpec,
         Asn1TypeReferenceTokenNode,
-        ItemIdCase,
+        Case2,
+    );
+}
+
+/++
+    ItemId ::= ItemSpec
+ ++/
+final class Asn1ItemIdNode : Asn1BaseNode
+{
+    mixin Container!(Asn1NodeType.ItemId,
+        Asn1ItemSpecNode,
     );
 }
 
@@ -1271,7 +1292,7 @@ final class Asn1NamedTypeNode : Asn1BaseNode
 final class Asn1ValueNode : Asn1BaseNode
 {
     mixin OneOf!(Asn1NodeType.Value,
-        Asn1BuiltinTypeNode,
+        Asn1BuiltinValueNode,
         Asn1ReferencedValueNode,
         Asn1ObjectClassFieldValueNode,
     );
@@ -1464,12 +1485,12 @@ final class Asn1EnumeratedTypeNode : Asn1BaseNode
 /++
     Enumerations ::=
         RootEnumeration
-        | RootEnumeration "," "..." ExceptionSpec
-        | RootEnumeration "," "..." ExceptionSpec "," AdditionalEnumeration
+        [Case1] | RootEnumeration "," "..." ExceptionSpec
+        [Case2] | RootEnumeration "," "..." ExceptionSpec "," AdditionalEnumeration
  ++/
 final class Asn1EnumerationsNode : Asn1BaseNode
 {
-    final class Unbounded : Asn1BaseNode
+    final static class Case1 : Asn1BaseNode
     {
         mixin Container!(Asn1NodeType.FAILSAFE,
             Asn1RootEnumerationNode,
@@ -1477,7 +1498,7 @@ final class Asn1EnumerationsNode : Asn1BaseNode
         );
     }
 
-    final class Bounded : Asn1BaseNode
+    final static class Case2 : Asn1BaseNode
     {
         mixin Container!(Asn1NodeType.FAILSAFE,
             Asn1RootEnumerationNode,
@@ -1488,8 +1509,8 @@ final class Asn1EnumerationsNode : Asn1BaseNode
 
     mixin OneOf!(Asn1NodeType.Enumerations,
         Asn1RootEnumerationNode,
-        Unbounded,
-        Bounded
+        Case1,
+        Case2
     );
 }
 
@@ -1533,10 +1554,7 @@ final class Asn1EnumeratedValueNode : Asn1BaseNode
 }
 
 // RealType ::= REAL
-final class Asn1RealTypeNode : Asn1BaseNode
-{
-    mixin Container!(Asn1NodeType.RealType);
-}
+alias Asn1RealTypeNode = Asn1StaticNode!(Asn1NodeType.RealType);
 
 /++
     RealValue ::=
@@ -1581,9 +1599,8 @@ final class Asn1NumericRealValueNode : Asn1BaseNode
 final class Asn1SpecialRealValueNode : Asn1BaseNode
 {
     mixin OneOf!(Asn1NodeType.SpecialRealValue,
-        Asn1SequenceValueNode,
         Asn1PlusInfinityNode,
-        Asn1NegativeInfinityNode,
+        Asn1MinusInfinityNode,
     );
 }
 
@@ -1651,9 +1668,9 @@ final class Asn1NamedBitNode : Asn1BaseNode
  ++/
 final class Asn1BitStringValueNode : Asn1BaseNode
 {
-    final class Empty : Asn1BaseNode
+    final static class Empty : Asn1BaseNode
     {
-        mixin Container!(Asn1NodeType.FAILSAFE);
+        mixin Container!(Asn1NodeType.FAILSAFE, Asn1EmptyNode);
     }
 
     mixin OneOf!(Asn1NodeType.BitStringValue, 
@@ -1678,10 +1695,7 @@ final class Asn1IdentifierListNode : Asn1BaseNode
 /++
     OctetStringType ::= OCTET STRING
  ++/
-final class Asn1OctetStringTypeNode : Asn1BaseNode
-{
-    mixin Container!(Asn1NodeType.OctetStringType);
-}
+alias Asn1OctetStringTypeNode = Asn1StaticNode!(Asn1NodeType.OctetStringType);
 
 /++
     OctetStringValue ::=
@@ -1716,10 +1730,7 @@ alias Asn1NullValueNode = Asn1StaticNode!(Asn1NodeType.NullValue);
  ++/
 final class Asn1SequenceTypeNode : Asn1BaseNode
 {
-    final static class Empty : Asn1BaseNode
-    {
-        mixin Container!(Asn1NodeType.FAILSAFE);
-    }
+    alias Empty = Asn1StaticNode!(Asn1NodeType.FAILSAFE);
 
     final static class Extension : Asn1BaseNode
     {
@@ -1780,11 +1791,19 @@ final class Asn1ComponentTypeListsNode : Asn1BaseNode
 
     final static class Case2 : Asn1BaseNode
     {
+        final static class Additional : Asn1BaseNode
+        {
+            mixin Container!(Asn1NodeType.FAILSAFE,
+                Asn1RootComponentTypeListNode
+            );
+        }
+
         mixin Container!(Asn1NodeType.FAILSAFE,
             Asn1RootComponentTypeListNode,
             Asn1ExtensionAndExceptionNode,
+            Asn1ExtensionAdditionsNode,
             Asn1ExtensionEndMarkerNode,
-            Asn1RootComponentTypeListNode,
+            Additional,
         );
     }
 
@@ -1829,7 +1848,7 @@ final class Asn1RootComponentTypeListNode : Asn1BaseNode
 /++
     ExtensionEndMarker ::= "," "..."
  ++/
-alias Asn1ExtensionEndMarkerNode = Asn1StaticNode!(Asn1NodeType.ExtensionAndException);
+alias Asn1ExtensionEndMarkerNode = Asn1StaticNode!(Asn1NodeType.ExtensionEndMarker);
 
 /++
     ExtensionAdditions ::=
@@ -1872,7 +1891,7 @@ final class Asn1ExtensionAdditionNode : Asn1BaseNode
  ++/
 final class Asn1ExtensionAdditionGroupNode : Asn1BaseNode
 {
-    mixin OneOf!(Asn1NodeType.ExtensionAdditionGroup,
+    mixin Container!(Asn1NodeType.ExtensionAdditionGroup,
         Asn1VersionNumberNode,
         Asn1ComponentTypeListNode,
     );
@@ -1923,18 +1942,11 @@ final class Asn1ComponentTypeNode : Asn1BaseNode
         );
     }
 
-    final static class Components : Asn1BaseNode
-    {
-        mixin Container!(Asn1NodeType.FAILSAFE,
-            Asn1TypeNode,
-        );
-    }
-
     mixin OneOf!(Asn1NodeType.ComponentType, 
         Asn1NamedTypeNode,
         Optional,
         Default,
-        Components
+        Asn1TypeNode,
     );
 }
 
@@ -1947,7 +1959,7 @@ final class Asn1SequenceValueNode : Asn1BaseNode
 {
     final static class Empty : Asn1BaseNode
     {
-        mixin Container!(Asn1NodeType.FAILSAFE);
+        mixin Container!(Asn1NodeType.FAILSAFE, Asn1EmptyNode);
     }
 
     mixin OneOf!(Asn1NodeType.SequenceValue, 
@@ -1987,7 +1999,7 @@ final class Asn1SequenceOfValueNode : Asn1BaseNode
 {
     final static class Empty : Asn1BaseNode
     {
-        mixin Container!(Asn1NodeType.FAILSAFE);
+        mixin Container!(Asn1NodeType.FAILSAFE, Asn1EmptyNode);
     }
 
     mixin OneOf!(Asn1NodeType.SequenceOfValue, 
@@ -2027,7 +2039,7 @@ final class Asn1SetTypeNode : Asn1BaseNode
 {
     final static class Empty : Asn1BaseNode
     {
-        mixin Container!(Asn1NodeType.FAILSAFE);
+        mixin Container!(Asn1NodeType.FAILSAFE, Asn1EmptyNode);
     }
 
     final static class Extension : Asn1BaseNode
@@ -2054,7 +2066,7 @@ final class Asn1SetValueNode : Asn1BaseNode
 {
     final static class Empty : Asn1BaseNode
     {
-        mixin Container!(Asn1NodeType.FAILSAFE);
+        mixin Container!(Asn1NodeType.FAILSAFE, Asn1EmptyNode);
     }
 
     mixin OneOf!(Asn1NodeType.SetValue, 
@@ -2086,7 +2098,7 @@ final class Asn1SetOfValueNode : Asn1BaseNode
 {
     final static class Empty : Asn1BaseNode
     {
-        mixin Container!(Asn1NodeType.FAILSAFE);
+        mixin Container!(Asn1NodeType.FAILSAFE, Asn1EmptyNode);
     }
 
     mixin OneOf!(Asn1NodeType.SetOfValue, 
@@ -2108,12 +2120,12 @@ final class Asn1ChoiceTypeNode : Asn1BaseNode
 
 /++
     AlternativeTypeLists ::=
-        RootAlternativeTypeList
-        | RootAlternativeTypeList "," ExtensionAndException ExtensionAdditionAlternatives OptionalExtensionMarker
+                RootAlternativeTypeList
+        [Case1] | RootAlternativeTypeList "," ExtensionAndException ExtensionAdditionAlternatives OptionalExtensionMarker
  ++/
 final class Asn1AlternativeTypeListsNode : Asn1BaseNode
 {
-    final static class Extension : Asn1BaseNode
+    final static class Case1 : Asn1BaseNode
     {
         mixin Container!(Asn1NodeType.FAILSAFE,
             Asn1RootAlternativeTypeListNode,
@@ -2125,7 +2137,7 @@ final class Asn1AlternativeTypeListsNode : Asn1BaseNode
 
     mixin OneOf!(Asn1NodeType.AlternativeTypeLists,
         Asn1RootAlternativeTypeListNode,
-        Extension,
+        Case1,
     );
 }
 
@@ -2318,12 +2330,12 @@ alias Asn1ObjectIdentifierTypeNode = Asn1StaticNode!(Asn1NodeType.OBJECT_IDENTIF
 
 /++
     ObjectIdentifierValue ::=
-        "{" ObjIdComponentsList "}"
-        | "{" DefinedValue ObjIdComponentsList "}"
+                "{" ObjIdComponentsList "}"
+        [Case1] | "{" DefinedValue ObjIdComponentsList "}"
  ++/
 final class Asn1ObjectIdentifierValueNode : Asn1BaseNode
 {
-    final static class DefinedValue : Asn1BaseNode
+    final static class Case1 : Asn1BaseNode
     {
         mixin Container!(Asn1NodeType.FAILSAFE,
             Asn1DefinedValueNode,
@@ -2333,7 +2345,7 @@ final class Asn1ObjectIdentifierValueNode : Asn1BaseNode
 
     mixin OneOf!(Asn1NodeType.ObjectIdentifierValue, 
         Asn1ObjIdComponentsListNode,
-        DefinedValue,
+        Case1,
     );
 }
 
@@ -2441,7 +2453,6 @@ final class Asn1RelativeOIDComponentsNode : Asn1BaseNode
         Asn1DefinedValueNode,
     );
 }
-
 
 /++
     EmbeddedPDVType ::= EMBEDDED PDV
@@ -2701,12 +2712,12 @@ final class Asn1UsefulTypeNode : Asn1BaseNode
 
 /++
     ConstrainedType ::=
-        Type Constraint
+        [Case1] Type Constraint
         | TypeWithConstraint
  + ++/
 final class Asn1ConstrainedTypeNode : Asn1BaseNode
 {
-    final static class TypeAndConstraint : Asn1BaseNode
+    final static class Case1 : Asn1BaseNode
     {
         mixin Container!(Asn1NodeType.FAILSAFE,
             Asn1TypeNode,
@@ -2715,7 +2726,7 @@ final class Asn1ConstrainedTypeNode : Asn1BaseNode
     }
 
     mixin OneOf!(Asn1NodeType.ConstrainedType,
-        TypeAndConstraint,
+        Case1,
         Asn1TypeWithConstraintNode,
     );
 }
@@ -2838,20 +2849,20 @@ final class Asn1SubtypeConstraintNode : Asn1BaseNode
 
 /++
     ElementSetSpecs ::=
-        RootElementSetSpec
-        | RootElementSetSpec "," "..."
-        | RootElementSetSpec "," "..." "," AdditionalElementSetSpec
+                RootElementSetSpec
+        [Case1] | RootElementSetSpec "," "..."
+        [Case2] | RootElementSetSpec "," "..." "," AdditionalElementSetSpec
  + ++/
 final class Asn1ElementSetSpecsNode : Asn1BaseNode
 {
-    final static class Open : Asn1BaseNode
+    final static class Case1 : Asn1BaseNode
     {
         mixin Container!(Asn1NodeType.FAILSAFE,
             Asn1RootElementSetSpecNode,
         );
     }
 
-    final static class OpenAdditional : Asn1BaseNode
+    final static class Case2 : Asn1BaseNode
     {
         mixin Container!(Asn1NodeType.FAILSAFE,
             Asn1RootElementSetSpecNode,
@@ -2859,10 +2870,10 @@ final class Asn1ElementSetSpecsNode : Asn1BaseNode
         );
     }
 
-    mixin Container!(Asn1NodeType.ElementSetSpecs,
+    mixin OneOf!(Asn1NodeType.ElementSetSpecs,
         Asn1RootElementSetSpecNode,
-        Open,
-        OpenAdditional,
+        Case1,
+        Case2,
     );
 }
 
@@ -2920,11 +2931,11 @@ final class Asn1IntersectionsNode : Asn1BaseNode
 }
 
 /++
-    IntersectionElements ::= Elements | Elems Exclusions
+    IntersectionElements ::= Elements | [Case1] Elems Exclusions
  + ++/
 final class Asn1IntersectionElementsNode : Asn1BaseNode
 {
-    final static class Exclusions : Asn1BaseNode
+    final static class Case1 : Asn1BaseNode
     {
         mixin Container!(Asn1NodeType.FAILSAFE,
             Asn1ElemsNode,
@@ -2934,7 +2945,7 @@ final class Asn1IntersectionElementsNode : Asn1BaseNode
 
     mixin OneOf!(Asn1NodeType.IntersectionElements, 
         Asn1ElementsNode,
-        Exclusions,
+        Case1,
     );
 }
 
@@ -3003,7 +3014,7 @@ final class Asn1SubtypeElementsNode : Asn1BaseNode
  + ++/
 final class Asn1SingleValueNode : Asn1BaseNode
 {
-    mixin OneOf!(Asn1NodeType.SingleValue,
+    mixin Container!(Asn1NodeType.SingleValue,
         Asn1ValueNode,
     );
 }
@@ -3042,11 +3053,11 @@ final class Asn1ValueRangeNode : Asn1BaseNode
 }
 
 /++
-    LowerEndpoint ::= LowerEndValue | LowerEndValue "<"
+    LowerEndpoint ::= LowerEndValue | [Case1] LowerEndValue "<"
  + ++/
 final class Asn1LowerEndpointNode : Asn1BaseNode
 {
-    final static class Open : Asn1BaseNode
+    final static class Case1 : Asn1BaseNode
     {
         mixin Container!(Asn1NodeType.FAILSAFE,
             Asn1LowerEndValueNode,
@@ -3055,16 +3066,16 @@ final class Asn1LowerEndpointNode : Asn1BaseNode
 
     mixin OneOf!(Asn1NodeType.LowerEndpoint,
         Asn1LowerEndValueNode,
-        Open,
+        Case1,
     );
 }
 
 /++
-    UpperEndpoint ::= UpperEndValue | "<" UpperEndValue
+    UpperEndpoint ::= UpperEndValue | [Case1] "<" UpperEndValue
  + ++/
 final class Asn1UpperEndpointNode : Asn1BaseNode
 {
-    final static class Open : Asn1BaseNode
+    final static class Case1 : Asn1BaseNode
     {
         mixin Container!(Asn1NodeType.FAILSAFE,
             Asn1UpperEndValueNode,
@@ -3073,7 +3084,7 @@ final class Asn1UpperEndpointNode : Asn1BaseNode
 
     mixin OneOf!(Asn1NodeType.UpperEndpoint,
         Asn1UpperEndValueNode,
-        Open,
+        Case1,
     );
 }
 
@@ -3136,7 +3147,7 @@ final class Asn1PermittedAlphabetNode : Asn1BaseNode
  + ++/
 final class Asn1InnerTypeConstraintsNode : Asn1BaseNode
 {
-    mixin Container!(Asn1NodeType.InnerTypeConstraints,
+    mixin OneOf!(Asn1NodeType.InnerTypeConstraints,
         Asn1SingleTypeConstraintNode,
         Asn1MultipleTypeConstraintsNode,
     );
@@ -3424,7 +3435,7 @@ final class Asn1FieldSpecListNode : Asn1BaseNode
 }
 
 /++
-    WithSyntaxSpec ::= WITH SYNTAX SyntaxList | empty
+    WithSyntaxSpec ::= WITH SYNTAX "{" SyntaxList "}" | empty
  + ++/
 final class Asn1WithSyntaxSpecNode : Asn1BaseNode
 {
@@ -3663,7 +3674,7 @@ final class Asn1FieldNameNode : Asn1BaseNode
 }
 
 /++
-    SyntaxList ::= "{" TokenOrGroupSpec empty + "}"
+    SyntaxList ::= TokenOrGroupSpec empty +
  + ++/
 final class Asn1SyntaxListNode : Asn1BaseNode
 {
@@ -3673,7 +3684,7 @@ final class Asn1SyntaxListNode : Asn1BaseNode
 }
 
 /++
-    TokenOrGroupSpec ::= RequiredToken | OptionalGroup
+    TokenOrGroupSpec ::= RequiredToken | "[" OptionalGroup "]"
  + ++/
 final class Asn1TokenOrGroupSpecNode : Asn1BaseNode
 {
@@ -3684,7 +3695,7 @@ final class Asn1TokenOrGroupSpecNode : Asn1BaseNode
 }
 
 /++
-    OptionalGroup ::= "[" TokenOrGroupSpec empty + "]"
+    OptionalGroup ::= TokenOrGroupSpec empty +
  + ++/
 final class Asn1OptionalGroupNode : Asn1BaseNode
 {
@@ -3754,8 +3765,8 @@ final class Asn1ObjectNode : Asn1BaseNode
 
 /++
     ObjectDefn ::=
-        DefaultSyntax
-        | DefinedSyntax
+        "{" DefaultSyntax "}"
+        | "{" DefinedSyntax "}"
  + ++/
 final class Asn1ObjectDefnNode : Asn1BaseNode
 {
@@ -3766,7 +3777,7 @@ final class Asn1ObjectDefnNode : Asn1BaseNode
 }
 
 /++
-    DefaultSyntax ::= "{" FieldSetting "," * "}"
+    DefaultSyntax ::= FieldSetting "," *
  + ++/
 final class Asn1DefaultSyntaxNode : Asn1BaseNode
 {
@@ -3787,7 +3798,7 @@ final class Asn1FieldSettingNode : Asn1BaseNode
 }
 
 /++
-    DefinedSyntax ::= "{" DefinedSyntaxToken empty * "}"
+    DefinedSyntax ::= DefinedSyntaxToken empty *
  + ++/
 final class Asn1DefinedSyntaxNode : Asn1BaseNode
 {
@@ -4213,11 +4224,21 @@ final class Asn1ParameterizedObjectSetAssignmentNode : Asn1BaseNode
 }
 
 /++
-    ParameterList ::= "{" Parameter "," + "}"
+    ParameterList ::= "{" ParameterListValues "}"
  + ++/
 final class Asn1ParameterListNode : Asn1BaseNode
 {
-    mixin List!(Asn1NodeType.ParameterList,
+    mixin Container!(Asn1NodeType.ParameterList,
+        Asn1ParameterListValuesNode,
+    );
+}
+
+/++
+    ParameterListValues ::= Parameter "," +
+ + ++/
+final class Asn1ParameterListValuesNode : Asn1BaseNode
+{
+    mixin List!(Asn1NodeType.ParameterListValues,
         Asn1ParameterNode,
     );
 }
@@ -4335,7 +4356,7 @@ final class Asn1SimpleDefinedTypeNode : Asn1BaseNode
 final class Asn1ParameterizedValueNode : Asn1BaseNode
 {
     mixin Container!(Asn1NodeType.ParameterizedValue,
-        Asn1SimpleDefinedTypeNode,
+        Asn1SimpleDefinedValueNode,
         Asn1ActualParameterListNode,
     );
 }
@@ -4407,11 +4428,22 @@ final class Asn1ParameterizedObjectNode : Asn1BaseNode
 
 /++
     ActualParameterList ::=
-        "{" ActualParameter "," + "}"
+        "{" ActualParameterListValues "}"
  + ++/
 final class Asn1ActualParameterListNode : Asn1BaseNode
 {
-    mixin List!(Asn1NodeType.ActualParameterList,
+    mixin Container!(Asn1NodeType.ActualParameterList,
+        Asn1ActualParameterListValuesNode,
+    );
+}
+
+/++
+    ActualParameterListValues ::=
+        ActualParameter "," +
+ + ++/
+final class Asn1ActualParameterListValuesNode : Asn1BaseNode
+{
+    mixin List!(Asn1NodeType.ActualParameterListValues,
         Asn1ActualParameterNode,
     );
 }
@@ -4439,7 +4471,7 @@ final class Asn1ActualParameterNode : Asn1BaseNode
 
 /++
     GeneralConstraint ::=
-        UserDefinedConstraint
+        CONSTRAINED BY "{" UserDefinedConstraint "}"
         | TableConstraint
         | ContentsConstraint
  + ++/
@@ -4454,7 +4486,7 @@ final class Asn1GeneralConstraintNode : Asn1BaseNode
 
 /++
     UserDefinedConstraint ::=
-        CONSTRAINED BY "{" UserDefinedConstraintParameter "," * "}"
+        UserDefinedConstraintParameter "," *
  + ++/
 final class Asn1UserDefinedConstraintNode : Asn1BaseNode
 {
@@ -4584,9 +4616,24 @@ final class Asn1AtNotationNode : Asn1BaseNode
  + ++/
 final class Asn1LevelNode : Asn1BaseNode
 {
+    final static class Case1 : Asn1BaseNode
+    {
+        uint _level;
+        this(uint level) @safe @nogc nothrow pure
+        {
+            super(Asn1NodeType.FAILSAFE);
+            this._level = level;
+        }
+
+        uint level() @safe @nogc nothrow pure const
+        {
+            return this._level;
+        }
+    }
+
     mixin OneOf!(Asn1NodeType.Level,
-        Asn1LevelNode,
-        Asn1EmptyNode,
+        Case1,
+        Asn1EmptyNode
     );
 }
 
@@ -4596,7 +4643,7 @@ final class Asn1LevelNode : Asn1BaseNode
 final class Asn1ComponentIdListNode : Asn1BaseNode
 {
     mixin List!(Asn1NodeType.ComponentIdList,
-        Asn1IdentifierListNode
+        Asn1IdentifierTokenNode
     );
 }
 

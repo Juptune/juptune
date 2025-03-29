@@ -13,7 +13,7 @@ local('''
 local_resource(
     'test',
     cmd='meson test -C build || cat build/meson-logs/testlog.txt',
-    deps=['meson.build', 'src/'],
+    deps=['meson.build', 'src/', 'tools/'],
     labels=['development']
 )
 cmd_button(
