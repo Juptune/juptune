@@ -1726,23 +1726,15 @@ alias Asn1NullValueNode = Asn1StaticNode!(Asn1NodeType.NullValue);
     SequenceType ::=
         SEQUENCE "{" "}"
         | SEQUENCE "{" ExtensionAndException OptionalExtensionMarker "}"
+            (I don't know why this one exists, since ComponentTypeLists covers this case?)
         | SEQUENCE "{" ComponentTypeLists "}"
  ++/
 final class Asn1SequenceTypeNode : Asn1BaseNode
 {
     alias Empty = Asn1StaticNode!(Asn1NodeType.FAILSAFE);
 
-    final static class Extension : Asn1BaseNode
-    {
-        mixin Container!(Asn1NodeType.FAILSAFE,
-            Asn1ExtensionAndExceptionNode,
-            Asn1OptionalExtensionMarkerNode,
-        );
-    }
-
     mixin OneOf!(Asn1NodeType.SequenceType,
         Empty,
-        Extension,
         Asn1ComponentTypeListsNode,
     );
 }
@@ -2037,22 +2029,10 @@ final class Asn1NamedValueListNode : Asn1BaseNode
  ++/
 final class Asn1SetTypeNode : Asn1BaseNode
 {
-    final static class Empty : Asn1BaseNode
-    {
-        mixin Container!(Asn1NodeType.FAILSAFE, Asn1EmptyNode);
-    }
-
-    final static class Extension : Asn1BaseNode
-    {
-        mixin Container!(Asn1NodeType.FAILSAFE,
-            Asn1ExtensionAndExceptionNode,
-            Asn1OptionalExtensionMarkerNode,
-        );
-    }
+    alias Empty = Asn1StaticNode!(Asn1NodeType.empty);
 
     mixin OneOf!(Asn1NodeType.SetType, 
         Empty,
-        Extension,
         Asn1ComponentTypeListsNode,
     );
 }
@@ -2158,7 +2138,7 @@ final class Asn1RootAlternativeTypeListNode : Asn1BaseNode
  ++/
 final class Asn1ExtensionAdditionAlternativesNode : Asn1BaseNode
 {
-    mixin Container!(Asn1NodeType.ExtensionAdditionAlternatives,
+    mixin OneOf!(Asn1NodeType.ExtensionAdditionAlternatives,
         Asn1ExtensionAdditionAlternativesListNode,
         Asn1EmptyNode,
     );

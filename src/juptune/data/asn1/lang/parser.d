@@ -644,9 +644,10 @@ struct Asn1Parser
             );
             return Result.noError;
         }
-        consume().resultAssert;
 
         Asn1Lexer savedBeforeComma = _lexer;
+        consume().resultAssert;
+
         auto list = _context.allocNode!Asn1ExtensionAdditionListNode();
         while(true)
         {
@@ -694,7 +695,14 @@ struct Asn1Parser
             consume().resultAssert;
         }
 
-        node = _context.allocNode!(typeof(node))(list);
+        if(list.items.length == 0) // This can happen when ExtensionAdditions is placed before another comma-starting production.
+        {
+            node = _context.allocNode!(typeof(node))(
+                _context.allocNode!Asn1EmptyNode(token)
+            );
+        }
+        else
+            node = _context.allocNode!(typeof(node))(list);
         return Result.noError;
     }
 
@@ -704,6 +712,18 @@ struct Asn1Parser
         static struct StringType(NodeT_)
         {
             alias NodeT = NodeT_;
+            Asn1Token.Type type;
+        }
+
+        static struct TypeListType(string Name_, ListT_, OfT_)
+        {
+            static immutable Name = Name_;
+            alias ListT = ListT_;
+            alias OfT = OfT_;
+
+            static immutable BeginErrorMsg = "expected opening bracket to begin `"~Name_~"` type list";
+            static immutable EndErrorMsg = "expected closing bracket to end `"~Name_~"` type list";
+
             Asn1Token.Type type;
         }
 
@@ -744,13 +764,75 @@ struct Asn1Parser
                 else
                 {
                     consume().resultAssert;
-                    assert(false, "Not implemented");
+
+                    auto bitList = _context.allocNode!Asn1NamedBitListNode();
+                    while(true)
+                    {
+                        Asn1Token id;
+                        if(auto r = peek(id)) return r;
+                        if(id.type != identifier) break;
+                        consume().resultAssert;
+
+                        if(auto r = consume(auxToken)) return r;
+                        if(auxToken.type != leftParenthesis) return _lexer.makeError(
+                            Asn1ParserError.nonInitialTokenNotFound,
+                            "expected `(` following name of named bit within a `BIT STRING` component list",
+                            auxToken.location, "encountered token of type ", auxToken.type
+                        );
+
+                        Asn1Token bitNumber;
+                        if(auto r = peek(bitNumber)) return r;
+                        if(bitNumber.type == number)
+                        {
+                            consume().resultAssert;
+                            auto bit = _context.allocNode!Asn1NamedBitNode(
+                                _context.allocNode!(Asn1NamedBitNode.Number)(
+                                    _context.allocNode!Asn1IdentifierTokenNode(id),
+                                    _context.allocNode!Asn1NumberTokenNode(bitNumber)
+                                )
+                            );
+                            bitList.items.put(bit);
+                        }
+                        else
+                        {
+                            Asn1DefinedValueNode value;
+                            if(auto r = DefinedValue(value)) return r.notInitial;
+
+                            auto bit = _context.allocNode!Asn1NamedBitNode(
+                                _context.allocNode!(Asn1NamedBitNode.DefinedValue)(
+                                    _context.allocNode!Asn1IdentifierTokenNode(id),
+                                    value
+                                )
+                            );
+                            bitList.items.put(bit);
+                        }
+
+                        if(auto r = consume(auxToken)) return r;
+                        if(auxToken.type != rightParenthesis) return _lexer.makeError(
+                            Asn1ParserError.nonInitialTokenNotFound,
+                            "expected `)` following value of named bit within a `BIT STRING` component list",
+                            auxToken.location, "encountered token of type ", auxToken.type
+                        );
+
+                        if(auto r = peek(auxToken)) return r;
+                        if(auxToken.type != comma) break;
+                        consume().resultAssert;
+                    }
+
+                    if(bitList.items.length == 0) return _lexer.makeError(
+                        Asn1ParserError.listMustNotBeEmpty,
+                        "component list for `BIT STRING` is not allowed to empty - `BIT STRING { }` is forbidden",
+                        token.location
+                    );
+
                     if(auto r = consume(auxToken)) return r;
                     if(auxToken.type != rightBracket) return _lexer.makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected closing bracket to complete `BIT STRING` component list",
-                        token.location, "encountered token of type ", token.type
+                        auxToken.location, "encountered token of type ", auxToken.type
                     );
+
+                    makeBuiltin!Asn1BitStringTypeNode(bitList);
                 }
                 return Result.noError;
 
@@ -804,31 +886,7 @@ struct Asn1Parser
                     token.location, "encountered token of type ", token.type
                 );
 
-                auto typeList = _context.allocNode!Asn1AlternativeTypeListNode();
-                bool endingComma = false;
-                while(true)
-                {
-                    if(auto r = peek(token)) return r;
-                    if(token.type != identifier) break;
-                    endingComma = false;
-
-                    Asn1NamedTypeNode namedType;
-                    if(auto r = NamedType(namedType)) return r.notInitial;
-                    typeList.items.put(namedType);
-
-                    if(auto r = peek(token)) return r;
-                    if(token.type != comma) break;
-                    consume().resultAssert;
-                    endingComma = true;
-                }
-
-                if(typeList.items.length == 0) return _lexer.makeError(
-                    Asn1ParserError.listMustNotBeEmpty,
-                    "alternative type list for `CHOICE` is not allowed to empty - `CHOICE { }` is forbidden",
-                    token.location
-                );
-                
-                if(!endingComma)
+                Result checkEnd()
                 {
                     if(auto r = consume(token)) return r;
                     if(token.type != rightBracket) return _lexer.makeError(
@@ -836,6 +894,43 @@ struct Asn1Parser
                         "expected closing bracket to end `CHOICE` alternative type list",
                         token.location, "encountered token of type ", token.type
                     );
+                    return Result.noError;
+                }
+
+                Result AlternativeTypeList(out Asn1AlternativeTypeListNode typeList, out bool endingComma)
+                {
+                    typeList = _context.allocNode!Asn1AlternativeTypeListNode();
+                    while(true)
+                    {
+                        if(auto r = peek(token)) return r;
+                        if(token.type != identifier) break;
+                        endingComma = false;
+
+                        Asn1NamedTypeNode namedType;
+                        if(auto r = NamedType(namedType)) return r.notInitial;
+                        typeList.items.put(namedType);
+
+                        if(auto r = peek(token)) return r;
+                        if(token.type != comma) break;
+                        consume().resultAssert;
+                        endingComma = true;
+                    }
+
+                    if(typeList.items.length == 0) return _lexer.makeError(
+                        Asn1ParserError.listMustNotBeEmpty,
+                        "alternative type list for `CHOICE` is not allowed to empty - `CHOICE { }` is forbidden",
+                        token.location
+                    );
+                    return Result.noError;
+                }
+                
+                Asn1AlternativeTypeListNode typeList;
+                bool endingComma;
+                if(auto r = AlternativeTypeList(typeList, endingComma)) return r;
+                
+                if(!endingComma)
+                {
+                    if(auto r = checkEnd()) return r;
 
                     makeBuiltin!Asn1ChoiceTypeNode(
                         _context.allocNode!Asn1AlternativeTypeListsNode(
@@ -847,7 +942,131 @@ struct Asn1Parser
                     return Result.noError;
                 }
 
-                return assert(false, "TODO: Case1"); // GOTO: AlternativeTypeLists
+                Asn1ExtensionAndExceptionNode extAndExc;
+                if(auto r = ExtensionAndException(extAndExc)) return r.notInitial;
+                if(auto r = peek(token)) return r;
+                if(token.type != comma)
+                {
+                    if(auto r = checkEnd()) return r;
+
+                    makeBuiltin!Asn1ChoiceTypeNode(
+                        _context.allocNode!Asn1AlternativeTypeListsNode(
+                            _context.allocNode!(Asn1AlternativeTypeListsNode.Case1)(
+                                _context.allocNode!Asn1RootAlternativeTypeListNode(
+                                    typeList
+                                ),
+                                extAndExc,
+                                _context.allocNode!Asn1ExtensionAdditionAlternativesNode(
+                                    _context.allocNode!Asn1EmptyNode(token)
+                                ),
+                                _context.allocNode!Asn1OptionalExtensionMarkerNode(
+                                    _context.allocNode!Asn1EmptyNode(token)
+                                )
+                            )
+                        )
+                    );
+                    return Result.noError;
+                }
+                consume().resultAssert;
+
+                Asn1ExtensionAdditionAlternativesListNode addList;
+                if(auto r = peek(token)) return r;
+                if(token.type != ellipsis)
+                {
+                    addList = _context.allocNode!(typeof(addList))();
+                    while(true)
+                    {
+                        if(auto r = peek(token)) return r;
+                        if(token.type == Asn1Token.Type.leftVersionBrackets)
+                        {
+                            consume().resultAssert;
+
+                            Asn1VersionNumberNode versionNumber;
+                            if(auto r = VersionNumber(versionNumber)) return r;
+
+                            Asn1AlternativeTypeListNode altTypeList;
+                            if(auto r = AlternativeTypeList(altTypeList, endingComma)) return r;
+
+                            if(endingComma) return _lexer.makeError(
+                                Asn1ParserError.nonInitialTokenNotFound,
+                                "expected alternative type following comma within a `CHOICE` alternative type list",
+                                token.location, "encountered token of type ", token.type
+                            );
+
+                            if(auto r = consume(token)) return r;
+                            if(token.type != rightVersionBrackets) return _lexer.makeError(
+                                Asn1ParserError.nonInitialTokenNotFound,
+                                "expected `]]` to close alternative group within a `CHOICE` alternative type list",
+                                token.location, "encountered token of type ", token.type
+                            );
+
+                            auto group = _context.allocNode!Asn1ExtensionAdditionAlternativesGroupNode(
+                                versionNumber,
+                                altTypeList
+                            );
+                            addList.items.put(_context.allocNode!Asn1ExtensionAdditionAlternativeNode(group));
+                        }
+                        else
+                        {
+                            Asn1NamedTypeNode namedType;
+                            if(auto r = NamedType(namedType)) return r;
+                            addList.items.put(_context.allocNode!Asn1ExtensionAdditionAlternativeNode(namedType));
+                        }
+
+                        if(auto r = peek(token)) return r;
+                        if(token.type != comma) break;
+                        consume().resultAssert;
+
+                        if(auto r = peek(token)) return r;
+                        if(token.type == ellipsis) break;
+                    }
+                }
+
+                Asn1OptionalExtensionMarkerNode optionalEnd;
+                if(auto r = peek(token)) return r;
+                if(token.type == ellipsis)
+                {
+                    consume().resultAssert;
+                    optionalEnd = _context.allocNode!(typeof(optionalEnd))(
+                        _context.allocNode!Asn1ElipsisNode(token)
+                    );
+                }
+                else
+                {
+                    optionalEnd = _context.allocNode!(typeof(optionalEnd))(
+                        _context.allocNode!Asn1EmptyNode(token)
+                    );
+                }
+
+                Asn1ExtensionAdditionAlternativesNode alternatives;
+                if(addList is null || addList.items.length == 0)
+                {
+                    alternatives = _context.allocNode!(typeof(alternatives))(
+                        _context.allocNode!Asn1EmptyNode(token)
+                    );
+                }
+                else
+                {
+                    alternatives = _context.allocNode!(typeof(alternatives))(
+                        addList
+                    );
+                }
+
+                if(auto r = checkEnd()) return r;
+
+                makeBuiltin!Asn1ChoiceTypeNode(
+                    _context.allocNode!Asn1AlternativeTypeListsNode(
+                        _context.allocNode!(Asn1AlternativeTypeListsNode.Case1)(
+                            _context.allocNode!Asn1RootAlternativeTypeListNode(
+                                typeList
+                            ),
+                            extAndExc,
+                            alternatives,
+                            optionalEnd
+                        ),
+                    )
+                );
+                return Result.noError;
 
             case rEMBEDDED:
                 if(auto r = consume(token)) return r;
@@ -868,38 +1087,7 @@ struct Asn1Parser
                     token.location, "encountered token of type ", token.type
                 );
 
-                auto enumeration = _context.allocNode!Asn1EnumerationNode();
-                bool endingComma = false;
-                while(true)
-                {
-                    if(auto r = peek(token)) return r;
-                    if(token.type != identifier) break;
-                    endingComma = false;
-
-                    Asn1NamedNumberNode namedNumber;
-                    if(auto r = NamedNumber(namedNumber))
-                    {
-                        consume().resultAssert;
-                        enumeration.items.put(_context.allocNode!Asn1EnumerationItemNode(
-                            _context.allocNode!Asn1IdentifierTokenNode(token)
-                        ));
-                    }
-                    else
-                        enumeration.items.put(_context.allocNode!Asn1EnumerationItemNode(namedNumber));
-
-                    if(auto r = peek(token)) return r;
-                    if(token.type != comma) break;
-                    consume().resultAssert;
-                    endingComma = true;
-                }
-
-                if(enumeration.items.length == 0) return _lexer.makeError(
-                    Asn1ParserError.listMustNotBeEmpty,
-                    "enumerations for `ENUMERATED` is not allowed to empty - `ENUMERATED { }` is forbidden",
-                    token.location
-                );
-                
-                if(!endingComma)
+                Result checkEnd()
                 {
                     if(auto r = consume(token)) return r;
                     if(token.type != rightBracket) return _lexer.makeError(
@@ -907,6 +1095,50 @@ struct Asn1Parser
                         "expected closing bracket to end `ENUMERATED` enumerations",
                         token.location, "encountered token of type ", token.type
                     );
+                    return Result.noError;
+                }
+
+                Result Enumeration(out Asn1EnumerationNode enumeration, out bool endingComma)
+                {
+                    enumeration = _context.allocNode!Asn1EnumerationNode();
+                    endingComma = false;
+                    while(true)
+                    {
+                        if(auto r = peek(token)) return r;
+                        if(token.type != identifier) break;
+                        endingComma = false;
+
+                        Asn1NamedNumberNode namedNumber;
+                        if(auto r = NamedNumber(namedNumber))
+                        {
+                            consume().resultAssert;
+                            enumeration.items.put(_context.allocNode!Asn1EnumerationItemNode(
+                                _context.allocNode!Asn1IdentifierTokenNode(token)
+                            ));
+                        }
+                        else
+                            enumeration.items.put(_context.allocNode!Asn1EnumerationItemNode(namedNumber));
+
+                        if(auto r = peek(token)) return r;
+                        if(token.type != comma) break;
+                        consume().resultAssert;
+                        endingComma = true;
+                    }
+                    if(enumeration.items.length == 0) return _lexer.makeError(
+                        Asn1ParserError.listMustNotBeEmpty,
+                        "enumerations for `ENUMERATED` is not allowed to empty - `ENUMERATED { }` is forbidden",
+                        token.location
+                    );
+                    return Result.noError;
+                }
+
+                Asn1EnumerationNode enumeration;
+                bool endingComma;
+                if(auto r = Enumeration(enumeration, endingComma)) return r;
+                
+                if(!endingComma)
+                {
+                    if(auto r = checkEnd()) return r;
 
                     makeBuiltin!Asn1EnumeratedTypeNode(
                         _context.allocNode!Asn1EnumerationsNode(
@@ -918,7 +1150,57 @@ struct Asn1Parser
                     return Result.noError;
                 }
 
-                return assert(false, "TODO: Case1 & Case2"); // GOTO: Enumerations
+                if(auto r = consume(token)) return r;
+                if(token.type != ellipsis) return _lexer.makeError(
+                    Asn1ParserError.nonInitialTokenNotFound,
+                    "expected `...` following comma within an `ENUMERATED` enumerations list",
+                    token.location, "encountered token of type ", token.type
+                );
+
+                Asn1ExceptionSpecNode excSpec;
+                if(auto r = ExceptionSpec(excSpec)) return r;
+                if(auto r = peek(token)) return r;
+                if(token.type != comma)
+                {
+                    if(auto r = checkEnd()) return r;
+
+                    makeBuiltin!Asn1EnumeratedTypeNode(
+                        _context.allocNode!Asn1EnumerationsNode(
+                            _context.allocNode!(Asn1EnumerationsNode.Case1)(
+                                _context.allocNode!Asn1RootEnumerationNode(
+                                    enumeration
+                                ),
+                                excSpec
+                            )
+                        )
+                    );
+                    return Result.noError;
+                }
+                consume().resultAssert;
+
+                Asn1EnumerationNode addEnumeration;
+                if(auto r = Enumeration(addEnumeration, endingComma)) return r;
+                if(endingComma) return _lexer.makeError(
+                    Asn1ParserError.nonInitialTokenNotFound,
+                    "expected enumeration following comma at end of an `ENUMERATED` enumerations list",
+                    token.location, "encountered token of type ", token.type
+                );
+                if(auto r = checkEnd()) return r;
+
+                makeBuiltin!Asn1EnumeratedTypeNode(
+                    _context.allocNode!Asn1EnumerationsNode(
+                        _context.allocNode!(Asn1EnumerationsNode.Case2)(
+                            _context.allocNode!Asn1RootEnumerationNode(
+                                enumeration
+                            ),
+                            excSpec,
+                            _context.allocNode!Asn1AdditionalEnumerationNode(
+                                addEnumeration
+                            ),
+                        )
+                    )
+                );
+                return Result.noError;
 
             case rEXTERNAL:
                 makeBuiltin!Asn1ExternalTypeNode(token);
@@ -1013,62 +1295,148 @@ struct Asn1Parser
                 makeBuiltin!Asn1RelativeOIDTypeNode(token);
                 return Result.noError;
 
-            case rSEQUENCE:
-                if(auto r = consume(token)) return r;
-                if(token.type == rOF)
-                {
-                    if(auto r = peek(token)) return r;
-                    if(token.type == identifier)
+            // SET and SEQUENCE are identical, so we can do a simple subtitution
+            static foreach(Case; AliasSeq!(
+                TypeListType!("SEQUENCE", Asn1SequenceTypeNode, Asn1SequenceOfTypeNode)(rSEQUENCE),
+                TypeListType!("SET", Asn1SetTypeNode, Asn1SetOfTypeNode)(rSET),
+            ))
+            {
+                case Case.type:
+                    if(auto r = consume(token)) return r;
+                    if(token.type == rOF)
                     {
-                        Asn1NamedTypeNode namedType;
-                        if(auto r = NamedType(namedType)) return r;
-                        makeBuiltin!Asn1SequenceOfTypeNode(namedType);
-                    }
-                    else
-                    {
-                        Asn1TypeNode type;
-                        if(auto r = Type(type)) return r;
-                        makeBuiltin!Asn1SequenceOfTypeNode(type);
+                        if(auto r = peek(token)) return r;
+                        if(token.type == identifier)
+                        {
+                            Asn1NamedTypeNode namedType;
+                            if(auto r = NamedType(namedType)) return r;
+                            makeBuiltin!(Case.OfT)(namedType);
+                        }
+                        else
+                        {
+                            Asn1TypeNode type;
+                            if(auto r = Type(type)) return r;
+                            makeBuiltin!(Case.OfT)(type);
+                        }
+
+                        return Result.noError;
                     }
 
+                    if(token.type != leftBracket) return _lexer.makeError(
+                        Asn1ParserError.nonInitialTokenNotFound,
+                        Case.BeginErrorMsg,
+                        token.location, "encountered token of type ", token.type
+                    );
+
+                    if(auto r = peek(token)) return r;
+                    if(token.type == rightBracket)
+                    {
+                        consume().resultAssert;
+                        makeBuiltin!(Case.ListT)(
+                            _context.allocNode!(Case.ListT.Empty)(token)
+                        );
+                        return Result.noError;
+                    }
+
+                    Asn1ComponentTypeListsNode typeLists;
+                    if(auto r = ComponentTypeLists(typeLists)) return r.notInitial;
+
+                    if(auto r = consume(token)) return r;
+                    if(token.type != rightBracket) return _lexer.makeError(
+                        Asn1ParserError.nonInitialTokenNotFound,
+                        Case.EndErrorMsg,
+                        token.location, "encountered token of type ", token.type
+                    );
+
+                    makeBuiltin!(Case.ListT)(typeLists);
                     return Result.noError;
+            }
+
+            case leftSquare:
+                Asn1ClassNode class_;
+                if(auto r = peek(token)) return r;
+                switch(token.type)
+                {
+                    case rUNIVERSAL:  
+                        class_ = _context.allocNode!Asn1ClassNode(_context.allocNode!Asn1UniversalNode(token));
+                        consume().resultAssert;
+                        break;
+                    case rAPPLICATION:  
+                        class_ = _context.allocNode!Asn1ClassNode(_context.allocNode!Asn1ApplicationNode(token));
+                        consume().resultAssert;
+                        break;
+                    case rPRIVATE:  
+                        class_ = _context.allocNode!Asn1ClassNode(_context.allocNode!Asn1PrivateNode(token));
+                        consume().resultAssert;
+                        break;
+                    default:
+                        class_ = _context.allocNode!Asn1ClassNode(_context.allocNode!Asn1EmptyNode(token));
+                        break;
                 }
 
-                if(token.type != leftBracket) return _lexer.makeError(
-                    Asn1ParserError.nonInitialTokenNotFound,
-                    "expected opening bracket to begin `SEQUENCE` type list",
-                    token.location, "encountered token of type ", token.type
-                );
-
+                Asn1ClassNumberNode classNumber;
                 if(auto r = peek(token)) return r;
-                if(token.type == rightBracket)
+                if(token.type == number)
                 {
                     consume().resultAssert;
-                    makeBuiltin!Asn1SequenceTypeNode(
-                        _context.allocNode!(Asn1SequenceTypeNode.Empty)(token)
+                    classNumber = _context.allocNode!(typeof(classNumber))(
+                        _context.allocNode!Asn1NumberTokenNode(token)
                     );
-                    return Result.noError;
                 }
-
-                Asn1ComponentTypeListsNode typeLists;
-                if(auto r = ComponentTypeLists(typeLists))
+                else
                 {
-                    if(!r.isError(Asn1ParserError.tokenNotFound))
-                        return r;
-                    assert(typeLists is null);
-                    // TODO: Handle SequenceType-specific ExtensionAndException here
-                    if(auto r2 = peek(token)) return r2;
-                    assert(token.type != ellipsis, "TODO:");
+                    Asn1DefinedValueNode value;
+                    if(auto r = DefinedValue(value)) return r.notInitial;
+                    classNumber = _context.allocNode!(typeof(classNumber))(value);
                 }
 
                 if(auto r = consume(token)) return r;
-                if(token.type != rightBracket) return _lexer.makeError(
+                if(token.type != rightSquare) return _lexer.makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
-                    "expected closing bracket to end `SEQUENCE` type list",
+                    "expected `]` to mark end of Tag, as part of a TaggedType",
                     token.location, "encountered token of type ", token.type
                 );
 
-                makeBuiltin!Asn1SequenceTypeNode(typeLists);
+                auto tag = _context.allocNode!Asn1TagNode(class_, classNumber);
+                if(auto r = peek(token)) return r;
+
+                Asn1Token tagTypeToken;
+                if(token.type == rEXPLICIT || token.type == rIMPLICIT)
+                {
+                    tagTypeToken = token;
+                    consume().resultAssert;
+                }
+
+                Asn1TypeNode type;
+                if(auto r = Type(type)) return r;
+
+                switch(tagTypeToken.type)
+                {
+                    case rEXPLICIT:
+                        makeBuiltin!Asn1TaggedTypeNode(
+                            _context.allocNode!(Asn1TaggedTypeNode.Explicit)(
+                                tag, type
+                            ),
+                        );
+                        break;
+                    
+                    case rIMPLICIT:
+                        makeBuiltin!Asn1TaggedTypeNode(
+                            _context.allocNode!(Asn1TaggedTypeNode.Implicit)(
+                                tag, type
+                            ),
+                        );
+                        break;
+
+                    default:
+                        makeBuiltin!Asn1TaggedTypeNode(
+                            _context.allocNode!(Asn1TaggedTypeNode.Default)(
+                                tag, type
+                            ),
+                        );
+                        break;
+                }
+
                 return Result.noError;
 
             default: return _lexer.makeError(
@@ -1110,9 +1478,9 @@ unittest
         "BIT STRING": T("BIT STRING", (n){ 
             assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1BitStringTypeNode.isNode!(Asn1BitStringTypeNode.Plain)); 
         }),
-        // "BIT STRING - named": T("BIT STRING {  }", (n){ 
-        //     assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1BitStringTypeNode.isNode!Asn1NamedBitListNode); 
-        // }),
+        "BIT STRING - named": T("BIT STRING { a(0), b(1) }", (n){ 
+            assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1BitStringTypeNode.isNode!Asn1NamedBitListNode); 
+        }),
         "BOOLEAN": T("BOOLEAN", (n){
             assert(n.asNode!Asn1BuiltinTypeNode.isNode!Asn1BooleanTypeNode);
         }),
@@ -1185,21 +1553,51 @@ unittest
                 );
             }
         ),
+        "CHOICE - Case1 - Alternative": T(
+            "CHOICE { a BOOLEAN, ... !20 }", (n){
+                assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1ChoiceTypeNode.getNode!Asn1AlternativeTypeListsNode.isNode!(Asn1AlternativeTypeListsNode.Case1));
+            }
+        ),
+        "CHOICE - Case1 - Alternative 2": T(
+            "CHOICE { a BOOLEAN, ... !20, ... }", (n){
+                assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1ChoiceTypeNode.getNode!Asn1AlternativeTypeListsNode.isNode!(Asn1AlternativeTypeListsNode.Case1));
+            }
+        ),
+        "CHOICE - Case1 - Alternative 3": T(
+            "CHOICE { a BOOLEAN, ... !20, b BOOLEAN, [[ 20: c INTEGER ]] }", (n){
+                assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1ChoiceTypeNode.getNode!Asn1AlternativeTypeListsNode.isNode!(Asn1AlternativeTypeListsNode.Case1));
+            }
+        ),
+        "CHOICE - Case1 - Alternative 4": T(
+            "CHOICE { a BOOLEAN, ..., [[ 20: b BOOLEAN, c INTEGER ]], ... }", (n){
+                assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1ChoiceTypeNode.getNode!Asn1AlternativeTypeListsNode.isNode!(Asn1AlternativeTypeListsNode.Case1));
+            }
+        ),
         "EMBEDDED PDV": T("EMBEDDED PDV", (n){
             assert(n.asNode!Asn1BuiltinTypeNode.isNode!Asn1EmbeddedPDVTypeNode);
         }),
-        "Enumerated - RootEnumeration - Single": T(
+        "ENUMERATED - RootEnumeration - Single": T(
             "ENUMERATED { a }", (n){
                 assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1EnumeratedTypeNode.getNode!Asn1EnumerationsNode.asNode!Asn1RootEnumerationNode.getNode!Asn1EnumerationNode
                     .items.length == 1
                 );
             }
         ),
-        "Enumerated - RootEnumeration - Multiple": T(
+        "ENUMERATED - RootEnumeration - Multiple": T(
             "ENUMERATED { a, b(1), c(-2) }", (n){
                 assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1EnumeratedTypeNode.getNode!Asn1EnumerationsNode.asNode!Asn1RootEnumerationNode.getNode!Asn1EnumerationNode
                     .items.length == 3
                 );
+            }
+        ),
+        "ENUMERATED - Case1": T(
+            "ENUMERATED { a, ... !20 }", (n){
+                assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1EnumeratedTypeNode.getNode!Asn1EnumerationsNode.isNode!(Asn1EnumerationsNode.Case1));
+            }
+        ),
+        "ENUMERATED - Case2": T(
+            "ENUMERATED { a, ... !20, b }", (n){
+                assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1EnumeratedTypeNode.getNode!Asn1EnumerationsNode.isNode!(Asn1EnumerationsNode.Case2));
             }
         ),
         "EXTERNAL": T("EXTERNAL", (n){
@@ -1321,11 +1719,129 @@ unittest
             assert(node.getNode!Asn1ExtensionAdditionsNode.isNode!Asn1EmptyNode);
             assert(node.getNode!Asn1OptionalExtensionMarkerNode.isNode!Asn1EmptyNode);
         }),
+        "SEQUENCE - Redudant case": T("SEQUENCE { ... !20, ... }", (n){
+            auto node = n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SequenceTypeNode.asNode!Asn1ComponentTypeListsNode.asNode!(Asn1ComponentTypeListsNode.Case4);
+            assert(node.getNode!Asn1ExtensionAndExceptionNode.isNode!Asn1ExceptionSpecNode);
+            assert(node.getNode!Asn1ExtensionAdditionsNode.isNode!Asn1EmptyNode);
+            assert(node.getNode!Asn1OptionalExtensionMarkerNode.isNode!Asn1ElipsisNode);
+        }),
         "SEQUENCE OF - Type": T("SEQUENCE OF INTEGER", (n){
             assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SequenceOfTypeNode.isNode!Asn1TypeNode);
         }),
         "SEQUENCE OF - NamedType": T("SEQUENCE OF i INTEGER", (n){
             assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SequenceOfTypeNode.isNode!Asn1NamedTypeNode);
+        }),
+        "SET - Empty": T("SET {}", (n){
+            assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetTypeNode.isNode!(Asn1SetTypeNode.Empty));
+        }),
+        "SET - Single - ComponentType - Plain": T("SET { a BOOLEAN }", (n){
+            assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetTypeNode.asNode!Asn1ComponentTypeListsNode.asNode!Asn1RootComponentTypeListNode.getNode!Asn1ComponentTypeListNode
+                .items.length == 1
+            );
+        }),
+        "SET - Single - ComponentType - Optional": T("SET { a BOOLEAN OPTIONAL }", (n){
+            assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetTypeNode.asNode!Asn1ComponentTypeListsNode.asNode!Asn1RootComponentTypeListNode.getNode!Asn1ComponentTypeListNode
+                .items.length == 1
+            );
+        }),
+        "SET - Single - ComponentType - COMPONENTS OF": T("SET { COMPONENTS OF INTEGER }", (n){
+            assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetTypeNode.asNode!Asn1ComponentTypeListsNode.asNode!Asn1RootComponentTypeListNode.getNode!Asn1ComponentTypeListNode
+                .items.length == 1
+            );
+        }),
+        "SET - Multiple": T("SET { a BOOLEAN, b INTEGER OPTIONAL, COMPONENTS OF INTEGER }", (n){
+            assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetTypeNode.asNode!Asn1ComponentTypeListsNode.asNode!Asn1RootComponentTypeListNode.getNode!Asn1ComponentTypeListNode
+                .items.length == 3
+            );
+        }),
+        "SET - Case1": T("SET { a BOOLEAN, ... !-20, b BOOLEAN, [[ 20: c INTEGER ]], ... }", (n){
+            auto node = n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetTypeNode.asNode!Asn1ComponentTypeListsNode.asNode!(Asn1ComponentTypeListsNode.Case1);
+            assert(node.getNode!Asn1RootComponentTypeListNode.getNode!Asn1ComponentTypeListNode
+                .items.length == 1
+            );
+            assert(node.getNode!Asn1ExtensionAndExceptionNode.asNode!Asn1ExceptionSpecNode.asNode!Asn1ExceptionIdentificationNode.asNode!Asn1SignedNumberNode.asNode!(Asn1SignedNumberNode.Negative).getNode!Asn1NumberTokenNode
+                .token.asNumber.value == 20
+            );
+            assert(node.getNode!Asn1ExtensionAdditionsNode.asNode!Asn1ExtensionAdditionListNode
+                .items.length == 2
+            );
+            assert(node.getNode!Asn1OptionalExtensionMarkerNode.isNode!Asn1ElipsisNode);
+        }),
+        "SET - Case1 - Alternative": T("SET { a BOOLEAN, ... }", (n){
+            auto node = n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetTypeNode.asNode!Asn1ComponentTypeListsNode.asNode!(Asn1ComponentTypeListsNode.Case1);
+            assert(node.getNode!Asn1RootComponentTypeListNode.getNode!Asn1ComponentTypeListNode
+                .items.length == 1
+            );
+            assert(node.getNode!Asn1ExtensionAndExceptionNode.isNode!Asn1ElipsisNode);
+            assert(node.getNode!Asn1ExtensionAdditionsNode.isNode!Asn1EmptyNode);
+            assert(node.getNode!Asn1OptionalExtensionMarkerNode.isNode!Asn1EmptyNode);
+        }),
+        "SET - Case2": T("SET { a BOOLEAN, ... !-20, b BOOLEAN, [[ 20: c INTEGER ]], ..., d BIT STRING, e INTEGER }", (n){
+            auto node = n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetTypeNode.asNode!Asn1ComponentTypeListsNode.asNode!(Asn1ComponentTypeListsNode.Case2);
+            assert(node.getNode!Asn1RootComponentTypeListNode.getNode!Asn1ComponentTypeListNode
+                .items.length == 1
+            );
+            assert(node.getNode!Asn1ExtensionAndExceptionNode.asNode!Asn1ExceptionSpecNode.asNode!Asn1ExceptionIdentificationNode.asNode!Asn1SignedNumberNode.asNode!(Asn1SignedNumberNode.Negative).getNode!Asn1NumberTokenNode
+                .token.asNumber.value == 20
+            );
+            assert(node.getNode!Asn1ExtensionAdditionsNode.asNode!Asn1ExtensionAdditionListNode
+                .items.length == 2
+            );
+            assert(node.getNode!(Asn1ComponentTypeListsNode.Case2.Additional).getNode!Asn1RootComponentTypeListNode.getNode!Asn1ComponentTypeListNode
+                .items.length == 2
+            );
+        }),
+        "SET - Case3": T("SET { ... !-20, b BOOLEAN, [[ 20: c INTEGER ]], ..., d BIT STRING, e INTEGER }", (n){
+            auto node = n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetTypeNode.asNode!Asn1ComponentTypeListsNode.asNode!(Asn1ComponentTypeListsNode.Case3);
+            assert(node.getNode!Asn1ExtensionAndExceptionNode.asNode!Asn1ExceptionSpecNode.asNode!Asn1ExceptionIdentificationNode.asNode!Asn1SignedNumberNode.asNode!(Asn1SignedNumberNode.Negative).getNode!Asn1NumberTokenNode
+                .token.asNumber.value == 20
+            );
+            assert(node.getNode!Asn1ExtensionAdditionsNode.asNode!Asn1ExtensionAdditionListNode
+                .items.length == 2
+            );
+            assert(node.getNode!Asn1RootComponentTypeListNode.getNode!Asn1ComponentTypeListNode
+                .items.length == 2
+            );
+        }),
+        "SET - Case4": T("SET { ... !-20, b BOOLEAN, [[ 20: c INTEGER ]], ... }", (n){
+            auto node = n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetTypeNode.asNode!Asn1ComponentTypeListsNode.asNode!(Asn1ComponentTypeListsNode.Case4);
+            assert(node.getNode!Asn1ExtensionAndExceptionNode.asNode!Asn1ExceptionSpecNode.asNode!Asn1ExceptionIdentificationNode.asNode!Asn1SignedNumberNode.asNode!(Asn1SignedNumberNode.Negative).getNode!Asn1NumberTokenNode
+                .token.asNumber.value == 20
+            );
+            assert(node.getNode!Asn1ExtensionAdditionsNode.asNode!Asn1ExtensionAdditionListNode
+                .items.length == 2
+            );
+            assert(node.getNode!Asn1OptionalExtensionMarkerNode.isNode!Asn1ElipsisNode);
+        }),
+        "SET - Case4 - Alternative": T("SET { ... }", (n){
+            auto node = n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetTypeNode.asNode!Asn1ComponentTypeListsNode.asNode!(Asn1ComponentTypeListsNode.Case4);
+            assert(node.getNode!Asn1ExtensionAndExceptionNode.isNode!Asn1ElipsisNode);
+            assert(node.getNode!Asn1ExtensionAdditionsNode.isNode!Asn1EmptyNode);
+            assert(node.getNode!Asn1OptionalExtensionMarkerNode.isNode!Asn1EmptyNode);
+        }),
+        "SET - Redudant case": T("SET { ... !20, ... }", (n){
+            auto node = n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetTypeNode.asNode!Asn1ComponentTypeListsNode.asNode!(Asn1ComponentTypeListsNode.Case4);
+            assert(node.getNode!Asn1ExtensionAndExceptionNode.isNode!Asn1ExceptionSpecNode);
+            assert(node.getNode!Asn1ExtensionAdditionsNode.isNode!Asn1EmptyNode);
+            assert(node.getNode!Asn1OptionalExtensionMarkerNode.isNode!Asn1ElipsisNode);
+        }),
+        "SET OF - Type": T("SET OF INTEGER", (n){
+            assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetOfTypeNode.isNode!Asn1TypeNode);
+        }),
+        "SET OF - NamedType": T("SET OF i INTEGER", (n){
+            assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetOfTypeNode.isNode!Asn1NamedTypeNode);
+        }),
+        "TAG - Default": T("[UNIVERSAL 0] BOOLEAN", (n){
+            assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1TaggedTypeNode.isNode!(Asn1TaggedTypeNode.Default));
+        }),
+        "TAG - Explicit": T("[APPLICATION 0] EXPLICIT BOOLEAN", (n){
+            assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1TaggedTypeNode.isNode!(Asn1TaggedTypeNode.Explicit));
+        }),
+        "TAG - Implicit": T("[PRIVATE 0] IMPLICIT BOOLEAN", (n){
+            assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1TaggedTypeNode.isNode!(Asn1TaggedTypeNode.Implicit));
+        }),
+        "TAG - No tag class": T("[0] BOOLEAN", (n){
+            assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1TaggedTypeNode.isNode!(Asn1TaggedTypeNode.Default));
         }),
     ];
 
