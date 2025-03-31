@@ -54,6 +54,9 @@ private Result notInitial(Result result)
  +
  +  Yes, the AST is inefficient and parts are unused due to ambiguity that requires a semantic pass - I want to keep
  +  syntax and semantic analysis separate for my own sanity. Yes, this does waste a lot more memory than it should.
+ +
+ +  As most of this file is very, _very_ similar, verbose code, this file is free to take liberties in the name
+ +  of terseness. i.e. no `this.` spam; usage of the `if(auto r = ...)` pattern; less whitespace usage, etc.
  + ++/
 struct Asn1Parser
 {
@@ -104,6 +107,474 @@ struct Asn1Parser
     }
 
     /++++ Parsers (can you tell I'm suicidal) ++++/
+
+    Result ModuleDefinition(out Asn1ModuleDefinitionNode node)
+    {
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+
+        Asn1Token token;
+
+        Asn1ModuleIdentifierNode identifier;
+        if(auto r = ModuleIdentifier(identifier)) return r;
+        if(auto r = consume(token)) return r;
+        if(token.type != Asn1Token.Type.rDEFINITIONS) return _lexer.makeError(
+            Asn1ParserError.nonInitialTokenNotFound,
+            "expected `DEFINITIONS` when parsing ModuleDefinition",
+            token.location, "encountered token of type ", token.type
+        );
+
+        Asn1TagDefaultNode tagDefault;
+        if(auto r = peek(token)) return r;
+        switch(token.type) with(Asn1Token.Type)
+        {
+            case rEXPLICIT:
+            case rIMPLICIT:
+            case rAUTOMATIC:
+                consume().resultAssert;
+
+                const typeToken = token;
+                if(auto r = consume(token)) return r;
+                if(token.type != rTAGS) return _lexer.makeError(
+                    Asn1ParserError.nonInitialTokenNotFound,
+                    "expected `TAGS` when parsing ModuleDefinition",
+                    token.location, "encountered token of type ", token.type
+                );
+
+                if(typeToken.type == rEXPLICIT)
+                    tagDefault = _context.allocNode!(typeof(tagDefault))(_context.allocNode!Asn1ExplicitTagsNode(typeToken));
+                else if(typeToken.type == rIMPLICIT)
+                    tagDefault = _context.allocNode!(typeof(tagDefault))(_context.allocNode!Asn1ImplicitTagsNode(typeToken));
+                else if(typeToken.type == rAUTOMATIC)
+                    tagDefault = _context.allocNode!(typeof(tagDefault))(_context.allocNode!Asn1AutomaticTagsNode(typeToken));
+                break;
+
+            default:
+                tagDefault = _context.allocNode!(typeof(tagDefault))(
+                    _context.allocNode!Asn1EmptyNode(token)
+                );
+                break;
+        }
+
+        Asn1ExtensionDefaultNode extensionDefault;
+        if(auto r = peek(token)) return r;
+        if(token.type == Asn1Token.Type.rEXTENSIBILITY)
+        {
+            consume().resultAssert;
+            if(auto r = consume(token)) return r;
+            if(token.type != Asn1Token.Type.rIMPLIED) return _lexer.makeError(
+                Asn1ParserError.nonInitialTokenNotFound,
+                "expected `IMPLIED` to denote `EXTENSIBILITY IMPLIED` when parsing ModuleDefinition",
+                token.location, "encountered token of type ", token.type
+            );
+            extensionDefault = _context.allocNode!(typeof(extensionDefault))(
+                _context.allocNode!Asn1ExtensibilityImpliedNode(token)
+            );
+        }
+        else
+        {
+            extensionDefault = _context.allocNode!(typeof(extensionDefault))(
+                _context.allocNode!Asn1EmptyNode(token)
+            );
+        }
+
+        if(auto r = consume(token)) return r;
+        if(token.type != Asn1Token.Type.assignment) return _lexer.makeError(
+            Asn1ParserError.nonInitialTokenNotFound,
+            "expected `::=` when parsing ModuleDefinition",
+            token.location, "encountered token of type ", token.type
+        );
+        if(auto r = consume(token)) return r;
+        if(token.type != Asn1Token.Type.rBEGIN) return _lexer.makeError(
+            Asn1ParserError.nonInitialTokenNotFound,
+            "expected `BEGIN` when parsing ModuleDefinition",
+            token.location, "encountered token of type ", token.type
+        );
+
+        Asn1ModuleBodyNode modBod;
+        if(auto r = peek(token)) return r;
+        if(token.type == Asn1Token.Type.rEND)
+        {
+            modBod = _context.allocNode!(typeof(modBod))(
+                _context.allocNode!Asn1EmptyNode(token)
+            );
+        }
+        else if(auto r = ModuleBody(modBod)) return r.notInitial;
+
+        if(auto r = consume(token)) return r;
+        if(token.type != Asn1Token.Type.rEND) return _lexer.makeError(
+            Asn1ParserError.nonInitialTokenNotFound,
+            "expected `END` when parsing ModuleDefinition",
+            token.location, "encountered token of type ", token.type
+        );
+        
+        node = _context.allocNode!(typeof(node))(
+            identifier,
+            tagDefault,
+            extensionDefault,
+            modBod
+        );
+        return Result.noError;
+    }
+
+    Result ModuleBody(out Asn1ModuleBodyNode node)
+    {
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+        
+        Asn1Token token;
+
+        Asn1ExportsNode exports;
+        if(auto r = peek(token)) return r;
+        if(token.type == Asn1Token.Type.rEXPORTS)
+        {
+            consume().resultAssert;
+            if(auto r = peek(token)) return r;
+            if(token.type == Asn1Token.Type.rALL)
+            {
+                consume().resultAssert;
+                if(auto r = consume(token)) return r;
+                if(token.type != Asn1Token.Type.semicolon) return _lexer.makeError(
+                    Asn1ParserError.nonInitialTokenNotFound,
+                    "expected `;` to denote `EXPORT ALL ;` when parsing ModuleDefinition",
+                    token.location, "encountered token of type ", token.type
+                );
+                exports = _context.allocNode!(typeof(exports))(
+                    _context.allocNode!Asn1ExportsAllNode(token)
+                );
+            }
+            else
+            {
+                Asn1SymbolListNode symbols;
+                if(auto r = peek(token)) return r;
+                if(token.type != Asn1Token.Type.semicolon)
+                {
+                    if(auto r = SymbolList(symbols)) return r.notInitial;
+                    if(auto r = consume(token)) return r;
+                    if(token.type != Asn1Token.Type.semicolon) return _lexer.makeError(
+                        Asn1ParserError.nonInitialTokenNotFound,
+                        "expected `;` to denote end of `EXPORT` when parsing ModuleDefinition",
+                        token.location, "encountered token of type ", token.type
+                    );
+                    exports = _context.allocNode!(typeof(exports))(
+                        _context.allocNode!Asn1SymbolsExportedNode(symbols)
+                    );
+                }
+                else
+                {
+                    consume().resultAssert;
+                    exports = _context.allocNode!(typeof(exports))(
+                        _context.allocNode!Asn1SymbolsExportedNode(
+                            _context.allocNode!Asn1EmptyNode(token)
+                        )
+                    );
+                }
+            }
+        }
+        else
+        {
+            exports = _context.allocNode!(typeof(exports))(
+                _context.allocNode!Asn1EmptyNode(token)
+            );
+        }
+
+        Asn1ImportsNode imports;
+        if(auto r = peek(token)) return r;
+        if(token.type == Asn1Token.Type.rIMPORTS)
+        {
+            consume().resultAssert;
+            if(auto r = peek(token)) return r;
+
+            if(token.type != Asn1Token.Type.semicolon)
+            {
+                auto importsList = _context.allocNode!Asn1SymbolsFromModuleListNode();
+                while(true)
+                {
+                    Asn1SymbolListNode symbols;
+                    if(auto r = SymbolList(symbols)) return r.notInitial;
+                    if(auto r = consume(token)) return r;
+                    if(token.type != Asn1Token.Type.rFROM) return _lexer.makeError(
+                        Asn1ParserError.nonInitialTokenNotFound,
+                        "expected `;` to denote of `IMPORT ... FROM` when parsing Imports",
+                        token.location, "encountered token of type ", token.type
+                    );
+
+                    if(auto r = consume(token)) return r;
+                    if(token.type != Asn1Token.Type.moduleReference) return _lexer.makeError(
+                        Asn1ParserError.nonInitialTokenNotFound,
+                        "expected module reference after `FROM` when parsing an import",
+                        token.location, "encountered token of type ", token.type
+                    );
+                    const modRefToken = token;
+
+                    Asn1AssignedIdentifierNode assId;
+                    if(auto r = peek(token)) return r;
+                    if(token.type == Asn1Token.Type.leftBracket)
+                    {
+                        consume().resultAssert;
+                        Asn1ObjIdComponentsListNode idList;
+                        if(auto r = ObjIdComponentsList(idList)) return r.notInitial;
+                        if(auto r = consume(token)) return r;
+                        if(token.type != Asn1Token.Type.rightBracket) return _lexer.makeError(
+                            Asn1ParserError.nonInitialTokenNotFound,
+                            "expected `}` after module reference for `FROM` when parsing an import",
+                            token.location, "encountered token of type ", token.type
+                        );
+
+                        assId = _context.allocNode!(typeof(assId))(
+                            _context.allocNode!Asn1ObjectIdentifierValueNode(idList)
+                        );
+                    }
+                    else
+                    {
+                        Asn1DefinedValueNode definedValue;
+                        if(auto r = DefinedValue(definedValue))
+                        {
+                            if(!r.notInitial.isError(Asn1ParserError.nonInitialTokenNotFound))
+                                return r;
+                            assId = _context.allocNode!(typeof(assId))(
+                                _context.allocNode!Asn1EmptyNode(token)
+                            );
+                        }
+                        else
+                            assId = _context.allocNode!(typeof(assId))(definedValue);
+                    }
+
+                    importsList.items.put(_context.allocNode!Asn1SymbolsFromModuleNode(
+                        symbols,
+                        _context.allocNode!Asn1GlobalModuleReferenceNode(
+                            _context.allocNode!Asn1ModuleReferenceTokenNode(modRefToken),
+                            assId
+                        )
+                    ));
+                    
+                    if(auto r = peek(token)) return r;
+                    if(token.type == Asn1Token.Type.semicolon)
+                    {
+                        consume().resultAssert;
+                        break;
+                    }
+                }
+                imports = _context.allocNode!(typeof(imports))(
+                    _context.allocNode!Asn1SymbolsImportedNode(importsList)
+                );
+            }
+            else
+            {
+                consume().resultAssert;
+                imports = _context.allocNode!(typeof(imports))(
+                    _context.allocNode!Asn1SymbolsImportedNode(
+                        _context.allocNode!Asn1EmptyNode(token)
+                    )
+                );
+            }
+        }
+        else
+        {
+            imports = _context.allocNode!(typeof(imports))(
+                _context.allocNode!Asn1EmptyNode(token)
+            );
+        }
+
+        auto assList = _context.allocNode!Asn1AssignmentListNode();
+        while(true)
+        {
+            if(auto r = peek(token)) return r;
+            if(token.type == Asn1Token.Type.rEND) break;
+            import std. conv : to;
+            debug assert(false, token.to!string);
+        }
+
+        node = _context.allocNode!(typeof(node))(
+            _context.allocNode!(typeof(node).Case1)(
+                exports,
+                imports,
+                assList
+            )
+        );
+        return Result.noError;
+    }
+
+    Result SymbolList(out Asn1SymbolListNode node)
+    {
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+        
+        Asn1Token token;
+
+        node = _context.allocNode!(typeof(node))();
+        while(true)
+        {
+            Asn1ReferenceNode refNode;
+            if(auto r = Reference(refNode)) return r;
+            if(auto r = peek(token)) return r;
+            if(token.type == Asn1Token.Type.leftBracket)
+            {
+                consume().resultAssert;
+                if(auto r = consume(token)) return r;
+                if(token.type != Asn1Token.Type.rightBracket) return _lexer.makeError(
+                    Asn1ParserError.nonInitialTokenNotFound,
+                    "expected `}` to close parameter list for Symbol",
+                    token.location, "encountered token of type ", token.type
+                );
+
+                node.items.put(_context.allocNode!Asn1SymbolNode(
+                    _context.allocNode!Asn1ParameterizedReferenceNode(refNode)
+                ));
+            }
+            else
+                node.items.put(_context.allocNode!Asn1SymbolNode(refNode));
+
+            if(auto r = peek(token)) return r;
+            if(token.type != Asn1Token.Type.comma) break;
+            consume().resultAssert;
+        }
+
+        return Result.noError;
+    }
+
+    Result Reference(out Asn1ReferenceNode node)
+    {
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+        
+        Asn1Token token;
+        if(auto r = consume(token)) return r;
+
+        if(token.type == Asn1Token.Type.typeReference)
+        {
+            node = _context.allocNode!(typeof(node))(
+                _context.allocNode!Asn1TypeReferenceTokenNode(token)
+            );
+        }
+        else if(token.type == Asn1Token.Type.valueReference)
+        {
+            node = _context.allocNode!(typeof(node))(
+                _context.allocNode!Asn1ValueReferenceTokenNode(token)
+            );
+        }
+        else return _lexer.makeError(
+            Asn1ParserError.tokenNotFound,
+            "expected module or type reference when parsing Reference",
+            token.location, "encountered token of type ", token.type
+        ); 
+
+        return Result.noError;
+    }
+
+    Result ModuleIdentifier(out Asn1ModuleIdentifierNode node)
+    {
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+        
+        Asn1Token token;
+        if(auto r = consume(token)) return r;
+        if(token.type != Asn1Token.Type.moduleReference) return _lexer.makeError(
+            Asn1ParserError.tokenNotFound,
+            "expected module reference (starts with a capital) when parsing ModuleIdentifier",
+            token.location, "encountered token of type ", token.type
+        );
+        const modRefToken = token;
+
+        if(auto r = peek(token)) return r;
+        if(token.type != Asn1Token.Type.leftBracket)
+        {
+            node = _context.allocNode!(typeof(node))(
+                _context.allocNode!Asn1ModuleReferenceTokenNode(modRefToken),
+                _context.allocNode!Asn1DefinitiveIdentifierNode(
+                    _context.allocNode!Asn1EmptyNode(token)
+                ),
+            );
+            return Result.noError;
+        }
+        consume().resultAssert;
+
+        auto idList = _context.allocNode!Asn1DefinitiveObjIdComponentListNode();
+        while(true)
+        {
+            if(auto r = consume(token)) return r;
+            
+            if(token.type == Asn1Token.Type.number)
+            {
+                idList.items.put(_context.allocNode!Asn1DefinitiveObjIdComponentNode(
+                    _context.allocNode!Asn1DefinitiveNumberFormNode(
+                        _context.allocNode!Asn1NumberTokenNode(token)
+                    )
+                ));
+            }
+            else if(token.type == Asn1Token.Type.identifier)
+            {
+                const identifierToken = token;
+                if(auto r = peek(token)) return r;
+                if(token.type == Asn1Token.Type.leftParenthesis)
+                {
+                    consume().resultAssert;
+                    if(auto r = consume(token)) return r;
+                    if(token.type != Asn1Token.Type.number) return _lexer.makeError(
+                        Asn1ParserError.nonInitialTokenNotFound,
+                        "expected number when parsing named module object identifier component",
+                        token.location, "encountered token of type ", token.type
+                    );
+
+                    idList.items.put(_context.allocNode!Asn1DefinitiveObjIdComponentNode(
+                        _context.allocNode!Asn1DefinitiveNameAndNumberFormNode(
+                            _context.allocNode!Asn1IdentifierTokenNode(identifierToken),
+                            _context.allocNode!Asn1DefinitiveNumberFormNode(
+                                _context.allocNode!Asn1NumberTokenNode(token)
+                            ),
+                        )
+                    ));
+
+                    if(auto r = consume(token)) return r;
+                    if(token.type != Asn1Token.Type.rightParenthesis) return _lexer.makeError(
+                        Asn1ParserError.nonInitialTokenNotFound,
+                        "expected `)` to close a named module object identifier component",
+                        token.location, "encountered token of type ", token.type
+                    );
+                }
+                else
+                {
+                    idList.items.put(_context.allocNode!Asn1DefinitiveObjIdComponentNode(
+                        _context.allocNode!Asn1NameFormNode(
+                            _context.allocNode!Asn1IdentifierTokenNode(identifierToken)
+                        )
+                    ));
+                }
+            }
+            else return _lexer.makeError(
+                Asn1ParserError.nonInitialTokenNotFound,
+                "expected identifier or number when parsing module object identifier component",
+                token.location, "encountered token of type ", token.type
+            );
+
+            if(auto r = peek(token)) return r;
+            if(token.type != Asn1Token.Type.comma) break;
+            consume().resultAssert;
+        }
+
+        if(auto r = consume(token)) return r;
+        if(token.type != Asn1Token.Type.rightBracket) return _lexer.makeError(
+            Asn1ParserError.nonInitialTokenNotFound,
+            "expected `}` to denote end of module object identifier component list",
+            token.location, "encountered token of type ", token.type
+        );
+
+        node = _context.allocNode!(typeof(node))(
+            _context.allocNode!Asn1ModuleReferenceTokenNode(modRefToken),
+            _context.allocNode!Asn1DefinitiveIdentifierNode(idList),
+        );
+        return Result.noError;
+    }
+
+    Result Assignment(out Asn1AssignmentNode node)
+    {
+        assert(false);
+    }
 
     Result NamedType(out Asn1NamedTypeNode node)
     {
@@ -1801,7 +2272,7 @@ struct Asn1Parser
                 // Figure out which type of value list we're dealing with by
                 // performing a lookahead. Not efficient but it's so much more
                 // simpler than figuring it on-the-fly.
-                    const savedLexerSeq = _lexer;
+                const savedLexerSeq = _lexer;
 
                 // If a left parenthesis shows up directly after any identifier, then it's an OBJECT IDENTIFIER sequence,
                 // as no other sequence-looking value syntax allows for NameAndNumberForm.
@@ -2542,6 +3013,109 @@ unittest
 
             Asn1ValueNode node;
             parser.Value(node).resultAssert;
+            test.verify(node);
+
+            Asn1Token token;
+            parser.consume(token).resultAssert;
+            assert(token.type == Asn1Token.Type.eof, "Expected no more tokens, but got: "~token.to!string);
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]:\n"~err.msg);
+    }
+}
+
+@("Asn1Parser - ModuleDefinition - General Success")
+unittest
+{
+    static struct T
+    {
+        string input;
+        void function(Asn1ModuleDefinitionNode node) verify;
+    }
+
+    auto cases = [
+        "minimal": T("MyMod DEFINITIONS ::= BEGIN END", (n){ 
+            assert(n.getNode!Asn1TagDefaultNode.isNode!Asn1EmptyNode);
+            assert(n.getNode!Asn1ExtensionDefaultNode.isNode!Asn1EmptyNode);
+            assert(n.getNode!Asn1ModuleBodyNode.isNode!Asn1EmptyNode);
+        }),
+        "ModuleIdentifier - All Types": T("MyMod { nameForm, 20, nameAndNumber(20) } DEFINITIONS ::= BEGIN END", (n){ 
+            assert(n.getNode!Asn1ModuleIdentifierNode.getNode!Asn1DefinitiveIdentifierNode.asNode!Asn1DefinitiveObjIdComponentListNode
+                .items.length == 3
+            );
+        }),
+        "TagDefault - EXPLICIT": T("MyMod DEFINITIONS EXPLICIT TAGS ::= BEGIN END", (n){ 
+            assert(n.getNode!Asn1TagDefaultNode.isNode!Asn1ExplicitTagsNode);
+        }),
+        "TagDefault - IMPLICIT": T("MyMod DEFINITIONS IMPLICIT TAGS ::= BEGIN END", (n){ 
+            assert(n.getNode!Asn1TagDefaultNode.isNode!Asn1ImplicitTagsNode);
+        }),
+        "TagDefault - AUTOMATIC": T("MyMod DEFINITIONS AUTOMATIC TAGS ::= BEGIN END", (n){ 
+            assert(n.getNode!Asn1TagDefaultNode.isNode!Asn1AutomaticTagsNode);
+        }),
+        "ExtensionDefault - IMPLIED": T("MyMod DEFINITIONS EXTENSIBILITY IMPLIED ::= BEGIN END", (n){ 
+            assert(n.getNode!Asn1ExtensionDefaultNode.isNode!Asn1ExtensibilityImpliedNode);
+        }),
+        "Imports - Empty": T(`
+            MyMod DEFINITIONS ::= BEGIN
+                IMPORTS;
+            END
+        `, (n){
+            assert(n.getNode!Asn1ModuleBodyNode.asNode!(Asn1ModuleBodyNode.Case1).getNode!Asn1ImportsNode.asNode!Asn1SymbolsImportedNode.isNode!Asn1EmptyNode);
+        }),
+        "Imports - Multiple": T(`
+            MyMod DEFINITIONS ::= BEGIN
+                IMPORTS
+                    A, b FROM Mod1
+                    C FROM Mod2 { iso foo(123) }
+                    D FROM Mod3 definedValue
+                    E FROM Mod4 ThisTechnically.shouldntWork
+                ;
+            END
+        `, (n){
+            assert(n.getNode!Asn1ModuleBodyNode.asNode!(Asn1ModuleBodyNode.Case1).getNode!Asn1ImportsNode.asNode!Asn1SymbolsImportedNode.asNode!Asn1SymbolsFromModuleListNode
+                .items.length == 4
+            );
+        }),
+        "Exports - Empty": T(`
+            MyMod DEFINITIONS ::= BEGIN
+                EXPORTS;
+            END
+        `, (n){
+            assert(n.getNode!Asn1ModuleBodyNode.asNode!(Asn1ModuleBodyNode.Case1).getNode!Asn1ExportsNode.asNode!Asn1SymbolsExportedNode.isNode!Asn1EmptyNode);
+        }),
+        "Exports - ALL": T(`
+            MyMod DEFINITIONS ::= BEGIN
+                EXPORTS ALL;
+            END
+        `, (n){
+            assert(n.getNode!Asn1ModuleBodyNode.asNode!(Asn1ModuleBodyNode.Case1).getNode!Asn1ExportsNode.isNode!Asn1ExportsAllNode);
+        }),
+        "Exports - Multiple": T(`
+            MyMod DEFINITIONS ::= BEGIN
+                EXPORTS
+                    Foo, bar
+                ;
+            END
+        `, (n){
+            assert(n.getNode!Asn1ModuleBodyNode.asNode!(Asn1ModuleBodyNode.Case1).getNode!Asn1ExportsNode.asNode!Asn1SymbolsExportedNode.asNode!Asn1SymbolListNode
+                .items.length == 2
+            );
+        }),
+    ];
+
+    foreach(name, test; cases)
+    {
+        try
+        {
+            import std.conv : to;
+
+            Asn1ParserContext context;
+            auto lexer = Asn1Lexer(test.input);
+            auto parser = Asn1Parser(lexer, &context);
+
+            Asn1ModuleDefinitionNode node;
+            parser.ModuleDefinition(node).resultAssert;
             test.verify(node);
 
             Asn1Token token;

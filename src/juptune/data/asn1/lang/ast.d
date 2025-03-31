@@ -1715,10 +1715,7 @@ final class Asn1NamedBitNode : Asn1BaseNode
  ++/
 final class Asn1BitStringValueNode : Asn1BaseNode
 {
-    final static class Empty : Asn1BaseNode
-    {
-        mixin Container!(Asn1NodeType.FAILSAFE, Asn1EmptyNode);
-    }
+    alias Empty = Asn1StaticNode!(Asn1NodeType.FAILSAFE);
 
     mixin OneOf!(Asn1NodeType.BitStringValue, 
         Asn1BstringTokenNode,
@@ -1996,10 +1993,7 @@ final class Asn1ComponentTypeNode : Asn1BaseNode
  ++/
 final class Asn1SequenceValueNode : Asn1BaseNode
 {
-    final static class Empty : Asn1BaseNode
-    {
-        mixin Container!(Asn1NodeType.FAILSAFE, Asn1EmptyNode);
-    }
+    alias Empty = Asn1StaticNode!(Asn1NodeType.FAILSAFE);
 
     mixin OneOf!(Asn1NodeType.SequenceValue, 
         Asn1ComponentValueListNode,
@@ -2036,10 +2030,7 @@ final class Asn1SequenceOfTypeNode : Asn1BaseNode
  ++/
 final class Asn1SequenceOfValueNode : Asn1BaseNode
 {
-    final static class Empty : Asn1BaseNode
-    {
-        mixin Container!(Asn1NodeType.FAILSAFE, Asn1EmptyNode);
-    }
+    alias Empty = Asn1StaticNode!(Asn1NodeType.FAILSAFE);
 
     mixin OneOf!(Asn1NodeType.SequenceOfValue, 
         Asn1ValueListNode,
@@ -2091,10 +2082,7 @@ final class Asn1SetTypeNode : Asn1BaseNode
  ++/
 final class Asn1SetValueNode : Asn1BaseNode
 {
-    final static class Empty : Asn1BaseNode
-    {
-        mixin Container!(Asn1NodeType.FAILSAFE, Asn1EmptyNode);
-    }
+    alias Empty = Asn1StaticNode!(Asn1NodeType.FAILSAFE);
 
     mixin OneOf!(Asn1NodeType.SetValue, 
         Asn1ComponentValueListNode,
@@ -2123,10 +2111,7 @@ final class Asn1SetOfTypeNode : Asn1BaseNode
  ++/
 final class Asn1SetOfValueNode : Asn1BaseNode
 {
-    final static class Empty : Asn1BaseNode
-    {
-        mixin Container!(Asn1NodeType.FAILSAFE, Asn1EmptyNode);
-    }
+    alias Empty = Asn1StaticNode!(Asn1NodeType.FAILSAFE);
 
     mixin OneOf!(Asn1NodeType.SetOfValue, 
         Asn1ValueListNode,
