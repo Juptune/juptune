@@ -19,7 +19,9 @@ enum Asn1ParserError
     tokenNotFound,
     nonInitialTokenNotFound,
     oneOfNoMatches,
-    listMustNotBeEmpty
+    listMustNotBeEmpty,
+    bug,
+    invalidSyntax,
 }
 
 // Some parsers are also subparsers of other parsers! So we need a shortcut
@@ -235,7 +237,58 @@ struct Asn1Parser
 
     Result DefinedValue(out Asn1DefinedValueNode node)
     {
-        assert(false, "TODO: Implement");
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+
+        Asn1Token token;
+        if(auto r = consume(token)) return r;
+        
+        if(token.type == Asn1Token.Type.moduleReference)
+        {
+            const moduleToken = token;
+            if(auto r = consume(token)) return r;
+            if(token.type != Asn1Token.Type.dot) return _lexer.makeError(
+                Asn1ParserError.nonInitialTokenNotFound,
+                "expected `.` following module reference when parsing a DefinedValue",
+                token.location, "encountered token of type ", token.type
+            );
+
+            if(auto r = consume(token)) return r;
+            if(token.type != Asn1Token.Type.valueReference) return _lexer.makeError(
+                Asn1ParserError.nonInitialTokenNotFound,
+                "expected identifier following module reference when parsing a DefinedValue",
+                token.location, "encountered token of type ", token.type
+            );
+
+            node = _context.allocNode!(typeof(node))(
+                _context.allocNode!Asn1ExternalValueReferenceNode(
+                    _context.allocNode!Asn1ModuleReferenceTokenNode(moduleToken),
+                    _context.allocNode!Asn1ValueReferenceTokenNode(token)
+                )
+            );
+            return Result.noError;
+        }
+        else if (token.type == Asn1Token.Type.valueReference)
+        {
+            Asn1Token lookahead;
+            if(auto r = peek(lookahead)) return r;
+            if(lookahead.type == Asn1Token.Type.leftBracket)
+            {
+                assert(false, "TODO: Support ParameterizedValue");
+            }
+
+            node = _context.allocNode!(typeof(node))(
+                _context.allocNode!Asn1ValueReferenceTokenNode(token)
+            );
+            return Result.noError;
+        }
+
+        return _lexer.makeError(
+            Asn1ParserError.tokenNotFound,
+            "expected identifier or module reference when attempting to parse a DefinedValue",
+            token.location, "encountered token of type ", token.type
+        );
     }
 
     Result DefinedObjectClass(out Asn1DefinedObjectClassNode node)
@@ -708,6 +761,12 @@ struct Asn1Parser
 
     Result Type(out Asn1TypeNode node)
     {
+        // TODO: ConstrainedType
+        return PlainType(node);
+    }
+
+    Result PlainType(out Asn1TypeNode node)
+    {
         import std.meta : AliasSeq;
         static struct StringType(NodeT_)
         {
@@ -735,6 +794,9 @@ struct Asn1Parser
                 ),
             );
         }
+
+        // TODO: ObjectClassFieldType
+        // TODO: ReferencedType
 
         auto savedLexer = _lexer;
         scope(exit) if(node is null)
@@ -1447,13 +1509,494 @@ struct Asn1Parser
         }
     }
 
+    Result ValueList(out Asn1ValueListNode node)
+    {
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+
+        Asn1Token token;
+        node = _context.allocNode!(typeof(node))();
+        while(true)
+        {
+            Asn1ValueNode value;
+            if(auto r = Value(value)) return r;
+            node.items.put(value);
+
+            if(auto r = peek(token)) return r;
+            if(token.type != Asn1Token.Type.comma) break;
+            consume().resultAssert;
+        }
+
+        return Result.noError;
+    }
+
+    Result NamedValueList(out Asn1NamedValueListNode node)
+    {
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+
+        Asn1Token token;
+        node = _context.allocNode!(typeof(node))();
+        while(true)
+        {
+            if(auto r = consume(token)) return r;
+            if(token.type != Asn1Token.Type.identifier) return _lexer.makeError(
+                Asn1ParserError.nonInitialTokenNotFound,
+                "expected identifier when looking for a NamedValue",
+                token.location, "encountered token of type ", token.type
+            );
+
+            Asn1ValueNode value;
+            if(auto r = Value(value)) return r;
+            node.items.put(_context.allocNode!Asn1NamedValueNode(
+                _context.allocNode!Asn1IdentifierTokenNode(token),
+                value
+            ));
+
+            if(auto r = peek(token)) return r;
+            if(token.type != Asn1Token.Type.comma) break;
+            consume().resultAssert;
+        }
+
+        return Result.noError;
+    }
+
+    Result ObjIdComponentsList(out Asn1ObjIdComponentsListNode node)
+    {
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+
+        Asn1Token token;
+        node = _context.allocNode!(typeof(node))();
+        while(true)
+        {
+            if(auto r = peek(token)) return r;
+            if(token.type == Asn1Token.Type.identifier)
+            {
+                Asn1Token lookahead;
+                const savedLexerLookahead = _lexer;
+                consume().resultAssert;
+
+                if(auto r = consume(lookahead)) return r;
+                if(lookahead.type == Asn1Token.Type.leftParenthesis)
+                {
+                    const identifierToken = token;
+                    if(auto r = peek(token)) return r;
+                    
+                    if(token.type == Asn1Token.Type.number)
+                    {
+                        consume().resultAssert;
+                        node.items.put(_context.allocNode!Asn1ObjIdComponentsNode(
+                            _context.allocNode!Asn1NameAndNumberFormNode(
+                                _context.allocNode!Asn1IdentifierTokenNode(identifierToken),
+                                _context.allocNode!Asn1NumberFormNode(
+                                    _context.allocNode!Asn1NumberTokenNode(token)
+                                )
+                            )
+                        ));
+                    }
+                    else
+                    {
+                        Asn1DefinedValueNode definedValue;
+                        if(auto r = DefinedValue(definedValue)) return r.notInitial;
+                        
+                        node.items.put(_context.allocNode!Asn1ObjIdComponentsNode(
+                            _context.allocNode!Asn1NameAndNumberFormNode(
+                                _context.allocNode!Asn1IdentifierTokenNode(identifierToken),
+                                _context.allocNode!Asn1NumberFormNode(definedValue)
+                            )
+                        ));
+                    }
+
+                    if(auto r = consume(token)) return r;
+                    if(token.type != Asn1Token.Type.rightParenthesis) return _lexer.makeError(
+                        Asn1ParserError.nonInitialTokenNotFound,
+                        "expected `)` to denote end of named object identifier part",
+                        token.location, "encountered token of type ", token.type
+                    );
+                }
+                else
+                {
+                    _lexer = savedLexerLookahead;
+                    Asn1DefinedValueNode definedValue;
+                    if(auto r = DefinedValue(definedValue)) return r.notInitial;
+                    node.items.put(_context.allocNode!Asn1ObjIdComponentsNode(
+                        definedValue
+                    ));
+                }
+            }
+            else return _lexer.makeError(
+                Asn1ParserError.nonInitialTokenNotFound,
+                "expected identifier when reading object identifier component list",
+                token.location, "encountered token of type ", token.type
+            );
+
+            if(auto r = peek(token)) return r;
+            if(token.type == Asn1Token.Type.rightBracket) break; // Intentionally not consumed, left for the parent parser
+        }
+
+        return Result.noError;
+    }
+
     Result Value(out Asn1ValueNode node)
     {
         auto savedLexer = _lexer;
         scope(exit) if(node is null)
             _lexer = savedLexer;
 
-        assert(false, "Not implemented");
+        Asn1Token token;
+        if(auto r = consume(token)) return r;
+
+        void makeBuiltin(NodeT, Args...)(Args args)
+        {
+            node = _context.allocNode!(typeof(node))(
+                _context.allocNode!Asn1BuiltinValueNode(
+                    _context.allocNode!NodeT(args)
+                ),
+            );
+        }
+
+        switch(token.type) with(Asn1Token.Type)
+        {
+            case cstring:
+                makeBuiltin!Asn1UnresolvedStringValueNode(
+                    _context.allocNode!Asn1CstringTokenNode(token)
+                );
+                return Result.noError;
+            case hstring:
+                makeBuiltin!Asn1UnresolvedStringValueNode(
+                    _context.allocNode!Asn1HstringTokenNode(token)
+                );
+                return Result.noError;
+            case bstring:
+                makeBuiltin!Asn1UnresolvedStringValueNode(
+                    _context.allocNode!Asn1BstringTokenNode(token)
+                );
+                return Result.noError;
+            case rCONTAINING:
+                Asn1ValueNode value;
+                if(auto r = Value(value)) return r;
+                makeBuiltin!Asn1UnresolvedStringValueNode(
+                    _context.allocNode!(Asn1UnresolvedStringValueNode.Containing)(value)
+                );
+                return Result.noError;
+
+            case rTRUE:
+                makeBuiltin!Asn1BooleanValueNode(
+                    _context.allocNode!(Asn1BooleanValueNode.True)(token),
+                );
+                return Result.noError;
+            case rFALSE:
+                makeBuiltin!Asn1BooleanValueNode(
+                    _context.allocNode!(Asn1BooleanValueNode.False)(token),
+                );
+                return Result.noError;
+
+            case rNULL:
+                makeBuiltin!Asn1NullValueNode(token);
+                return Result.noError;
+
+            case number:
+                makeBuiltin!Asn1IntegerValueNode(
+                    _context.allocNode!Asn1SignedNumberNode(
+                        _context.allocNode!Asn1NumberTokenNode(token)
+                    )
+                );
+                return Result.noError;
+
+            case realNumber:
+                makeBuiltin!Asn1RealValueNode(
+                    _context.allocNode!Asn1NumericRealValueNode(
+                        _context.allocNode!Asn1RealNumberTokenNode(token)
+                    )
+                );
+                return Result.noError;
+
+            case hyphenMinus:
+                Asn1Token numberToken;
+                if(auto r = consume(numberToken)) return r;
+                
+                if(numberToken.type == number)
+                {
+                    makeBuiltin!Asn1IntegerValueNode(
+                        _context.allocNode!Asn1SignedNumberNode(
+                            _context.allocNode!(Asn1SignedNumberNode.Negative)(
+                                _context.allocNode!Asn1NumberTokenNode(numberToken)
+                            )
+                        )
+                    );
+                }
+                else if(numberToken.type == realNumber)
+                {
+                    makeBuiltin!Asn1RealValueNode(
+                        _context.allocNode!Asn1NumericRealValueNode(
+                            _context.allocNode!(Asn1NumericRealValueNode.Negative)(
+                                _context.allocNode!Asn1RealNumberTokenNode(numberToken)
+                            )
+                        )
+                    );
+                }
+                else return _lexer.makeError(
+                    Asn1ParserError.nonInitialTokenNotFound,
+                    "expected number or realNumber following hyphen to denote a negative SignedNumber",
+                    numberToken.location, "encountered token of type ", numberToken.type
+                );
+
+                return Result.noError;
+
+            case rPLUS_INFINITY:
+                makeBuiltin!Asn1RealValueNode(
+                    _context.allocNode!Asn1SpecialRealValueNode(
+                        _context.allocNode!Asn1PlusInfinityNode(token)
+                    )
+                );
+                return Result.noError;
+            case rMINUS_INFINITY:
+                makeBuiltin!Asn1RealValueNode(
+                    _context.allocNode!Asn1SpecialRealValueNode(
+                        _context.allocNode!Asn1MinusInfinityNode(token)
+                    )
+                );
+                return Result.noError;
+
+            case identifier:
+            case typeReference:
+                _lexer = savedLexer;
+                
+                Asn1DefinedValueNode value;
+                if(auto r = DefinedValue(value)) return r;
+                
+                node = _context.allocNode!Asn1ValueNode(
+                    _context.allocNode!Asn1ReferencedValueNode(value)
+                );
+                return Result.noError;
+
+            case leftBracket:
+                Result checkEnd(string Context)()
+                {
+                    static immutable ErrorMsg = "expected `}` to close "~Context;
+
+                    if(auto r = consume(token)) return r;
+                    if(token.type != rightBracket) return _lexer.makeError(
+                        Asn1ParserError.nonInitialTokenNotFound,
+                        ErrorMsg,
+                        token.location, "encountered token of type ", token.type
+                    );
+                    return Result.noError;
+                }
+
+                if(auto r = peek(token)) return r;
+                if(token.type == rightBracket)
+                {
+                    makeBuiltin!Asn1UnresolvedSequenceValueNode(
+                        _context.allocNode!Asn1EmptyNode(token)
+                    );
+                    consume().resultAssert;
+                    return Result.noError;
+                }
+
+                // Figure out which type of value list we're dealing with by
+                // performing a lookahead. Not efficient but it's so much more
+                // simpler than figuring it on-the-fly.
+                    const savedLexerSeq = _lexer;
+
+                // If a left parenthesis shows up directly after any identifier, then it's an OBJECT IDENTIFIER sequence,
+                // as no other sequence-looking value syntax allows for NameAndNumberForm.
+                //      { iso-yada(123) }
+                //      { iso-yada-123 asn1(123) }
+                //
+                // If no commas show up and there's only 1 value, then it's ambiguous, so will default to
+                // a ValueList.
+                //      { my-integer }
+                //
+                // (Values in the form of `a { yada }` are ambiguous between a named Sequence value and a
+                //  parameterised value)
+                //
+                // If no commas show up and there's 1 ambiguous value, then assume it's a NamedValueList.
+                //      { iso-yada-123 asn1 }
+                //
+                // If a comma is found; multiple non-named values exist, and any number
+                // of ambiguous values exist then it's a ValueList.
+                //      { my, value }
+                //      { my, ambiguous {} }
+                //
+                // If a comma is found, and only ambiguous values exists, assume it's a NamedValueList.
+                //      { ambiguous {} }
+                //      { ambiguous {}, twobiguous {} }
+                //
+                // If a comma is found, and any amount of non-ambiguous named values exist, it's a NamedValueList.
+                //      { ambiguous {}, except this }
+                //
+                // DefinedValue allows for a ParameterizedValue, which uses `{}` to define parameters, 
+                // so we need to keep track of whether we're in a parameter list or not and ignore everything inside one.
+                //      { some { template, params }, here }
+                //
+                // This loop also keeps track of how many identifiers show up side-by-side, but it's
+                // currently (and probably never) needed as a way to sort out ambiguity.
+                //
+                // Semantic Analysis will perform the rest of the validation, e.g. sometimes what looks like a
+                // NamedValueList is also a valid OBJECT IDENTIFIER sequence, so type information will be used to
+                // clear up ambiguity.
+                ulong bracketNesting;
+                ulong soloValues;
+                ulong ambiguousNamedValues;
+                ulong definiteNamedValues;
+                ulong longestIdChain;
+                ulong idChain;
+                bool foundComma;
+
+                Result skipParams()
+                {
+                    Asn1Token tok;
+                    if(auto r = peek(tok)) return r;
+                    if(tok.type == leftBracket)
+                    {
+                        bracketNesting++;
+                        consume.resultAssert();
+                    }
+
+                    while(bracketNesting > 0)
+                    {
+                        if(auto r = consume(tok)) return r;
+                        if(tok.type == leftBracket)
+                            bracketNesting++;
+                        else if(tok.type == rightBracket)
+                            bracketNesting--;
+                        else if(tok.type == eof) return _lexer.makeError(
+                            Asn1ParserError.nonInitialTokenNotFound,
+                            "hit eof when looking for `}` to close sequence when performing lookahead - unterminated sequence list",
+                            token.location, "encountered token of type ", token.type
+                        );
+                    }
+
+                    return Result.noError;
+                }
+
+                void resetIdChain()
+                {
+                    if(idChain > longestIdChain)
+                        longestIdChain = idChain;
+                    idChain = 0;
+                }
+
+                while(true)
+                {
+                    Asn1Token lookahead;
+                    if(auto r = consume(lookahead)) return r;
+
+                    if(lookahead.type == identifier)
+                    {
+                        idChain++;
+                        if(auto r = consume(lookahead)) return r;
+                        if(lookahead.type == leftBracket)
+                        {
+                            bracketNesting++;
+                            if(auto r = skipParams()) return r;
+                            ambiguousNamedValues++;
+                        }
+                        else if(lookahead.type == comma)
+                        {
+                            foundComma = true;
+                            soloValues++;
+                        }
+                        else if(lookahead.type == leftParenthesis)
+                        {
+                            _lexer = savedLexerSeq;
+                            Asn1ObjIdComponentsListNode componentList;
+                            if(auto r = ObjIdComponentsList(componentList)) return r.notInitial;
+                            makeBuiltin!Asn1UnresolvedSequenceValueNode(componentList);
+                            return checkEnd!"object identifier component list sequence"();
+                        }
+                        else if(lookahead.type == rightBracket)
+                        {
+                            soloValues++;
+                            break;
+                        }
+                        else
+                        {
+                            resetIdChain();
+                            definiteNamedValues++;
+                        }
+                    }
+                    else if(lookahead.type == leftBracket)
+                    {
+                        resetIdChain();
+                        bracketNesting++;
+                        if(auto r = skipParams()) return r;
+                    }
+                    else if(lookahead.type == comma)
+                        foundComma = true;
+                    else if(lookahead.type == typeReference)
+                        assert(false, "TODO: Short circuit into a parameterised value's parameter list");
+                    else if(lookahead.type == rightBracket)
+                        break;
+                    else if(lookahead.type == eof) return _lexer.makeError(
+                        Asn1ParserError.nonInitialTokenNotFound,
+                        "hit eof when looking for `}` to close sequence when performing lookahead - unterminated sequence list",
+                        token.location, "encountered token of type ", token.type
+                    );
+                    else
+                    {
+                        resetIdChain();
+                        soloValues++;
+                    }
+                }
+                _lexer = savedLexerSeq;
+
+                if(
+                    (soloValues == 1 && ambiguousNamedValues == 0 && definiteNamedValues == 0)
+                    || (soloValues > 1 && ambiguousNamedValues >= 0 && definiteNamedValues == 0 && foundComma)
+                )
+                {
+                    Asn1ValueListNode valueList;
+                    if(auto r = ValueList(valueList)) return r.notInitial;
+                    makeBuiltin!Asn1UnresolvedSequenceValueNode(valueList);
+                    return checkEnd!"value list sequence"();
+                }
+                else if(
+                    (soloValues == 0 && ambiguousNamedValues + definiteNamedValues == 1)
+                    || (soloValues == 0 && ambiguousNamedValues + definiteNamedValues > 1 && foundComma)
+                )
+                {
+                    Asn1NamedValueListNode valueList;
+                    if(auto r = NamedValueList(valueList)) return r.notInitial;
+                    makeBuiltin!Asn1UnresolvedSequenceValueNode(valueList);
+                    return checkEnd!"named value list sequence"();
+                }
+                else if(!foundComma) // NOTE: No comma but (potentially) multiple values exist
+                {
+                    Asn1ObjIdComponentsListNode componentList;
+                    if(auto r = ObjIdComponentsList(componentList)) return r.notInitial;
+                    makeBuiltin!Asn1UnresolvedSequenceValueNode(componentList);
+                    return checkEnd!"object identifier component list sequence"();
+                }
+                else if(soloValues > 0 && definiteNamedValues > 0) return _lexer.makeError(
+                    Asn1ParserError.invalidSyntax,
+                    "sequence value appears to consist of both Values and NamedValues, this is never a valid construction",
+                    token.location, 
+                    "soloValues=", soloValues, 
+                    " definiteNamedValue=", definiteNamedValues,
+                    " ambiguousNamedValues=", ambiguousNamedValues
+                );
+
+                return _lexer.makeError(
+                    Asn1ParserError.bug,
+                    "bug: Unable to determine what type of sequence is formed",
+                    token.location,
+                    "soloValues=", soloValues, 
+                    " definiteNamedValue=", definiteNamedValues,
+                    " ambiguousNamedValues=", ambiguousNamedValues,
+                );
+
+            default: return _lexer.makeError(
+                Asn1ParserError.oneOfNoMatches,
+                "expected Value",
+                token.location, "encountered token of type ", token.type
+            );
+        }
     }
 }
 
@@ -1857,6 +2400,148 @@ unittest
 
             Asn1TypeNode node;
             parser.Type(node).resultAssert;
+            test.verify(node);
+
+            Asn1Token token;
+            parser.consume(token).resultAssert;
+            assert(token.type == Asn1Token.Type.eof, "Expected no more tokens, but got: "~token.to!string);
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]:\n"~err.msg);
+    }
+}
+
+@("Asn1Parser - Value - General Success")
+unittest
+{
+    static struct T
+    {
+        string input;
+        void function(Asn1ValueNode node) verify;
+    }
+
+    auto cases = [
+        "UnresolvedString - bstring": T("'0101'B", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedStringValueNode.isNode!Asn1BstringTokenNode); 
+        }),
+        "UnresolvedString - hstring": T("'DEAD'H", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedStringValueNode.isNode!Asn1HstringTokenNode); 
+        }),
+        "UnresolvedString - cstring": T(`"foo"`, (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedStringValueNode.isNode!Asn1CstringTokenNode); 
+        }),
+        "UnresolvedString - CONTAINING value": T(`CONTAINING "boo"`, (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedStringValueNode.isNode!(Asn1UnresolvedStringValueNode.Containing)); 
+        }),
+        "boolean - FALSE": T("TRUE", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1BooleanValueNode.isNode!(Asn1BooleanValueNode.True)); 
+        }),
+        "boolean - FALSE": T("FALSE", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1BooleanValueNode.isNode!(Asn1BooleanValueNode.False)); 
+        }),
+        "NULL": T("NULL", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.isNode!Asn1NullValueNode); 
+        }),
+        "integer - positive": T("20", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1IntegerValueNode.asNode!Asn1SignedNumberNode.isNode!Asn1NumberTokenNode); 
+        }),
+        "integer - negative": T("-20", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1IntegerValueNode.asNode!Asn1SignedNumberNode.isNode!(Asn1SignedNumberNode.Negative)); 
+        }),
+        "real - positive": T("20.0", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1RealValueNode.asNode!Asn1NumericRealValueNode.isNode!Asn1RealNumberTokenNode); 
+        }),
+        "real - negative": T("-20.0", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1RealValueNode.asNode!Asn1NumericRealValueNode.isNode!(Asn1NumericRealValueNode.Negative)); 
+        }),
+        "real - PLUS-INFINITY": T("PLUS-INFINITY", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1RealValueNode.asNode!Asn1SpecialRealValueNode.isNode!Asn1PlusInfinityNode); 
+        }),
+        "real - MINUS-INFINITY": T("MINUS-INFINITY", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1RealValueNode.asNode!Asn1SpecialRealValueNode.isNode!Asn1MinusInfinityNode); 
+        }),
+        "UnresolvedSequence - Empty": T("{}", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.isNode!Asn1EmptyNode); 
+        }),
+        "UnresolvedSequence - ValueList - Single": T("{ 1 }", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.asNode!Asn1ValueListNode
+                .items.length == 1
+            ); 
+        }),
+        "UnresolvedSequence - ValueList - Multiple": T("{ 1, TRUE, 'DEADBEEF'H }", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.asNode!Asn1ValueListNode
+                .items.length == 3
+            ); 
+        }),
+        // "UnresolvedSequence - ValueList - Multiple w/ Ambiguous": T("{ 1, value {}, 'DEADBEEF'H }", (n){ 
+        //     assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.asNode!Asn1ValueListNode
+        //         .items.length == 3
+        //     ); 
+        // }),
+        "UnresolvedSequence - NamedValueList - Single": T("{ a 1 }", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.asNode!Asn1NamedValueListNode
+                .items.length == 1
+            ); 
+        }),
+        "UnresolvedSequence - NamedValueList - Multiple": T("{ a 1, b 12, c 42 }", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.asNode!Asn1NamedValueListNode
+                .items.length == 3
+            ); 
+        }),
+        "UnresolvedSequence - NamedValueList - Ambiguous Single": T("{ a {} }", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.asNode!Asn1NamedValueListNode
+                .items.length == 1
+            ); 
+        }),
+        "UnresolvedSequence - NamedValueList - Ambiguous Multiple": T("{ a {}, b {} }", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.asNode!Asn1NamedValueListNode
+                .items.length == 2
+            ); 
+        }),
+        "UnresolvedSequence - NamedValueList - Ambiguous mixed": T("{ a {}, except 2 }", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.asNode!Asn1NamedValueListNode
+                .items.length == 2
+            ); 
+        }),
+        "UnresolvedSequence - NamedValueList - Ambiguous Multiple 2": T("{ a b }", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.asNode!Asn1NamedValueListNode
+                .items.length == 1
+            ); 
+        }),
+        "UnresolvedSequence - ObjIdComponentsList - Unambiguous Single": T("{ a (1) }", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.asNode!Asn1ObjIdComponentsListNode
+                .items.length == 1
+            );
+        }),
+        "UnresolvedSequence - ObjIdComponentsList - Unambiguous Single Alternative": T("{ a (def) }", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.asNode!Asn1ObjIdComponentsListNode
+                .items.length == 1
+            );
+        }),
+        "UnresolvedSequence - ObjIdComponentsList - Unambiguous Single Alternative 2": T("{ a (MODULE.def) }", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.asNode!Asn1ObjIdComponentsListNode
+                .items.length == 1
+            );
+        }),
+        "UnresolvedSequence - ObjIdComponentsList - Unambiguous Multiple": T("{ a b c }", (n){ 
+            assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.asNode!Asn1ObjIdComponentsListNode
+                .items.length == 3
+            );
+        }),
+    ];
+
+    foreach(name, test; cases)
+    {
+        try
+        {
+            import std.conv : to;
+
+            Asn1ParserContext context;
+            auto lexer = Asn1Lexer(test.input);
+            auto parser = Asn1Parser(lexer, &context);
+
+            Asn1ValueNode node;
+            parser.Value(node).resultAssert;
             test.verify(node);
 
             Asn1Token token;

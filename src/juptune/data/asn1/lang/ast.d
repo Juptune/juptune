@@ -10,6 +10,7 @@ import juptune.data.asn1.lang.common : Asn1ParserContext;
 import juptune.data.asn1.lang.lexer  : Asn1Token;
 
 // NOTE: This aims to stay 1:1 with the spec for my own sanity, even if a lot of it is a waste of memory.
+// NOTE: Not all nodes are actually used, since the parser either lacks information, or prefers to represent things in a different way.
 
 enum Asn1NodeType // For faster/easier to write type checks, instead of using casting.
 {
@@ -1322,26 +1323,72 @@ final class Asn1ValueNode : Asn1BaseNode
  ++/
 final class Asn1BuiltinValueNode : Asn1BaseNode
 {
+    // NOTE: Due to ambiguity
+    //      - Any type that requires a sequence value is instead replaced by
+    //        Asn1UnresolvedSequenceValueNode, as type information is needed.
+    //      - Any raw string case is unused, instead replaced by Asn1UnresolvedStringValueNode.
+
     mixin OneOf!(Asn1NodeType.BuiltinValue,
-        Asn1BitStringValueNode,
+        // Asn1BitStringValueNode,
         Asn1BooleanValueNode,
-        Asn1CharacterStringValueNode,
+        // Asn1CharacterStringValueNode,
         Asn1ChoiceValueNode,
-        Asn1EmbeddedPdvValueNode,
+        // Asn1EmbeddedPdvValueNode,
         Asn1EnumeratedValueNode,
-        Asn1ExternalValueNode,
-        Asn1InstanceOfValueNode,
+        // Asn1ExternalValueNode,
+        // Asn1InstanceOfValueNode,
         Asn1IntegerValueNode,
         Asn1NullValueNode,
-        Asn1ObjectIdentifierValueNode,
-        Asn1OctetStringValueNode,
+        // Asn1ObjectIdentifierValueNode,
+        // Asn1OctetStringValueNode,
         Asn1RealValueNode,
-        Asn1RelativeOIDValueNode,
-        Asn1SequenceValueNode,
-        Asn1SequenceOfValueNode,
-        Asn1SetValueNode,
-        Asn1SetOfValueNode,
+        // Asn1RelativeOIDValueNode,
+        // Asn1SequenceValueNode,
+        // Asn1SequenceOfValueNode,
+        // Asn1SetValueNode,
+        // Asn1SetOfValueNode,
         Asn1TaggedValueNode,
+
+        // Non-standard, helps with parsing logic
+        Asn1UnresolvedStringValueNode,
+        Asn1UnresolvedSequenceValueNode,
+        Asn1UnresolvedIdentifierValueNode,
+    );
+}
+
+final class Asn1UnresolvedStringValueNode : Asn1BaseNode // Requires semantic analysis to determine exact type.
+{
+    // The string value nodes support this syntax:
+    //  CONTAINING Value
+    final static class Containing : Asn1BaseNode
+    {
+        mixin Container!(Asn1NodeType.FAILSAFE,
+            Asn1ValueNode,
+        );
+    }
+
+    mixin OneOf!(Asn1NodeType.FAILSAFE,
+        Asn1CstringTokenNode,
+        Asn1HstringTokenNode,
+        Asn1BstringTokenNode,
+        Containing
+    );
+}
+
+final class Asn1UnresolvedSequenceValueNode : Asn1BaseNode // Requires semantic analysis to determine exact type.
+{
+    mixin OneOf!(Asn1NodeType.FAILSAFE,
+        Asn1ValueListNode,
+        Asn1NamedValueListNode,
+        Asn1ObjIdComponentsListNode,
+        Asn1EmptyNode
+    );
+}
+
+final class Asn1UnresolvedIdentifierValueNode : Asn1BaseNode // Requires semantic analysis to determine exact meaning.
+{
+    mixin OneOf!(Asn1NodeType.FAILSAFE,
+        Asn1IdentifierTokenNode,
     );
 }
 
@@ -2350,8 +2397,11 @@ final class Asn1ObjIdComponentsListNode : Asn1BaseNode
  ++/
 final class Asn1ObjIdComponentsNode : Asn1BaseNode
 {
+    // NOTE: Due to ambiguity:
+    //      - NameForm instead becomes DefinedValue (ValueReference case)
+    //      - NumberForm's DefinedValue case is never used
     mixin OneOf!(Asn1NodeType.ObjIdComponents, 
-        Asn1NameFormNode,
+        // Asn1NameFormNode,
         Asn1NumberFormNode,
         Asn1NameAndNumberFormNode,
         Asn1DefinedValueNode,
@@ -2375,7 +2425,7 @@ final class Asn1NumberFormNode : Asn1BaseNode
 {
     mixin OneOf!(Asn1NodeType.NumberForm, 
         Asn1NumberTokenNode,
-        Asn1DefinedValueNode,
+        Asn1DefinedValueNode, // Fun fact, this is redundant since all references already include DefinedValue as an option...
     );
 }
 

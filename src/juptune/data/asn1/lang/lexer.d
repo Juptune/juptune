@@ -1089,11 +1089,11 @@ struct Asn1Lexer
         this.buildError(buffer, location, args);
         auto result = Result.make(error, message, String2.fromDestroyingArray(buffer));
 
-        version(unittest) debug
-        {
-            import std.stdio : writeln;
-            writeln(result.error, " -> ", result.context.sliceMaybeFromStack);
-        }
+        // version(unittest) debug
+        // {
+        //     import std.stdio : writeln;
+        //     writeln(result.error, " -> ", result.context.sliceMaybeFromStack);
+        // }
 
         return result;
     }
