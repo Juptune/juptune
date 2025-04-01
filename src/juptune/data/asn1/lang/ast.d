@@ -993,7 +993,6 @@ final class Asn1AssignmentListNode : Asn1BaseNode
 final class Asn1AssignmentNode : Asn1BaseNode
 {
     mixin OneOf!(Asn1NodeType.Assignment, 
-        Asn1AssignmentNode,
         Asn1TypeAssignmentNode,
         Asn1ValueAssignmentNode,
         Asn1ValueSetTypeAssignmentNode,
@@ -1266,7 +1265,7 @@ final class Asn1ReferencedTypeNode : Asn1BaseNode
 {
     mixin OneOf!(Asn1NodeType.ReferencedType,
         Asn1DefinedTypeNode,
-        Asn1UsefulTypeNode,
+        // Asn1UsefulTypeNode, // I literally don't get the point of this one
         Asn1SelectionTypeNode,
         Asn1TypeFromObjectNode,
         Asn1ValueSetFromObjectsNode,
@@ -2846,7 +2845,7 @@ final class Asn1ConstraintNode : Asn1BaseNode
  + ++/
 final class Asn1ConstraintSpecNode : Asn1BaseNode
 {
-    mixin OneOf!(Asn1NodeType.Constraint,
+    mixin OneOf!(Asn1NodeType.ConstraintSpec,
         Asn1SubtypeConstraintNode,
         Asn1GeneralConstraintNode,
     );

@@ -18,7 +18,6 @@ enum Asn1ParserError
     none,
     tokenNotFound,
     nonInitialTokenNotFound,
-    oneOfNoMatches,
     listMustNotBeEmpty,
     bug,
     invalidSyntax,
@@ -26,7 +25,7 @@ enum Asn1ParserError
 
 // Some parsers are also subparsers of other parsers! So we need a shortcut
 // to more finely control whether an "initial token not found" error is reported or not.
-private Result notInitial(Result result)
+private Result notInitial(Result result) @nogc nothrow
 {
     if(result.isError(Asn1ParserError.tokenNotFound))
         result.changeErrorType(Asn1ParserError.nonInitialTokenNotFound);
@@ -67,7 +66,9 @@ struct Asn1Parser
         ulong              _level;
     }
 
-    this(Asn1Lexer lexer, Asn1ParserContext* context) @nogc nothrow
+    @nogc nothrow:
+
+    this(Asn1Lexer lexer, Asn1ParserContext* context)
     in(context !is null, "context cannot be null")
     {
         this._context = context;
@@ -76,7 +77,7 @@ struct Asn1Parser
 
     /++++ Standard parsing functions/helpers ++++/
 
-    Result peek(scope out Asn1Token token) @nogc nothrow
+    Result peek(scope out Asn1Token token)
     {
         TailCall:
 
@@ -93,7 +94,7 @@ struct Asn1Parser
         return Result.noError;
     }
 
-    Result consume(scope out Asn1Token token) @nogc nothrow
+    Result consume(scope out Asn1Token token)
     {
         if(auto r = this.peek(token)) return r;
         this._lexer.next(token).resultAssert;
@@ -383,8 +384,10 @@ struct Asn1Parser
         {
             if(auto r = peek(token)) return r;
             if(token.type == Asn1Token.Type.rEND) break;
-            import std. conv : to;
-            debug assert(false, token.to!string);
+
+            Asn1AssignmentNode ass;
+            if(auto r = Assignment(ass)) return r;
+            assList.items.put(ass); // Modern Poetry
         }
 
         node = _context.allocNode!(typeof(node))(
@@ -573,7 +576,86 @@ struct Asn1Parser
 
     Result Assignment(out Asn1AssignmentNode node)
     {
-        assert(false);
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+
+        Asn1Token token;
+        if(auto r = consume(token)) return r;
+
+        if(token.type == Asn1Token.Type.typeReference)
+        {
+            const typeRefToken = token;
+
+            if(auto r = peek(token)) return r;
+            if(token.type != Asn1Token.Type.assignment)
+            {
+                assert(false, "TODO: ValueSetTypeAssignment");
+
+                Asn1TypeNode type;
+                if(auto r = Type(type)) return r;
+                if(auto r = consume(token)) return r;
+                if(token.type != Asn1Token.Type.assignment) return _lexer.makeError(
+                    Asn1ParserError.nonInitialTokenNotFound,
+                    "expected `::=` following type when parsing a ValueSetAssignment",
+                    token.location, "encoutered token of type ", token.type
+                );
+
+                Asn1ValueSetNode valueSet;
+                if(auto r = false) return Result.noError;
+                node = _context.allocNode!(typeof(node))(
+                    _context.allocNode!Asn1ValueSetTypeAssignmentNode(
+                        _context.allocNode!Asn1TypeReferenceTokenNode(typeRefToken),
+                        type,
+                        valueSet
+                    )
+                );
+            }
+            else
+            {
+                consume().resultAssert;
+                Asn1TypeNode type;
+                if(auto r = Type(type)) return r;
+                node = _context.allocNode!(typeof(node))(
+                    _context.allocNode!Asn1TypeAssignmentNode(
+                        _context.allocNode!Asn1TypeReferenceTokenNode(typeRefToken),
+                        type
+                    )
+                );
+            }
+        }
+        else if(token.type == Asn1Token.Type.valueReference)
+        {
+            const valueRefToken = token;
+
+            Asn1TypeNode type;
+            if(auto r = Type(type)) return r;
+
+            if(auto r = consume(token)) return r;
+            if(token.type != Asn1Token.Type.assignment) return _lexer.makeError(
+                Asn1ParserError.nonInitialTokenNotFound,
+                "expected `::=` following value name when parsing a ValueAssignment",
+                token.location, "encoutered token of type ", token.type
+            );
+
+            Asn1ValueNode value;
+            if(auto r = Value(value)) return r;
+            node = _context.allocNode!(typeof(node))(
+                _context.allocNode!Asn1ValueAssignmentNode(
+                    _context.allocNode!Asn1ValueReferenceTokenNode(valueRefToken),
+                    type,
+                    value
+                )
+            );
+        }
+        else return _lexer.makeError(
+            Asn1ParserError.tokenNotFound,
+            "expected type or identifier when parsing Assignment",
+            token.location, "encoutered token of type ", token.type
+        );
+        assert(node !is null, "Forgot to set node to a value");
+
+        return Result.noError();
     }
 
     Result NamedType(out Asn1NamedTypeNode node)
@@ -1075,7 +1157,7 @@ struct Asn1Parser
         if(auto r = consume(token)) return r;
         if(token.type != Asn1Token.Type.ellipsis) return _lexer.makeError(
             Asn1ParserError.tokenNotFound,
-            "expected `...` when looking for ExtensionAndException",
+            "expected `...` when looking for ExtensionAndException - did you add an extra comma within a SEQUENCE/SET/CHOICE?",
             token.location, "encountered token of type ", token.type
         );
 
@@ -1232,8 +1314,32 @@ struct Asn1Parser
 
     Result Type(out Asn1TypeNode node)
     {
-        // TODO: ConstrainedType
-        return PlainType(node);
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+        
+        Asn1TypeNode plainType;
+        if(auto r = PlainType(plainType)) return r;
+
+        Asn1Token token;
+        if(auto r = peek(token)) return r;
+        if(token.type == Asn1Token.Type.leftParenthesis)
+        {
+            Asn1ConstraintNode constraint;
+            if(auto r = Constraint(constraint)) return r;
+            node = _context.allocNode!(typeof(node))(
+                _context.allocNode!Asn1ConstrainedTypeNode(
+                    _context.allocNode!(Asn1ConstrainedTypeNode.Case1)(
+                        plainType,
+                        constraint
+                    )
+                )
+            );
+        }
+        else
+            node = plainType;
+
+        return Result.noError;
     }
 
     Result PlainType(out Asn1TypeNode node)
@@ -1267,7 +1373,7 @@ struct Asn1Parser
         }
 
         // TODO: ObjectClassFieldType
-        // TODO: ReferencedType
+        // TODO: TypeWithConstraint
 
         auto savedLexer = _lexer;
         scope(exit) if(node is null)
@@ -1278,6 +1384,70 @@ struct Asn1Parser
 
         switch(token.type) with(Asn1Token.Type)
         {
+            case identifier:
+                const idToken = token;
+                if(auto r = consume(token)) return r;
+                if(token.type != leftArrow) return _lexer.makeError(
+                    Asn1ParserError.nonInitialTokenNotFound,
+                    "expected `<` after identifier when parsing selection type",
+                    token.location, "encountered token of type ", token.type
+                );
+
+                Asn1TypeNode type;
+                if(auto r = Type(type)) return r;
+
+                node = _context.allocNode!(typeof(node))(
+                    _context.allocNode!Asn1ReferencedTypeNode(
+                        _context.allocNode!Asn1SelectionTypeNode(
+                            _context.allocNode!Asn1IdentifierTokenNode(
+                                idToken
+                            ),
+                            type
+                        )
+                    )
+                );
+                return Result.noError;
+
+            case typeReference:
+                const typeRefToken = token;
+                if(auto r = peek(token)) return r;
+                if(token.type == dot)
+                {
+                    consume().resultAssert;
+                    if(auto r = consume(token)) return r;
+                    if(token.type != typeReference) return _lexer.makeError(
+                        Asn1ParserError.nonInitialTokenNotFound,
+                        "expected typereference after `.` when parsing external type reference",
+                        token.location, "encountered token of type ", token.type
+                    );
+                    node = _context.allocNode!(typeof(node))(
+                        _context.allocNode!Asn1ReferencedTypeNode(
+                            _context.allocNode!Asn1DefinedTypeNode(
+                                _context.allocNode!Asn1ExternalTypeReferenceNode(
+                                    _context.allocNode!Asn1ModuleReferenceTokenNode(
+                                        typeRefToken
+                                    ),
+                                    _context.allocNode!Asn1TypeReferenceTokenNode(
+                                        token
+                                    )
+                                )
+                            )
+                        )
+                    );
+                    return Result.noError;
+                }
+
+                node = _context.allocNode!(typeof(node))(
+                    _context.allocNode!Asn1ReferencedTypeNode(
+                        _context.allocNode!Asn1DefinedTypeNode(
+                            _context.allocNode!Asn1TypeReferenceTokenNode(
+                                typeRefToken
+                            )
+                        )
+                    )
+                );
+                return Result.noError;
+
             case rBIT:
                 if(auto r = consume(token)) return r;
                 if(token.type != rSTRING)
@@ -1973,7 +2143,7 @@ struct Asn1Parser
                 return Result.noError;
 
             default: return _lexer.makeError(
-                Asn1ParserError.oneOfNoMatches,
+                Asn1ParserError.tokenNotFound,
                 "expected Type",
                 token.location, "encountered token of type ", token.type
             );
@@ -2098,6 +2268,17 @@ struct Asn1Parser
                         definedValue
                     ));
                 }
+            }
+            else if(token.type == Asn1Token.Type.number)
+            {
+                consume().resultAssert;
+                node.items.put(_context.allocNode!Asn1ObjIdComponentsNode(
+                    _context.allocNode!Asn1NumberFormNode(
+                        _context.allocNode!Asn1NumberTokenNode(
+                            token
+                        )
+                    )
+                ));
             }
             else return _lexer.makeError(
                 Asn1ParserError.nonInitialTokenNotFound,
@@ -2463,11 +2644,590 @@ struct Asn1Parser
                 );
 
             default: return _lexer.makeError(
-                Asn1ParserError.oneOfNoMatches,
+                Asn1ParserError.tokenNotFound,
                 "expected Value",
                 token.location, "encountered token of type ", token.type
             );
         }
+    }
+
+    Result Constraint(out Asn1ConstraintNode node)
+    {
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+
+        Asn1Token token;
+        if(auto r = consume(token)) return r;
+        if(token.type != Asn1Token.Type.leftParenthesis) return _lexer.makeError(
+            Asn1ParserError.tokenNotFound,
+            "expected `(` to denote start of constraint",
+            token.location, "encountered token of type ", token.type
+        );
+
+        Asn1ConstraintSpecNode constraintSpec;
+        // TODO: Asn1GeneralConstraintNode
+
+        Asn1ElementSetSpecNode rootSetSpec;
+        if(auto r = ElementSetSpec(rootSetSpec)) return r;
+        if(auto r = peek(token)) return r;
+        if(token.type == Asn1Token.Type.comma)
+        {
+            consume().resultAssert;
+            if(auto r = consume(token)) return r;
+            if(token.type != Asn1Token.Type.ellipsis) return _lexer.makeError(
+                Asn1ParserError.tokenNotFound,
+                "expected `...` to denote `, ...` as part of constraint spec",
+                token.location, "encountered token of type ", token.type
+            );
+            
+            if(auto r = peek(token)) return r;
+            if(token.type == Asn1Token.Type.comma)
+            {
+                consume().resultAssert;
+                Asn1ElementSetSpecNode additionalSetSpec;
+                if(auto r = ElementSetSpec(additionalSetSpec)) return r;
+                constraintSpec = _context.allocNode!(typeof(constraintSpec))(
+                    _context.allocNode!Asn1SubtypeConstraintNode(
+                        _context.allocNode!Asn1ElementSetSpecsNode(
+                            _context.allocNode!(Asn1ElementSetSpecsNode.Case2)(
+                                _context.allocNode!Asn1RootElementSetSpecNode(
+                                    rootSetSpec
+                                ),
+                                _context.allocNode!Asn1AdditionalElementSetSpecNode(
+                                    additionalSetSpec
+                                )
+                            )
+                        )
+                    )
+                );
+            }
+            else
+            {
+                constraintSpec = _context.allocNode!(typeof(constraintSpec))(
+                    _context.allocNode!Asn1SubtypeConstraintNode(
+                        _context.allocNode!Asn1ElementSetSpecsNode(
+                            _context.allocNode!(Asn1ElementSetSpecsNode.Case1)(
+                                _context.allocNode!Asn1RootElementSetSpecNode(
+                                    rootSetSpec
+                                )
+                            )
+                        )
+                    )
+                );
+            }
+        }
+        else
+        {
+            constraintSpec = _context.allocNode!(typeof(constraintSpec))(
+                _context.allocNode!Asn1SubtypeConstraintNode(
+                    _context.allocNode!Asn1ElementSetSpecsNode(
+                        _context.allocNode!Asn1RootElementSetSpecNode(
+                            rootSetSpec
+                        )
+                    )
+                )
+            );
+        }
+
+        Asn1ExceptionSpecNode excSpec;
+        if(auto r = ExceptionSpec(excSpec)) return r;
+        
+        if(auto r = consume(token)) return r;
+        if(token.type != Asn1Token.Type.rightParenthesis) return _lexer.makeError(
+            Asn1ParserError.tokenNotFound,
+            "expected `)` to denote end of constraint",
+            token.location, "encountered token of type ", token.type
+        );
+
+        node = _context.allocNode!(typeof(node))(
+            constraintSpec,
+            excSpec
+        );
+        return Result.noError;
+    }
+
+    Result ElementSetSpec(out Asn1ElementSetSpecNode node)
+    {
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+
+        Asn1Token token;
+        if(auto r = peek(token)) return r;
+        if(token.type == Asn1Token.Type.rALL)
+        {
+            consume().resultAssert;
+            Asn1ExclusionsNode exclusions;
+            if(auto r = Exclusions(exclusions)) return r;
+            node = _context.allocNode!(typeof(node))(exclusions);
+            return Result.noError;
+        }
+
+        auto unions = _context.allocNode!Asn1UnionsNode();
+        while(true)
+        {
+            auto intersections = _context.allocNode!Asn1IntersectionsNode();
+            while(true)
+            {
+                Asn1ElementsNode elements;
+                if(auto r = Elements(elements)) return r;
+                if(auto r = peek(token)) return r;
+                if(token.type == Asn1Token.Type.rEXCEPT)
+                {
+                    Asn1ExclusionsNode exclusions;
+                    if(auto r = Exclusions(exclusions)) return r;
+                    
+                    intersections.items.put(_context.allocNode!Asn1IntersectionElementsNode(
+                        _context.allocNode!(Asn1IntersectionElementsNode.Case1)(
+                            _context.allocNode!Asn1ElemsNode(elements),
+                            exclusions
+                        )
+                    ));
+                }
+                else
+                {
+                    intersections.items.put(_context.allocNode!Asn1IntersectionElementsNode(
+                        elements
+                    ));
+                }
+
+                if(auto r = peek(token)) return r;
+                if(token.type != Asn1Token.Type.rINTERSECTION
+                && token.type != Asn1Token.Type.toBach) break;
+                consume().resultAssert;
+            }
+            unions.items.put(intersections);
+
+            if(auto r = peek(token)) return r;
+            if(token.type != Asn1Token.Type.rUNION
+            && token.type != Asn1Token.Type.pipe) break;
+            consume().resultAssert;
+        }
+
+        node = _context.allocNode!(typeof(node))(unions);
+        return Result.noError;
+    }
+
+    Result Exclusions(out Asn1ExclusionsNode node)
+    {
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+
+        Asn1Token token;
+        if(auto r = consume(token)) return r;
+        if(token.type != Asn1Token.Type.rEXCEPT) return _lexer.makeError(
+            Asn1ParserError.tokenNotFound,
+            "expected `EXCEPT` to denote `ALL EXCEPT` when parsing Exclusions",
+            token.location, "encountered token of type ", token.type
+        );
+
+        Asn1ElementsNode elements;
+        if(auto r = Elements(elements)) return r;
+
+        node = _context.allocNode!(typeof(node))(elements);
+        return Result.noError;
+    }
+
+    // NOTE: Does not parse
+    //      - TypeConstraint as it is special cased for `ObjectClassFieldType`, so must be handled specially there.
+    Result Elements(out Asn1ElementsNode node)
+    {
+        auto savedLexer = _lexer;
+        scope(exit) if(node is null)
+            _lexer = savedLexer;
+
+        Asn1Token token;
+        if(auto r = peek(token)) return r;
+
+        // Start off with the easy ones.
+        switch(token.type) with(Asn1Token.Type)
+        {
+            case rINCLUDES:
+                consume().resultAssert;
+                
+                Asn1TypeNode type;
+                if(auto r = Type(type)) return r.notInitial;
+                node = _context.allocNode!(typeof(node))(
+                    _context.allocNode!Asn1SubtypeElementsNode(
+                        _context.allocNode!Asn1ContainedSubtypeNode(
+                            _context.allocNode!Asn1IncludesNode(
+                                _context.allocNode!Asn1IncludesMarkNode(token)
+                            ),
+                            type
+                        ),
+                    )
+                );
+                return Result.noError;
+
+            case rFROM:
+                consume().resultAssert;
+
+                Asn1ConstraintNode constraint;
+                if(auto r = Constraint(constraint)) return r.notInitial;
+                node = _context.allocNode!(typeof(node))(
+                    _context.allocNode!Asn1SubtypeElementsNode(
+                        _context.allocNode!Asn1PermittedAlphabetNode(
+                            constraint
+                        ),
+                    )
+                );
+                return Result.noError;
+
+            case rSIZE:
+                consume().resultAssert;
+
+                Asn1ConstraintNode constraint;
+                if(auto r = Constraint(constraint)) return r.notInitial;
+                node = _context.allocNode!(typeof(node))(
+                    _context.allocNode!Asn1SubtypeElementsNode(
+                        _context.allocNode!Asn1SizeConstraintNode(
+                            constraint
+                        ),
+                    )
+                );
+                return Result.noError;
+
+            case rPATTERN:
+                consume().resultAssert;
+
+                Asn1ValueNode value;
+                if(auto r = Value(value)) return r.notInitial;
+                node = _context.allocNode!(typeof(node))(
+                    _context.allocNode!Asn1SubtypeElementsNode(
+                        _context.allocNode!Asn1PatternConstraintNode(
+                            value
+                        ),
+                    )
+                );
+                return Result.noError;
+
+            case rWITH:
+                consume().resultAssert;
+                if(auto r = consume(token)) return r;
+                if(token.type == rCOMPONENT)
+                {
+                    Asn1ConstraintNode constraint;
+                    if(auto r = Constraint(constraint)) return r;
+                    node = _context.allocNode!(typeof(node))(
+                        _context.allocNode!Asn1SubtypeElementsNode(
+                            _context.allocNode!Asn1InnerTypeConstraintsNode(
+                                _context.allocNode!Asn1SingleTypeConstraintNode(
+                                    constraint
+                                ),
+                            ),
+                        )
+                    );
+                    return Result.noError;
+                }
+                else if(token.type != rCOMPONENTS) return _lexer.makeError(
+                    Asn1ParserError.nonInitialTokenNotFound,
+                    "expected `COMPONENTS` to denote `WITH COMPONENTS` when parsing constraint",
+                    token.location, "encountered token of type ", token.type
+                );
+
+                if(auto r = consume(token)) return r;
+                if(token.type != leftBracket) return _lexer.makeError(
+                    Asn1ParserError.nonInitialTokenNotFound,
+                    "expected `{` to denote start of `WITH COMPONENTS` constraint list",
+                    token.location, "encountered token of type ", token.type
+                );
+
+                bool isPartial;
+                if(auto r = peek(token)) return r;
+                if(token.type == ellipsis)
+                {
+                    consume().resultAssert;
+                    isPartial = true;
+                    if(auto r = consume(token)) return r;
+                    if(token.type != comma) return _lexer.makeError(
+                        Asn1ParserError.nonInitialTokenNotFound,
+                        "expected `,` following `...` within `WITH COMPONENTS` constraint list",
+                        token.location, "encountered token of type ", token.type
+                    );
+                }
+
+                auto typeConstraints = _context.allocNode!Asn1TypeConstraintsNode();
+                while(true)
+                {
+                    if(auto r = consume(token)) return r;
+                    if(token.type != identifier) return _lexer.makeError(
+                        Asn1ParserError.nonInitialTokenNotFound,
+                        "expected identifier within `WITH COMPONENTS` constraint list to begin next NamedConstraint",
+                        token.location, "encountered token of type ", token.type
+                    );
+                    const idToken = token;
+
+                    Asn1ValueConstraintNode valueConstraint;
+                    Asn1ConstraintNode constraint;
+                    if(auto r = Constraint(constraint))
+                    {
+                        if(!r.isError(Asn1ParserError.tokenNotFound))
+                            return r;
+                        valueConstraint = _context.allocNode!(typeof(valueConstraint))(
+                            _context.allocNode!Asn1EmptyNode(token)
+                        );
+                    }
+                    else
+                    {
+                        valueConstraint = _context.allocNode!(typeof(valueConstraint))(
+                            constraint
+                        );
+                    }
+
+                    Asn1PresenceConstraintNode presence;
+                    if(auto r = peek(token)) return r;
+                    switch(token.type)
+                    {
+                        case rPRESENT:
+                            consume().resultAssert;
+                            presence = _context.allocNode!(typeof(presence))(
+                                _context.allocNode!Asn1PresentNode(token)
+                            );
+                            break;
+                        case rABSENT:
+                            consume().resultAssert;
+                            presence = _context.allocNode!(typeof(presence))(
+                                _context.allocNode!Asn1AbsentNode(token)
+                            );
+                            break;
+                        case rOPTIONAL:
+                            consume().resultAssert;
+                            presence = _context.allocNode!(typeof(presence))(
+                                _context.allocNode!Asn1OptionalNode(token)
+                            );
+                            break;
+                        default:
+                            presence = _context.allocNode!(typeof(presence))(
+                                _context.allocNode!Asn1EmptyNode(token)
+                            );
+                            break;
+                    }
+
+                    typeConstraints.items.put(_context.allocNode!Asn1NamedConstraintNode(
+                        _context.allocNode!Asn1IdentifierTokenNode(idToken),
+                        _context.allocNode!Asn1ComponentConstraintNode(
+                            valueConstraint,
+                            presence
+                        )
+                    ));
+
+                    if(auto r = peek(token)) return r;
+                    if(token.type != comma) break;
+                    consume().resultAssert;
+                }
+
+                Asn1MultipleTypeConstraintsNode constraints;
+                if(isPartial)
+                {
+                    constraints = _context.allocNode!(typeof(constraints))(
+                        _context.allocNode!Asn1PartialSpecificationNode(
+                            typeConstraints
+                        )
+                    );
+                }
+                else
+                {
+                    constraints = _context.allocNode!(typeof(constraints))(
+                        _context.allocNode!Asn1FullSpecificationNode(
+                            typeConstraints
+                        )
+                    );
+                }
+
+                if(auto r = consume(token)) return r;
+                if(token.type != rightBracket) return _lexer.makeError(
+                    Asn1ParserError.nonInitialTokenNotFound,
+                    "expected `}` to denote end of `WITH COMPONENTS` constraint list",
+                    token.location, "encountered token of type ", token.type
+                );
+                node = _context.allocNode!(typeof(node))(
+                    _context.allocNode!Asn1SubtypeElementsNode(
+                        _context.allocNode!Asn1InnerTypeConstraintsNode(
+                            constraints
+                        ),
+                    )
+                );
+                return Result.noError;
+
+            default: break;
+        }
+
+        Asn1TypeNode type;
+        if(auto r = Type(type))
+        {
+            // Since we're prioritising Types before Values, we need to allow
+            // identifiers to pass through to the Value case, since 99% of the time
+            // they won't be signalling something like a SelectionType
+            if(r.isError(Asn1ParserError.nonInitialTokenNotFound))
+            {
+                if(auto r2 = peek(token)) return r2;
+                if(token.type != Asn1Token.Type.identifier) return r;
+            }
+            else if(!r.isError(Asn1ParserError.tokenNotFound))
+                return r;
+        }
+        else
+        {
+            node = _context.allocNode!(typeof(node))(
+                _context.allocNode!Asn1SubtypeElementsNode(
+                    _context.allocNode!Asn1ContainedSubtypeNode(
+                        _context.allocNode!Asn1IncludesNode(
+                            _context.allocNode!Asn1EmptyNode(token)
+                        ),
+                        type
+                    ),
+                )
+            );
+            return Result.noError;
+        }
+
+        Result ValueRange(out Asn1ValueRangeNode node, Asn1LowerEndpointNode lower)
+        {
+            if(auto r = consume(token)) return r;
+            if(token.type != Asn1Token.Type.rangeSeparator) return _lexer.makeError(
+                Asn1ParserError.nonInitialTokenNotFound,
+                "expected `..` following lower end of range constraint",
+                token.location, "encountered token of type ", token.type
+            );
+
+            if(auto r = peek(token)) return r;
+            
+            bool hasLeftArrow;
+            if(token.type == Asn1Token.Type.leftArrow)
+            {
+                hasLeftArrow = true;
+                consume().resultAssert;
+            }
+
+            Asn1UpperEndValueNode upper;
+            if(auto r = peek(token)) return r;
+            if(token.type == Asn1Token.Type.rMAX)
+            {
+                consume().resultAssert;
+                upper = _context.allocNode!(typeof(upper))(
+                    _context.allocNode!Asn1MaxNode(token)
+                );
+            }
+            else
+            {
+                Asn1ValueNode upperValue;
+                if(auto r = Value(upperValue)) return r.notInitial;
+                upper = _context.allocNode!(typeof(upper))(
+                    upperValue
+                );
+            }
+
+            Asn1UpperEndpointNode upperEndpoint;
+            if(hasLeftArrow)
+                upperEndpoint = _context.allocNode!Asn1UpperEndpointNode(_context.allocNode!(Asn1UpperEndpointNode.Case1)(upper));
+            else
+                upperEndpoint = _context.allocNode!Asn1UpperEndpointNode(upper);
+
+            node = _context.allocNode!(typeof(node))(
+                lower,
+                upperEndpoint
+            );
+            return Result.noError;
+        }
+
+        if(auto r = peek(token)) return r;
+        if(token.type == Asn1Token.Type.rMIN)
+        {
+            Asn1LowerEndpointNode lower;
+
+            consume().resultAssert;
+            if(auto r = peek(token)) return r;
+            if(token.type == Asn1Token.Type.leftArrow)
+            {
+                consume().resultAssert;
+                lower = _context.allocNode!(typeof(lower))(
+                    _context.allocNode!(typeof(lower).Case1)(
+                        _context.allocNode!Asn1LowerEndValueNode(
+                            _context.allocNode!Asn1MinNode(token)
+                        )
+                    )
+                );
+            }
+            else
+            {
+                lower = _context.allocNode!(typeof(lower))(
+                    _context.allocNode!Asn1LowerEndValueNode(
+                        _context.allocNode!Asn1MinNode(token)
+                    )
+                );
+            }
+
+            Asn1ValueRangeNode valueRange;
+            if(auto r = ValueRange(valueRange, lower)) return r;
+            
+            node = _context.allocNode!(typeof(node))(
+                _context.allocNode!Asn1SubtypeElementsNode(
+                    valueRange
+                )
+            );
+            return Result.noError;
+        }
+
+        Asn1ValueNode value;
+        if(auto r = Value(value))
+        {
+            if(!r.isError(Asn1ParserError.tokenNotFound))
+                return r;
+        }
+        else
+        {
+            Asn1LowerEndpointNode lower;
+            if(auto r = peek(token)) return r;
+            if(token.type == Asn1Token.Type.leftArrow)
+            {
+                consume().resultAssert;
+                lower = _context.allocNode!(typeof(lower))(
+                    _context.allocNode!(typeof(lower).Case1)(
+                        _context.allocNode!Asn1LowerEndValueNode(
+                            value
+                        )
+                    )
+                );
+            }
+            else if(token.type == Asn1Token.Type.rangeSeparator)
+            {
+                lower = _context.allocNode!(typeof(lower))(
+                    _context.allocNode!Asn1LowerEndValueNode(
+                        value
+                    )
+                );
+            }
+
+            if(lower is null) // We're not in a range constraint
+            {
+                node = _context.allocNode!(typeof(node))(
+                    _context.allocNode!Asn1SubtypeElementsNode(
+                        _context.allocNode!Asn1SingleValueNode(
+                            value
+                        ),
+                    )
+                );
+                return Result.noError;
+            }
+
+            Asn1ValueRangeNode valueRange;
+            if(auto r = ValueRange(valueRange, lower)) return r;
+            
+            node = _context.allocNode!(typeof(node))(
+                _context.allocNode!Asn1SubtypeElementsNode(
+                    valueRange
+                )
+            );
+            return Result.noError;
+        }
+
+        return _lexer.makeError(
+            Asn1ParserError.tokenNotFound,
+            "expected constraint element",
+            token.location, "encountered token of type ", token.type,
+        );
     }
 }
 
@@ -2857,6 +3617,119 @@ unittest
         "TAG - No tag class": T("[0] BOOLEAN", (n){
             assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1TaggedTypeNode.isNode!(Asn1TaggedTypeNode.Default));
         }),
+        "TAG - No tag class": T("[0] BOOLEAN", (n){
+            assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1TaggedTypeNode.isNode!(Asn1TaggedTypeNode.Default));
+        }),
+        "Constraint - SingleValue": T("INTEGER (1)", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .isNode!Asn1SingleValueNode
+            );
+        }),
+        "Constraint - ContainedSubtype": T("INTEGER (BOOLEAN)", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .isNode!Asn1ContainedSubtypeNode
+            );
+        }),
+        "Constraint - ContainedSubtype Alternative": T("INTEGER (INCLUDES BOOLEAN)", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .isNode!Asn1ContainedSubtypeNode
+            );
+        }),
+        "Constraint - ValueRange": T("INTEGER (0..1)", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .isNode!Asn1ValueRangeNode
+            );
+        }),
+        "Constraint - ValueRange MIN": T("INTEGER (MIN..1)", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .isNode!Asn1ValueRangeNode
+            );
+        }),
+        "Constraint - ValueRange MIN<": T("INTEGER (MIN<..1)", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .isNode!Asn1ValueRangeNode
+            );
+        }),
+        "Constraint - ValueRange MAX": T("INTEGER (0..MAX)", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .isNode!Asn1ValueRangeNode
+            );
+        }),
+        "Constraint - ValueRange MAX<": T("INTEGER (0..<MAX)", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .isNode!Asn1ValueRangeNode
+            );
+        }),
+        "Constraint - ValueRange Lower<": T("INTEGER (0<..1)", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .isNode!Asn1ValueRangeNode
+            );
+        }),
+        "Constraint - PermittedAlphabet": T(`INTEGER (FROM ("abc"))`, (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .isNode!Asn1PermittedAlphabetNode
+            );
+        }),
+        "Constraint - Size": T("INTEGER (SIZE (1))", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .isNode!Asn1SizeConstraintNode
+            );
+        }),
+        "Constraint - Pattern": T(`INTEGER (PATTERN "[012]")`, (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .isNode!Asn1PatternConstraintNode
+            );
+        }),
+        "Constraint - Intersections": T(`INTEGER (1 INTERSECTION 2 ^ 3)`, (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0]
+                .items.length == 3
+            );
+        }),
+        "Constraint - Union": T(`INTEGER (1 UNION 2 | 3)`, (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode
+                .items.length == 3
+            );
+        }),
+        "Constraint - Mixed union & intersection": T(`INTEGER (1 ^ 2 | 3 EXCEPT 4)`, (n){
+            auto unions = n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode;
+            assert(unions.items.length == 2);
+            assert(unions.items[0].items.length == 2);
+            assert(unions.items[1].items.length == 1);
+        }),
+        "Constraint - InnerTypeConstraints Single": T(`INTEGER (WITH COMPONENT (1))`, (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .asNode!Asn1InnerTypeConstraintsNode.isNode!Asn1SingleTypeConstraintNode
+            );
+        }),
+        "Constraint - InnerTypeConstraints Multiple": T(`INTEGER (WITH COMPONENTS { a })`, (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .asNode!Asn1InnerTypeConstraintsNode.isNode!Asn1MultipleTypeConstraintsNode
+            );
+        }),
+        "Constraint - InnerTypeConstraints Multiple w/ Value Constraint": T(
+            `INTEGER (WITH COMPONENTS { a (1) })`, (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .asNode!Asn1InnerTypeConstraintsNode.isNode!Asn1MultipleTypeConstraintsNode
+            );
+        }),
+        "Constraint - InnerTypeConstraints Multiple w/ Presence": T(
+            `INTEGER (WITH COMPONENTS { a PRESENT, b OPTIONAL, c ABSENT })`, (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .asNode!Asn1InnerTypeConstraintsNode.isNode!Asn1MultipleTypeConstraintsNode
+            );
+        }),
+        "Constraint - InnerTypeConstraints Multiple Partial": T(
+            `INTEGER (WITH COMPONENTS { ..., a })`, (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
+                .asNode!Asn1InnerTypeConstraintsNode.isNode!Asn1MultipleTypeConstraintsNode
+            );
+        }),
+        "ReferencedType - TypeReference": T(`MyType`, (n) {
+            assert(n.asNode!Asn1ReferencedTypeNode.asNode!Asn1DefinedTypeNode.isNode!Asn1TypeReferenceTokenNode);
+        }),
+        "ReferencedType - ExternalTypeReference": T(`MyMod.TypeRef`, (n) {
+            assert(n.asNode!Asn1ReferencedTypeNode.asNode!Asn1DefinedTypeNode.isNode!Asn1ExternalTypeReferenceNode);
+        }),
     ];
 
     foreach(name, test; cases)
@@ -2969,7 +3842,7 @@ unittest
                 .items.length == 2
             ); 
         }),
-        "UnresolvedSequence - NamedValueList - Ambiguous mixed": T("{ a {}, except 2 }", (n){ 
+        "UnresolvedSequence - NamedValueList - Ambiguous Mixed": T("{ a {}, except 2 }", (n){ 
             assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.asNode!Asn1NamedValueListNode
                 .items.length == 2
             ); 
@@ -3102,6 +3975,30 @@ unittest
                 .items.length == 2
             );
         }),
+        "TypeAssignment": T(`
+            MyMod DEFINITIONS ::= BEGIN
+                T ::= SEQUENCE {
+                    a BOOLEAN,
+                    b SET OF INTEGER
+                }
+            END
+        `, (n){
+            assert(n.getNode!Asn1ModuleBodyNode.asNode!(Asn1ModuleBodyNode.Case1).getNode!Asn1AssignmentListNode
+                .items.length == 1
+            );
+        }),
+        "ValueAssignment": T(`
+            MyMod DEFINITIONS ::= BEGIN
+                t SEQUENCE { a BOOLEAN, b SET OF INTEGER } ::= {
+                    a TRUE,
+                    b { 1, 2, 3 }
+                }
+            END
+        `, (n){
+            assert(n.getNode!Asn1ModuleBodyNode.asNode!(Asn1ModuleBodyNode.Case1).getNode!Asn1AssignmentListNode
+                .items.length == 1
+            );
+        }),
     ];
 
     foreach(name, test; cases)
@@ -3117,6 +4014,226 @@ unittest
             Asn1ModuleDefinitionNode node;
             parser.ModuleDefinition(node).resultAssert;
             test.verify(node);
+
+            Asn1Token token;
+            parser.consume(token).resultAssert;
+            assert(token.type == Asn1Token.Type.eof, "Expected no more tokens, but got: "~token.to!string);
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]:\n"~err.msg);
+    }
+}
+
+@("Asn1Parser - Examples from ISO/IEC 8824-1:2003")
+unittest
+{
+    // Just testing that they fully parse. Examples are modified to fit into a full
+    // ModuleDefinition syntax if needed.
+    auto cases = [
+        "14.10": `
+            M DEFINITIONS ::= BEGIN
+                T ::= SEQUENCE {
+                    a BOOLEAN,
+                    b SET OF INTEGER
+                }
+            END
+        `,
+        "19.5": `
+            M DEFINITIONS ::= BEGIN
+                A ::= ENUMERATED {a, b, ..., c(0)} -- invalid, since both 'a' and 'c' equal 0
+                B ::= ENUMERATED {a, b, ..., c, d(2)} -- invalid, since both 'c' and 'd' equal 2
+                C ::= ENUMERATED {a, b(3), ..., c(1)} -- valid, 'c' = 1
+                D ::= ENUMERATED {a, b, ..., c(2)} -- valid, 'c' = 2
+            END
+        `,
+        "19.6": `
+            M DEFINITIONS ::= BEGIN
+                A ::= ENUMERATED {a, b, ..., c} -- c = 2
+                B ::= ENUMERATED {a, b, c(0), ..., d} -- d = 3
+                C ::= ENUMERATED {a, b, ..., c(3), d} -- d = 4
+                D ::= ENUMERATED {a, z(25), ..., d} -- d = 1
+            END
+        `,
+        "28.8": `
+            M DEFINITIONS ::= BEGIN
+                A ::= CHOICE {
+                    b B,
+                    c NULL}
+                B ::= CHOICE {
+                    d [0] NULL,
+                    e [1] NULL}
+
+                A ::= CHOICE {
+                    b B,
+                    c C}
+                B ::= CHOICE {
+                    d [0] NULL,
+                    e [1] NULL}
+                C ::= CHOICE {
+                    f [2] NULL,
+                    g [3] NULL}
+
+                A ::= CHOICE {
+                    b B,
+                    c C}
+                B ::= CHOICE {
+                    d [0] NULL,
+                    e [1] NULL}
+                C ::= CHOICE {
+                    f [0] NULL,
+                    g [1] NULL}
+            END
+        `,
+        "31.12": `
+            M DEFINITIONS ::= BEGIN
+                a OBJECT IDENTIFIER ::= { iso standard 8571 pci (1) }
+                ftam OBJECT IDENTIFIER ::= { iso standard 8571 }
+                ftom2 OBJECT IDENTIFIER ::= { ftma pci(1) }
+            END
+        `,
+        "32.6": `
+            M DEFINITIONS ::= BEGIN
+                thisUniversity OBJECT IDENTIFIER ::=
+                    {iso member-body country(29) universities(56) thisuni(32)}
+                firstgroup RELATIVE-OID ::= {science-fac(4) maths-dept(3)}
+            END
+        `,
+        "33.5": `
+            M DEFINITIONS ::= BEGIN
+                T ::= SEQUENCE {
+                    identification CHOICE {
+                        syntaxes SEQUENCE {
+                            abstract OBJECT IDENTIFIER,
+                            transfer OBJECT IDENTIFIER }
+                        -- Abstract and transfer syntax object identifiers --,
+                        syntax OBJECT IDENTIFIER
+                        -- A single object identifier for identification of the abstract
+                        -- and transfer syntaxes --,
+                        presentation-context-id INTEGER
+                        -- (Applicable only to OSI environments)
+                        -- The negotiated OSI presentation context identifies the
+                        -- abstract and transfer syntaxes --,
+                        context-negotiation SEQUENCE {
+                            presentation-context-id INTEGER,
+                            transfer-syntax OBJECT IDENTIFIER }
+                        -- (Applicable only to OSI environments)
+                        -- Context-negotiation in progress, presentation-context-id
+                        -- identifies only the abstract syntax
+                        -- so the transfer syntax shall be specified --,
+                        transfer-syntax OBJECT IDENTIFIER
+                        -- The type of the value (for example, specification that it is
+                        -- the value of an ASN.1 type)
+                        -- is fixed by the application designer (and hence known to both
+                        -- sender and receiver). This
+                        -- case is provided primarily to support
+                        -- selective-field-encryption (or other encoding
+                        -- transformations) of an ASN.1 type --,
+                        fixed NULL
+                        -- The data value is the value of a fixed ASN.1 type (and hence
+                        -- known to both sender
+                        -- and receiver) -- },
+                        --data-value-descriptor ObjectDescriptor OPTIONAL
+                        -- This provides human-readable identification of the class of the
+                        -- value --
+                        data-value OCTET STRING }
+                    ( WITH COMPONENTS {
+                    ... ,
+                    data-value-descriptor ABSENT } )
+            END
+        `,
+        "33.8": `
+            M DEFINITIONS ::= BEGIN
+                T ::= EMBEDDED PDV (WITH COMPONENTS {
+                        ... ,
+                        identification (WITH COMPONENTS {
+                        syntaxes PRESENT } ) } )
+            END
+        `,
+        "37.8": `
+            M DEFINITIONS ::= BEGIN
+                IMPORTS BasicLatin, greekCapitalLetterSigma FROM ASN1-CHARACTER-MODULE
+                    { joint-iso-itu-t asn1(1) specification(0) modules(0) iso10646(0) };
+                MyAlphabet ::= UniversalString (FROM (BasicLatin | greekCapitalLetterSigma))
+                mystring MyAlphabet ::= { "abc" , greekCapitalLetterSigma , "def" }
+            END
+        `,
+        "38.1.3": `
+            M DEFINITIONS ::= BEGIN
+                space BMPString ::= {0, 0, 0, 32}
+                exclamationMark BMPString ::= {0, 0, 0, 33}
+                quotationMark BMPString ::= {0, 0, 0, 34}
+                -- ... and so on
+                tilde BMPString ::= {0, 0, 0, 126}
+                BasicLatin ::= BMPString
+                (FROM (space
+                | exclamationMark
+                | quotationMark
+                --| ...  and so on
+                | tilde)
+                )
+            END
+        `,
+        "38.1.4": `
+            M DEFINITIONS ::= BEGIN
+                Level1 ::= BMPString (FROM (ALL EXCEPT CombiningCharacters))
+                Level2 ::= BMPString (FROM (ALL EXCEPT CombiningCharactersType-2))
+                Level3 ::= BMPString
+            END
+        `,
+        "45.2": `
+            M DEFINITIONS ::= BEGIN
+                NamesOfMemberNations ::= SEQUENCE OF VisibleString (SIZE(1..64))
+            END
+        `,
+        "45.3": `
+            M DEFINITIONS ::= BEGIN
+                T ::= CHOICE {
+                    a SEQUENCE {
+                        a INTEGER OPTIONAL,
+                        b BOOLEAN
+                    },
+                    b NULL
+                }
+                V ::= a < T (WITH COMPONENTS {..., a ABSENT})
+            END
+        `,
+        "E.1.2": `
+            M DEFINITIONS ::= BEGIN
+                PersonnelRecord ::= [APPLICATION 0] SET
+                {   name Name,
+                    title VisibleString,
+                    number EmployeeNumber,
+                    dateOfHire Date,
+                    nameOfSpouse Name,
+                    children SEQUENCE OF ChildInformation DEFAULT {}
+                }
+                ChildInformation ::= SET
+                {   name Name,
+                    dateOfBirth Date
+                }
+                Name ::= [APPLICATION 1] SEQUENCE
+                {   givenName VisibleString,
+                    initial VisibleString,
+                    familyName VisibleString
+                }
+                EmployeeNumber ::= [APPLICATION 2] INTEGER
+                Date ::= [APPLICATION 3] VisibleString -- YYYY MMDD
+            END
+        `,
+    ];
+
+    foreach(name, test; cases)
+    {
+        try
+        {
+            import std.conv : to;
+
+            Asn1ParserContext context;
+            auto lexer = Asn1Lexer(test);
+            auto parser = Asn1Parser(lexer, &context);
+
+            Asn1ModuleDefinitionNode node;
+            parser.ModuleDefinition(node).resultAssert;
 
             Asn1Token token;
             parser.consume(token).resultAssert;

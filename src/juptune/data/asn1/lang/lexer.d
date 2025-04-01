@@ -736,7 +736,7 @@ struct Asn1Lexer
 
         if(!this.eof)
         {
-            if(this.peekAt(0) == '.')
+            if(this.peekAt(0) == '.' && (this.charsLeft <= 1 || this.peekAt(1) != '.'))
             {
                 this.advance(1); // Skip .
                 isReal = true;
@@ -1422,8 +1422,15 @@ unittest
     alias rum = Asn1Token.Real;
     alias str = Asn1Token.SubString;
     const cases = [
-        // ... I can't remember the test cases I want to put here, so for now here's a dummy xD
-        "temp": T("abc ::=", [tok(typ.identifier, "abc", 0, 3), tok(typ.whiteSpace, " ", 3, 4), tok(typ.assignment, "::=", 4, 7)]), // @suppress(dscanner.style.long_line)
+        // The spec doesn't seem to ever mention this as valid, but this particular syntax
+        // is used in several official examples, lol
+        "number - range separator edge case": T(
+            "1..2", [
+                tok(typ.number, "1", 0, 1, iv(num(1, true))),
+                tok(typ.rangeSeparator, "..", 1, 3),
+                tok(typ.number, "2", 3, 4, iv(num(2, true))),
+            ]
+        )
     ];
 
     foreach(name, test; cases)
