@@ -556,8 +556,7 @@ struct Asn1Parser
             );
 
             if(auto r = peek(token)) return r;
-            if(token.type != Asn1Token.Type.comma) break;
-            consume().resultAssert;
+            if(token.type == Asn1Token.Type.rightBracket) break;
         }
 
         if(auto r = consume(token)) return r;
@@ -1351,14 +1350,27 @@ struct Asn1Parser
             Asn1Token.Type type;
         }
 
-        static struct TypeListType(string Name_, ListT_, OfT_)
+        static struct TypeListType(
+            string Name_, 
+            ListT_, 
+            OfT_,
+            ConstraintOfTypeT_,
+            SizeConstraintOfTypeT_,
+            ConstraintOfNamedTypeT_,
+            SizeConstraintOfNamedTypeT_,
+        )
         {
             static immutable Name = Name_;
             alias ListT = ListT_;
             alias OfT = OfT_;
+            alias ConstraintOfTypeT = ConstraintOfTypeT_;
+            alias SizeConstraintOfTypeT = SizeConstraintOfTypeT_;
+            alias ConstraintOfNamedTypeT = ConstraintOfNamedTypeT_;
+            alias SizeConstraintOfNamedTypeT = SizeConstraintOfNamedTypeT_;
 
             static immutable BeginErrorMsg = "expected opening bracket to begin `"~Name_~"` type list";
             static immutable EndErrorMsg = "expected closing bracket to end `"~Name_~"` type list";
+            static immutable ConstraintMissingOfErrorMsg = "expected `OF` following constraint for `"~Name_~"`";
 
             Asn1Token.Type type;
         }
@@ -1372,8 +1384,18 @@ struct Asn1Parser
             );
         }
 
+        void makeTypeWithConstraint(NodeT, Args...)(Args args)
+        {
+            node = _context.allocNode!(typeof(node))(
+                _context.allocNode!Asn1ConstrainedTypeNode(
+                    _context.allocNode!Asn1TypeWithConstraintNode(
+                        _context.allocNode!NodeT(args)
+                    )
+                ),
+            );
+        }
+
         // TODO: ObjectClassFieldType
-        // TODO: TypeWithConstraint
 
         auto savedLexer = _lexer;
         scope(exit) if(node is null)
@@ -1563,6 +1585,20 @@ struct Asn1Parser
                     makeBuiltin!Asn1CharacterStringTypeNode(
                         _context.allocNode!Asn1RestrictedCharacterStringTypeNode(
                             _context.allocNode!(StringT.NodeT)(token)
+                        )
+                    );
+                    return Result.noError;
+            }
+
+            static foreach(UsefulT; [rGeneralizedTime, rUTCTime, rObjectDescriptor])
+            {
+                case UsefulT:
+                    token.type = typeReference; // Forcefully coerce, since for all intents and purposes this is how it gets treated.
+                    node = _context.allocNode!(typeof(node))(
+                        _context.allocNode!Asn1ReferencedTypeNode(
+                            _context.allocNode!Asn1UsefulTypeNode(
+                                _context.allocNode!Asn1TypeReferenceTokenNode(token)
+                            )
                         )
                     );
                     return Result.noError;
@@ -2000,11 +2036,40 @@ struct Asn1Parser
 
             // SET and SEQUENCE are identical, so we can do a simple subtitution
             static foreach(Case; AliasSeq!(
-                TypeListType!("SEQUENCE", Asn1SequenceTypeNode, Asn1SequenceOfTypeNode)(rSEQUENCE),
-                TypeListType!("SET", Asn1SetTypeNode, Asn1SetOfTypeNode)(rSET),
+                TypeListType!(
+                    "SEQUENCE", 
+                    Asn1SequenceTypeNode, 
+                    Asn1SequenceOfTypeNode,
+                    Asn1TypeWithConstraintNode.SequenceConstraintType,
+                    Asn1TypeWithConstraintNode.SequenceSizeConstraintType,
+                    Asn1TypeWithConstraintNode.SequenceConstraintNamedType,
+                    Asn1TypeWithConstraintNode.SequenceSizeConstraintNamedType,
+                )(rSEQUENCE),
+                TypeListType!(
+                    "SET", 
+                    Asn1SetTypeNode, 
+                    Asn1SetOfTypeNode,
+                    Asn1TypeWithConstraintNode.SetConstraintType,
+                    Asn1TypeWithConstraintNode.SetSizeConstraintType,
+                    Asn1TypeWithConstraintNode.SetConstraintNamedType,
+                    Asn1TypeWithConstraintNode.SetSizeConstraintNamedType,
+                )(rSET),
             ))
             {
                 case Case.type:
+                    Asn1ConstraintNode sizeConstraint;
+                    Asn1ConstraintNode otherConstraint;
+                    if(auto r = peek(token)) return r;
+                    if(token.type == rSIZE)
+                    {
+                        consume().resultAssert;
+                        if(auto r = Constraint(sizeConstraint)) return r.notInitial;
+                    }
+                    else if(token.type == leftParenthesis)
+                    {
+                        if(auto r = Constraint(otherConstraint)) return r.notInitial;
+                    }
+                    
                     if(auto r = consume(token)) return r;
                     if(token.type == rOF)
                     {
@@ -2013,17 +2078,54 @@ struct Asn1Parser
                         {
                             Asn1NamedTypeNode namedType;
                             if(auto r = NamedType(namedType)) return r;
-                            makeBuiltin!(Case.OfT)(namedType);
+
+                            if(sizeConstraint !is null)
+                            {
+                                makeTypeWithConstraint!(Case.SizeConstraintOfNamedTypeT)(
+                                    _context.allocNode!Asn1SizeConstraintNode(sizeConstraint),
+                                    namedType
+                                );
+                            }
+                            else if(otherConstraint !is null)
+                            {
+                                makeTypeWithConstraint!(Case.ConstraintOfNamedTypeT)(
+                                    otherConstraint,
+                                    namedType
+                                );
+                            }
+                            else
+                                makeBuiltin!(Case.OfT)(namedType);
                         }
                         else
                         {
                             Asn1TypeNode type;
                             if(auto r = Type(type)) return r;
-                            makeBuiltin!(Case.OfT)(type);
+
+                            if(sizeConstraint !is null)
+                            {
+                                makeTypeWithConstraint!(Case.SizeConstraintOfTypeT)(
+                                    _context.allocNode!Asn1SizeConstraintNode(sizeConstraint),
+                                    type
+                                );
+                            }
+                            else if(otherConstraint !is null)
+                            {
+                                makeTypeWithConstraint!(Case.ConstraintOfTypeT)(
+                                    otherConstraint,
+                                    type
+                                );
+                            }
+                            else
+                                makeBuiltin!(Case.OfT)(type);
                         }
 
                         return Result.noError;
                     }
+                    else if(sizeConstraint !is null || otherConstraint !is null) return _lexer.makeError(
+                        Asn1ParserError.nonInitialTokenNotFound,
+                        Case.ConstraintMissingOfErrorMsg,
+                        token.location, "encountered token of type ", token.type
+                    );
 
                     if(token.type != leftBracket) return _lexer.makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
@@ -3505,6 +3607,18 @@ unittest
         "SEQUENCE OF - NamedType": T("SEQUENCE OF i INTEGER", (n){
             assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SequenceOfTypeNode.isNode!Asn1NamedTypeNode);
         }),
+        "SEQUENCE OF - SizeConstraint - Type": T("SEQUENCE SIZE (0..1) OF INTEGER", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!Asn1TypeWithConstraintNode.isNode!(Asn1TypeWithConstraintNode.SequenceSizeConstraintType));
+        }),
+        "SEQUENCE OF - SizeConstraint - NamedType": T("SEQUENCE SIZE (0..1) OF i INTEGER", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!Asn1TypeWithConstraintNode.isNode!(Asn1TypeWithConstraintNode.SequenceSizeConstraintNamedType));
+        }),
+        "SEQUENCE OF - Constraint - Type": T("SEQUENCE (0) OF INTEGER", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!Asn1TypeWithConstraintNode.isNode!(Asn1TypeWithConstraintNode.SequenceConstraintType));
+        }),
+        "SEQUENCE OF - Constraint - NamedType": T("SEQUENCE (0) OF i INTEGER", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!Asn1TypeWithConstraintNode.isNode!(Asn1TypeWithConstraintNode.SequenceConstraintNamedType));
+        }),
         "SET - Empty": T("SET {}", (n){
             assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetTypeNode.isNode!(Asn1SetTypeNode.Empty));
         }),
@@ -3604,6 +3718,18 @@ unittest
         }),
         "SET OF - NamedType": T("SET OF i INTEGER", (n){
             assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1SetOfTypeNode.isNode!Asn1NamedTypeNode);
+        }),
+        "SET OF - SizeConstraint - Type": T("SET SIZE (0..1) OF INTEGER", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!Asn1TypeWithConstraintNode.isNode!(Asn1TypeWithConstraintNode.SetSizeConstraintType));
+        }),
+        "SET OF - SizeConstraint - NamedType": T("SET SIZE (0..1) OF i INTEGER", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!Asn1TypeWithConstraintNode.isNode!(Asn1TypeWithConstraintNode.SetSizeConstraintNamedType));
+        }),
+        "SET OF - Constraint - Type": T("SET (0) OF INTEGER", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!Asn1TypeWithConstraintNode.isNode!(Asn1TypeWithConstraintNode.SetConstraintType));
+        }),
+        "SET OF - Constraint - NamedType": T("SET (0) OF i INTEGER", (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!Asn1TypeWithConstraintNode.isNode!(Asn1TypeWithConstraintNode.SetConstraintNamedType));
         }),
         "TAG - Default": T("[UNIVERSAL 0] BOOLEAN", (n){
             assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1TaggedTypeNode.isNode!(Asn1TaggedTypeNode.Default));
@@ -3912,7 +4038,7 @@ unittest
             assert(n.getNode!Asn1ExtensionDefaultNode.isNode!Asn1EmptyNode);
             assert(n.getNode!Asn1ModuleBodyNode.isNode!Asn1EmptyNode);
         }),
-        "ModuleIdentifier - All Types": T("MyMod { nameForm, 20, nameAndNumber(20) } DEFINITIONS ::= BEGIN END", (n){ 
+        "ModuleIdentifier - All Types": T("MyMod { nameForm 20 nameAndNumber(20) } DEFINITIONS ::= BEGIN END", (n){ 
             assert(n.getNode!Asn1ModuleIdentifierNode.getNode!Asn1DefinitiveIdentifierNode.asNode!Asn1DefinitiveObjIdComponentListNode
                 .items.length == 3
             );

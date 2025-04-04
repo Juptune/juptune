@@ -1265,7 +1265,7 @@ final class Asn1ReferencedTypeNode : Asn1BaseNode
 {
     mixin OneOf!(Asn1NodeType.ReferencedType,
         Asn1DefinedTypeNode,
-        // Asn1UsefulTypeNode, // I literally don't get the point of this one
+        Asn1UsefulTypeNode,
         Asn1SelectionTypeNode,
         Asn1TypeFromObjectNode,
         Asn1ValueSetFromObjectsNode,
