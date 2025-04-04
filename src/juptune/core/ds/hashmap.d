@@ -321,11 +321,11 @@ struct RobinHoodHashMapBase(
     {
         assert(map.length != map.array.length, "The array should've grown by now.");
 
-        auto key   = initKey;
-        auto value = initValue;
-        const hash = this.getHash!Hasher(key);
-        auto index = hash % map.array.length;
-        ushort psl = 0;
+        auto key     = initKey;
+        ValueT value = initValue;
+        const hash   = this.getHash!Hasher(key);
+        auto index   = hash % map.array.length;
+        ushort psl   = 0;
 
         while(true)
         {

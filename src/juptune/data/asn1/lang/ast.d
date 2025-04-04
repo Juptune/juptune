@@ -369,6 +369,8 @@ enum Asn1NodeType // For faster/easier to write type checks, instead of using ca
 
 private mixin template OneOf(Asn1NodeType MyType, NodeTypes...)
 {
+    import juptune.core.util : Result;
+
     private
     {
         int _oneOfIndex = -1;
@@ -383,6 +385,14 @@ private mixin template OneOf(Asn1NodeType MyType, NodeTypes...)
         enum oneOfIndexOf = staticIndexOf!(NodeT, NodeTypes);
         enum Error = "Invalid node type: "~NodeT.stringof;
         static assert(oneOfIndexOf != -1, Error);
+    }
+
+    private template oneOfHandlerFuncTuple()
+    {
+        import std.meta : staticMap;
+        
+        alias ToFuncHandler(alias NodeT) = Result delegate(NodeT) @nogc nothrow;
+        alias oneOfHandlerFuncTuple = staticMap!(ToFuncHandler, NodeTypes);
     }
 
     static foreach(NodeT; NodeTypes)
@@ -420,6 +430,21 @@ private mixin template OneOf(Asn1NodeType MyType, NodeTypes...)
     {
         enum Index = oneOfIndexOf!NodeT;
         return this.isNode!NodeT ? this._oneOfValue[Index] : null;
+    }
+
+    Result match(scope oneOfHandlerFuncTuple!() handlers)
+    {
+        switch(this._oneOfIndex)
+        {
+            static foreach(i, NodeT; NodeTypes)
+            {
+                case i:
+                    return handlers[i](this.asNode!NodeT);
+            }
+
+            default:
+                assert(false, "bug: oneOfIndex isn't a valid value?");
+        }
     }
 }
 
@@ -532,6 +557,11 @@ abstract class Asn1BaseNode
     final Asn1NodeType nodeType() @safe @nogc nothrow pure const
     {
         return this._nodeType;
+    }
+
+    ~this()
+    {
+        this.dispose(); // For edge cases where a node isn't allocated from a ParserContext
     }
 
     void dispose() @nogc nothrow {}

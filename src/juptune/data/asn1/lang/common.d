@@ -24,13 +24,15 @@ struct Asn1Location
 struct Asn1ParserContext
 {
     import juptune.data.asn1.lang.ast : Asn1BaseNode;
-    import juptune.core.ds            : Array, String2;
+    import juptune.data.asn1.lang.ir  : Asn1BaseIr;
+    import juptune.core.ds            : Array, String2, HashMap;
     import juptune.core.util          : Result;
 
     @disable this(this){}
 
     NodeAllocator allocator;
     Array!Asn1BaseNode nodesToDtor;
+    Array!Asn1BaseIr irToDtor;
 
     @nogc nothrow:
 
@@ -38,9 +40,12 @@ struct Asn1ParserContext
     {
         foreach(node; this.nodesToDtor)
             node.dispose(); // Allows things like List nodes to free their Array resources.
+        foreach(ir; this.irToDtor)
+            ir.dispose(); // Allows things like List nodes to free their Array resources.
 
         this.allocator.__xdtor();
         this.nodesToDtor.__xdtor();
+        this.irToDtor.__xdtor();
     }
 
     NodeT allocNode(NodeT : Asn1BaseNode, CtorArgs...)(auto ref CtorArgs args)
@@ -51,6 +56,14 @@ struct Asn1ParserContext
         static if(__traits(hasMember, NodeT, "_MustBeDtored"))
             this.nodesToDtor.put(node);
 
+        return node;
+    }
+
+    NodeT allocNode(NodeT : Asn1BaseIr, CtorArgs...)(auto ref CtorArgs args)
+    {
+        import std.experimental.allocator : make;
+        auto node = make!NodeT(this.allocator, args);
+        this.irToDtor.put(node);
         return node;
     }
 }
