@@ -1356,6 +1356,7 @@ final class Asn1BuiltinValueNode : Asn1BaseNode
     //      - Any type that requires a sequence value is instead replaced by
     //        Asn1UnresolvedSequenceValueNode, as type information is needed.
     //      - Any raw string case is unused, instead replaced by Asn1UnresolvedStringValueNode.
+    //      - EnumeratedValue would simply become the Asn1ReferencedValueNode case.
 
     mixin OneOf!(Asn1NodeType.BuiltinValue,
         // Asn1BitStringValueNode,
@@ -1363,7 +1364,7 @@ final class Asn1BuiltinValueNode : Asn1BaseNode
         // Asn1CharacterStringValueNode,
         Asn1ChoiceValueNode,
         // Asn1EmbeddedPdvValueNode,
-        Asn1EnumeratedValueNode,
+        // Asn1EnumeratedValueNode,
         // Asn1ExternalValueNode,
         // Asn1InstanceOfValueNode,
         Asn1IntegerValueNode,
@@ -1376,7 +1377,7 @@ final class Asn1BuiltinValueNode : Asn1BaseNode
         // Asn1SequenceOfValueNode,
         // Asn1SetValueNode,
         // Asn1SetOfValueNode,
-        Asn1TaggedValueNode,
+        // Asn1TaggedValueNode,
 
         // Non-standard, helps with parsing logic
         Asn1UnresolvedStringValueNode,

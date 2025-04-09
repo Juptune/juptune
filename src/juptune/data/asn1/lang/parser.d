@@ -3461,8 +3461,11 @@ unittest
         ),
         "ENUMERATED - RootEnumeration - Multiple": T(
             "ENUMERATED { a, b(1), c(-2) }", (n){
-                assert(n.asNode!Asn1BuiltinTypeNode.asNode!Asn1EnumeratedTypeNode.getNode!Asn1EnumerationsNode.asNode!Asn1RootEnumerationNode.getNode!Asn1EnumerationNode
-                    .items.length == 3
+                auto items = n.asNode!Asn1BuiltinTypeNode.asNode!Asn1EnumeratedTypeNode.getNode!Asn1EnumerationsNode.asNode!Asn1RootEnumerationNode.getNode!Asn1EnumerationNode
+                            .items;
+                assert(items.length == 3);
+                assert(items[1].asNode!Asn1NamedNumberNode.asNode!(Asn1NamedNumberNode.Signed).getNode!Asn1SignedNumberNode
+                    .isNode!Asn1NumberTokenNode
                 );
             }
         ),
