@@ -12,6 +12,493 @@ import juptune.data.asn1.lang.ir;  // Intentionally everything
 import juptune.data.asn1.lang.common : Asn1ParserContext, Asn1Location;
 import juptune.data.asn1.lang.parser : Asn1Parser, Asn1ParserError;
 
+/++++ Special ++++/
+
+Result asn1AstToIr(
+    scope Asn1ModuleDefinitionNode node,
+    scope out Asn1ModuleIr ir,
+    scope ref Asn1ParserContext context,
+    scope Asn1SemanticErrorHandler errors,
+) @nogc nothrow
+{
+    auto modIdNode = node.getNode!Asn1ModuleIdentifierNode;
+    auto modRefToken = modIdNode.getNode!Asn1ModuleReferenceTokenNode.token;
+    auto modObjIdIr = context.allocNode!Asn1ObjectIdSequenceValueIr(modRefToken.location);
+    auto modObjIdResult = modIdNode.getNode!Asn1DefinitiveIdentifierNode.match(
+        (Asn1DefinitiveObjIdComponentListNode listNode){
+            foreach(item; listNode.items)
+            {
+                auto result = item.match(
+                    (Asn1NameFormNode nameForm){
+                        auto id = nameForm.getNode!Asn1IdentifierTokenNode;
+                        modObjIdIr.addObjectId(
+                            context.allocNode!Asn1ValueReferenceIr(
+                                id.token.location, 
+                                id.token.text
+                            )
+                        );
+                        return Result.noError;
+                    },
+                    (Asn1DefinitiveNumberFormNode numberForm){
+                        modObjIdIr.addObjectId(context.allocNode!Asn1IntegerValueIr(
+                            numberForm.getNode!Asn1NumberTokenNode.token,
+                            false
+                        ));
+                        return Result.noError;
+                    },
+                    (Asn1DefinitiveNameAndNumberFormNode nameNumberForm){
+                        modObjIdIr.addObjectId(context.allocNode!Asn1IntegerValueIr(
+                            nameNumberForm.getNode!Asn1DefinitiveNumberFormNode.getNode!Asn1NumberTokenNode.token,
+                            false
+                        ));
+                        return Result.noError;
+                    }
+                );
+                if(result.isError)
+                    return result;
+            }
+            return Result.noError;
+        },
+        (Asn1EmptyNode _) => Result.noError
+    );
+    if(modObjIdResult.isError)
+        return modObjIdResult;
+
+    Asn1ModuleIr.TagDefault tagDefault;
+    auto tagDefaultResult = node.getNode!Asn1TagDefaultNode.match(
+        (Asn1ExplicitTagsNode _){
+            tagDefault = Asn1ModuleIr.TagDefault.explicit;
+            return Result.noError;
+        },
+        (Asn1ImplicitTagsNode _){
+            tagDefault = Asn1ModuleIr.TagDefault.implicit;
+            return Result.noError;
+        },
+        (Asn1AutomaticTagsNode _){
+            tagDefault = Asn1ModuleIr.TagDefault.automatic;
+            return Result.noError;
+        },
+        (Asn1EmptyNode _){
+            tagDefault = Asn1ModuleIr.TagDefault.explicit;
+            return Result.noError;
+        },
+    );
+    if(tagDefaultResult.isError)
+        return tagDefaultResult;
+
+    bool extensibilityImplied;
+    auto extensionDefaultResult = node.getNode!Asn1ExtensionDefaultNode.match(
+        (Asn1ExtensibilityImpliedNode _){
+            extensibilityImplied = true;
+            return Result.noError;
+        },
+        (Asn1EmptyNode _) => Result.noError,
+    );
+    if(extensionDefaultResult.isError)
+        return extensionDefaultResult;
+
+    Asn1ModuleBodyNode.Case1 modBodyNode;
+    node.getNode!Asn1ModuleBodyNode.match(
+        (Asn1ModuleBodyNode.Case1 case1){
+            modBodyNode = case1;
+            return Result.noError;
+        },
+        (Asn1EmptyNode _){
+            ir = context.allocNode!(typeof(ir))(
+                modRefToken.text,
+                modObjIdIr,
+                tagDefault,
+                extensibilityImplied,
+                context.allocNode!Asn1ExportsIr(Asn1Location()),
+                context.allocNode!Asn1ImportsIr(Asn1Location()),
+            );
+            return Result.noError;
+        },
+    ).resultAssert;
+    if(modBodyNode is null)
+    {
+        assert(ir !is null, "bug: ir should've been set?");
+        return Result.noError;
+    }
+
+    Asn1ExportsIr exportsIr;
+    auto exportsResult = asn1AstToIr(modBodyNode.getNode!Asn1ExportsNode, exportsIr, context, errors);
+    if(exportsResult.isError)
+        return exportsResult;
+
+    Asn1ImportsIr importsIr;
+    auto importsResult = asn1AstToIr(modBodyNode.getNode!Asn1ImportsNode, importsIr, context, errors);
+    if(importsResult.isError)
+        return importsResult;
+
+    ir = context.allocNode!(typeof(ir))(
+        modRefToken.text,
+        modObjIdIr,
+        tagDefault,
+        extensibilityImplied,
+        exportsIr,
+        importsIr
+    );
+
+    foreach(assNode; modBodyNode.getNode!Asn1AssignmentListNode.items)
+    {
+        auto assResult = assNode.match(
+            (Asn1TypeAssignmentNode typeAss) {
+                Asn1TypeIr typeIr;
+                if(auto r = asn1AstToIr(typeAss.getNode!Asn1TypeNode, typeIr, context, errors))
+                    return r;
+
+                auto assIr = context.allocNode!Asn1TypeAssignmentIr(
+                    typeAss.getNode!Asn1TypeReferenceTokenNode.token.location,
+                    typeAss.getNode!Asn1TypeReferenceTokenNode.token.text,
+                    typeIr
+                );
+                if(auto r = ir.addAssignment(assIr, errors))
+                    return r;
+                return Result.noError;
+            },
+            (Asn1ValueAssignmentNode valueAss) {
+                Asn1TypeIr typeIr;
+                if(auto r = asn1AstToIr(valueAss.getNode!Asn1TypeNode, typeIr, context, errors))
+                    return r;
+
+                Asn1ValueIr valueIr;
+                if(auto r = asn1AstToIr(valueAss.getNode!Asn1ValueNode, valueIr, context, errors))
+                    return r;
+
+                auto assIr = context.allocNode!Asn1ValueAssignmentIr(
+                    valueAss.getNode!Asn1ValueReferenceTokenNode.token.location,
+                    valueAss.getNode!Asn1ValueReferenceTokenNode.token.text,
+                    typeIr,
+                    valueIr
+                );
+                if(auto r = ir.addAssignment(assIr, errors))
+                    return r;
+                return Result.noError;
+            },
+            (Asn1ValueSetTypeAssignmentNode _) {
+                assert(false, "Not implemented");
+                return Result.noError;
+            },
+            (Asn1ObjectClassAssignmentNode _) {
+                assert(false, "Not implemented");
+                return Result.noError;
+            },
+            (Asn1ObjectAssignmentNode _) {
+                assert(false, "Not implemented");
+                return Result.noError;
+            },
+            (Asn1ObjectSetAssignmentNode _) {
+                assert(false, "Not implemented");
+                return Result.noError;
+            },
+            (Asn1ParameterizedAssignmentNode _) {
+                assert(false, "Not implemented");
+                return Result.noError;
+            },
+        );
+        if(assResult.isError)
+            return assResult;
+    }
+    
+    return Result.noError;
+}
+@("asn1AstToIr - Asn1ModuleNode")
+unittest
+{
+    alias Harness = GenericTestHarness!(Asn1ModuleIr, (ref parser){
+        Asn1ModuleDefinitionNode node;
+        parser.ModuleDefinition(node).resultAssert;
+        return node;
+    });
+    
+    with(Harness) run([
+        "Plain, empty body": T("MyModule DEFINITIONS ::= BEGIN END", (ir){
+            assert(ir.getModuleName() == "MyModule");
+            assert(ir.getTagDefault() == Asn1ModuleIr.TagDefault.explicit);
+            assert(!ir.isExtensibilityImplied());
+        }),
+        "EXPLICIT TAGS": T("MyModule DEFINITIONS EXPLICIT TAGS ::= BEGIN END", (ir){
+            assert(ir.getTagDefault() == Asn1ModuleIr.TagDefault.explicit);
+        }),
+        "IMPLICIT TAGS": T("MyModule DEFINITIONS IMPLICIT TAGS ::= BEGIN END", (ir){
+            assert(ir.getTagDefault() == Asn1ModuleIr.TagDefault.implicit);
+        }),
+        "AUTOMATIC TAGS": T("MyModule DEFINITIONS AUTOMATIC TAGS ::= BEGIN END", (ir){
+            assert(ir.getTagDefault() == Asn1ModuleIr.TagDefault.automatic);
+        }),
+        "EXTENSIBILITY IMPLIED": T("MyModule DEFINITIONS EXTENSIBILITY IMPLIED ::= BEGIN END", (ir){
+            assert(ir.isExtensibilityImplied());
+        }),
+        "Empty Imports": T(`
+            MyModule DEFINITIONS ::= BEGIN
+                IMPORTS ;
+            END
+        `, (ir){
+        }),
+        "Import without module version": T(`
+            MyModule DEFINITIONS ::= BEGIN
+                IMPORTS
+                    FOO, bar FROM SomeMod
+                ;
+            END
+        `, (ir){
+            bool hasTypeRef, hasValueRef;
+            ir.getImports().foreachImport(
+                (modRef, modVersion, typeRef){
+                    hasTypeRef = true;
+                    assert(modRef == "SomeMod");
+                    assert(modVersion is null);
+                    assert(typeRef.typeRef == "FOO");
+                    return Result.noError;
+                },
+                (modRef, modVersion, valueRef){
+                    hasValueRef = true;
+                    assert(modRef == "SomeMod");
+                    assert(modVersion is null);
+                    assert(valueRef.valueRef == "bar");
+                    return Result.noError;
+                }
+            ).resultAssert;
+            assert(hasTypeRef && hasValueRef);
+        }),
+        "Empty Exports": T(`
+            MyModule DEFINITIONS ::= BEGIN
+                EXPORTS;
+            END
+        `, (ir){
+        }),
+        "EXPORTS ALL": T(`
+            MyModule DEFINITIONS ::= BEGIN
+                EXPORTS ALL;
+            END
+        `, (ir){
+            assert(ir.getExports().doesExportsAll);
+        }),
+        "Exports": T(`
+            MyModule DEFINITIONS ::= BEGIN
+                EXPORTS FOO, bar;
+            END
+        `, (ir){
+            
+        }),
+        "Assignments": T(`
+            MyModule DEFINITIONS ::= BEGIN
+                MyType ::= INTEGER
+                value INTEGER ::= 0
+            END
+        `, (ir){
+            size_t length;
+            ir.foreachAssignment((ass){
+                length++;
+
+                switch(length)
+                {
+                    case 1:
+                        auto typeAss = cast(Asn1TypeAssignmentIr)ass;
+                        assert(typeAss !is null);
+                        assert(typeAss.getSymbolName() == "MyType");
+                        assert(cast(Asn1IntegerTypeIr)typeAss.getSymbolType());
+                        break;
+                    
+                    case 2:
+                        auto valueAss = cast(Asn1ValueAssignmentIr)ass;
+                        assert(valueAss !is null);
+                        assert(valueAss.getSymbolName() == "value");
+                        assert(cast(Asn1IntegerTypeIr)valueAss.getSymbolType());
+                        assert(cast(Asn1IntegerValueIr)valueAss.getSymbolValue());
+                        break;
+
+                    default: assert(false, "Missing case for ass");
+                }
+
+                return Result.noError;
+            }).resultAssert;
+            assert(length == 2);
+        }),
+    ]);
+}
+
+Result asn1AstToIr(
+    scope Asn1ExportsNode node,
+    scope out Asn1ExportsIr ir,
+    scope ref Asn1ParserContext context,
+    scope Asn1SemanticErrorHandler errors,
+) @nogc nothrow
+{
+    return node.match(
+        (Asn1SymbolsExportedNode exportedNode){
+            return exportedNode.match(
+                (Asn1SymbolListNode symbolList){
+                    ir = context.allocNode!(typeof(ir))(Asn1Location()); // TODO: Location
+                    foreach(symbolNode; symbolList.items)
+                    {
+                        Asn1ReferenceNode refNode;
+                        symbolNode.match(
+                            (Asn1ReferenceNode symbolRefNode){
+                                refNode = symbolRefNode;
+                                return Result.noError;
+                            },
+                            (Asn1ParameterizedReferenceNode paramRefNode) {
+                                assert(false, "Not implemented");
+                                return Result.noError;
+                            }
+                        ).resultAssert;
+
+                        auto result = refNode.match(
+                            (Asn1TypeReferenceTokenNode typeRefNode){
+                                return ir.addExport(context.allocNode!Asn1TypeReferenceIr(
+                                    typeRefNode.token.location,
+                                    typeRefNode.token.text,
+                                ), errors);
+                            },
+                            (Asn1ValueReferenceTokenNode valueRefNode){
+                                return ir.addExport(context.allocNode!Asn1ValueReferenceIr(
+                                    valueRefNode.token.location,
+                                    valueRefNode.token.text
+                                ), errors);
+                            },
+                            (Asn1ObjectClassReferenceTokenNode _){
+                                assert(false, "Not implemented");
+                                return Result.noError;
+                            },
+                            (Asn1ObjectReferenceTokenNode _){
+                                assert(false, "Not implemented");
+                                return Result.noError;
+                            },
+                            (Asn1ObjectSetReferenceTokenNode _){
+                                assert(false, "Not implemented");
+                                return Result.noError;
+                            },
+                        );
+                        if(result.isError)
+                            return result;
+                    }
+                    return Result.noError;
+                },
+                (Asn1EmptyNode emptyNode){
+                    ir = context.allocNode!(typeof(ir))(emptyNode.token.location);
+                    return Result.noError;
+                },
+            );
+        },
+        (Asn1ExportsAllNode allNode){
+            ir = context.allocNode!(typeof(ir))(allNode.token.location, true);
+            return Result.noError;
+        },
+        (Asn1EmptyNode emptyNode){
+            ir = context.allocNode!(typeof(ir))(emptyNode.token.location);
+            return Result.noError;
+        },
+    );
+}
+// Tested by the ModuleBody overload as the parser cannot individually generate an ExportsNode
+
+Result asn1AstToIr(
+    scope Asn1ImportsNode node,
+    scope out Asn1ImportsIr ir,
+    scope ref Asn1ParserContext context,
+    scope Asn1SemanticErrorHandler errors,
+) @nogc nothrow
+{
+    Result handleSymbolMod(Asn1SymbolsFromModuleNode symbolModNode)
+    {
+        auto modRef = symbolModNode.getNode!Asn1GlobalModuleReferenceNode;
+
+        Asn1ObjectIdSequenceValueIr moduleVersion;
+        auto result = modRef.getNode!Asn1AssignedIdentifierNode.match(
+            (Asn1ObjectIdentifierValueNode objIdNode){
+                assert(false, "Not implemented");
+                return Result.noError;
+            },
+            (Asn1DefinedValueNode definedValue){
+                assert(false, "Not implemented");
+                return Result.noError;
+            },
+            (Asn1EmptyNode _) => Result.noError,
+        );
+        if(result.isError)
+            return result;
+
+        auto addResult = ir.setupImportsForModule(
+            modRef.getNode!Asn1ModuleReferenceTokenNode.token.text,
+            moduleVersion,
+            (scope addImport){
+                foreach(symbolNode; symbolModNode.getNode!Asn1SymbolListNode.items)
+                {
+                    auto symbolResult = symbolNode.match(
+                        (Asn1ReferenceNode refNode){
+                            return refNode.match(
+                                (Asn1TypeReferenceTokenNode typeRefNode){
+                                    return addImport(context.allocNode!Asn1TypeReferenceIr(
+                                        typeRefNode.token.location,
+                                        typeRefNode.token.text,
+                                    ));
+                                },
+                                (Asn1ValueReferenceTokenNode valueRefNode){
+                                    return addImport(context.allocNode!Asn1ValueReferenceIr(
+                                        valueRefNode.token.location,
+                                        valueRefNode.token.text
+                                    ));
+                                },
+                                (Asn1ObjectClassReferenceTokenNode _){
+                                    assert(false, "Not implemented");
+                                    return Result.noError;
+                                },
+                                (Asn1ObjectReferenceTokenNode _){
+                                    assert(false, "Not implemented");
+                                    return Result.noError;
+                                },
+                                (Asn1ObjectSetReferenceTokenNode _){
+                                    assert(false, "Not implemented");
+                                    return Result.noError;
+                                },
+                            );
+                        },
+                        (Asn1ParameterizedReferenceNode paramNode){
+                            assert(false, "Not implemented");
+                            return Result.noError;
+                        }
+                    );
+                    if(symbolResult.isError)
+                        return symbolResult;
+                }
+                return Result.noError;
+            },
+            errors
+        );
+        if(addResult.isError)
+            return addResult;
+        
+        return Result.noError;
+    }
+
+    return node.match(
+        (Asn1SymbolsImportedNode importedNode){
+            ir = context.allocNode!(typeof(ir))(Asn1Location()); // TODO: Location
+            return importedNode.match(
+                (Asn1SymbolsFromModuleListNode symbolModList){
+                    foreach(symbolModNode; symbolModList.items)
+                    {
+                        if(auto r = handleSymbolMod(symbolModNode))
+                            return r;
+                    }
+                    return Result.noError;
+                },
+                (Asn1EmptyNode emptyNode){
+                    ir = context.allocNode!(typeof(ir))(emptyNode.token.location);
+                    return Result.noError;
+                }
+            );
+        },
+        (Asn1EmptyNode emptyNode){
+            ir = context.allocNode!(typeof(ir))(emptyNode.token.location);
+            return Result.noError;
+        }
+    );
+}
+// Tested by the ModuleBody overload as the parser cannot individually generate an ImportsNode
+
 /++++ Types ++++/
 
 Result asn1AstToIr(
@@ -130,8 +617,105 @@ Result asn1AstToIr(
                 },
             ); 
         },
-        (Asn1ReferencedTypeNode type) { assert(false, "Not implemented"); return Result.noError; },
-        (Asn1ConstrainedTypeNode type) { assert(false, "Not implemented"); return Result.noError; },
+        (Asn1ReferencedTypeNode type) {
+            return type.match(
+                (Asn1DefinedTypeNode typeRef){
+                    return typeRef.match(
+                        (Asn1ExternalTypeReferenceNode refNode){
+                            ir = context.allocNode!Asn1TypeReferenceIr(
+                                refNode.getNode!Asn1ModuleReferenceTokenNode.token.location,
+                                refNode.getNode!Asn1ModuleReferenceTokenNode.token.text,
+                                refNode.getNode!Asn1TypeReferenceTokenNode.token.text,
+                            );
+                            return Result.noError;
+                        },
+                        (Asn1TypeReferenceTokenNode refNode){
+                            ir = context.allocNode!Asn1TypeReferenceIr(
+                                refNode.token.location,
+                                refNode.token.text,
+                            );
+                            return Result.noError;
+                        },
+                        (Asn1ParameterizedTypeNode refNode){
+                            assert(false, "Not implemented");
+                            return Result.noError;
+                        },
+                        (Asn1ParameterizedValueSetTypeNode refNode){
+                            assert(false, "Not implemented");
+                            return Result.noError;
+                        },
+                    );
+                },
+                (Asn1UsefulTypeNode typeRef){
+                    const token = typeRef.getNode!Asn1TypeReferenceTokenNode.token;
+                    switch(token.text)
+                    {
+                        case "GeneralizedTime":
+                            ir = context.allocNode!Asn1GeneralizedTimeTypeIr(token.location);
+                            return Result.noError;
+
+                        case "UTCTime":
+                            ir = context.allocNode!Asn1UtcTimeTypeIr(token.location);
+                            return Result.noError;
+
+                        default: assert(false, "bug: Unknown useful type?");
+                    }
+                },
+                (Asn1SelectionTypeNode typeRef){
+                    assert(false, "Not implemented");
+                    return Result.noError;
+                },
+                (Asn1TypeFromObjectNode typeRef){
+                    assert(false, "Not implemented");
+                    return Result.noError;
+                },
+                (Asn1ValueSetFromObjectsNode typeRef){
+                    assert(false, "Not implemented");
+                    return Result.noError;
+                },
+            );
+        },
+        (Asn1ConstrainedTypeNode type) {
+            return type.match(
+                (Asn1ConstrainedTypeNode.Case1 case1) {
+                    if(auto r = asn1AstToIr(case1.getNode!Asn1TypeNode, ir, context, errors))
+                        return r;
+
+                    Asn1ConstraintIr constraintIr, additionalConstraintIr;
+                    bool isExtensible;
+                    auto result = asn1AstToIrForConstraint(
+                        case1.getNode!Asn1ConstraintNode,
+                        constraintIr, // out
+                        isExtensible, // out
+                        additionalConstraintIr, // out
+                        context, 
+                        errors
+                    );
+                    if(result.isError)
+                        return result;
+
+                    if(constraintIr !is null)
+                    {
+                        if(auto r = ir.setMainConstraint(constraintIr))
+                            return r;
+
+                        if(isExtensible)
+                            ir.markAsConstraintExtensible();
+
+                        if(additionalConstraintIr !is null)
+                        {
+                            if(auto r = ir.setAdditionalConstraint(additionalConstraintIr))
+                                return r;
+                        }
+                    }
+                    return Result.noError;
+                },
+                (Asn1TypeWithConstraintNode typeNode) {
+                    assert(false, "Not implemented");
+                    return Result.noError;
+                },
+            );
+        },
     );
 }
 
@@ -457,7 +1041,8 @@ Result asn1AstToIr(
 
                             return ir.addEnumerationExplicit(
                                 signed.getNode!Asn1IdentifierTokenNode.token.text,
-                                intValue
+                                intValue,
+                                errors
                             );
                         },
                         (Asn1NamedNumberNode.Defined defined){
@@ -467,7 +1052,8 @@ Result asn1AstToIr(
 
                             return ir.addEnumerationExplicit(
                                 defined.getNode!Asn1IdentifierTokenNode.token.text,
-                                valueRef
+                                valueRef,
+                                errors
                             );
                         },
                     );
@@ -979,6 +1565,402 @@ unittest
     ]);
 }
 
+/++++ Constraints ++++/
+
+Result asn1AstToIrForConstraint(
+    scope Asn1ConstraintNode node,
+    scope out Asn1ConstraintIr constraintIr,
+    scope out bool isExtensible,
+    scope out Asn1ConstraintIr additionalConstraintIr, // May be null
+    scope ref Asn1ParserContext context,
+    scope Asn1SemanticErrorHandler errors,
+) @nogc nothrow
+{
+    return node.getNode!Asn1ConstraintSpecNode.match(
+        (Asn1SubtypeConstraintNode constraint){
+            return constraint.getNode!Asn1ElementSetSpecsNode.match(
+                (Asn1RootElementSetSpecNode specNode){
+                    return asn1AstToIr(specNode.getNode!Asn1ElementSetSpecNode, constraintIr, context, errors);
+                },
+                (Asn1ElementSetSpecsNode.Case1 case1){
+                    auto root = case1.getNode!Asn1RootElementSetSpecNode;
+                    if(auto r = asn1AstToIr(root.getNode!Asn1ElementSetSpecNode, constraintIr, context, errors))
+                        return r;
+                    isExtensible = true;
+                    return Result.noError;
+                },
+                (Asn1ElementSetSpecsNode.Case2 case2){
+                    auto root = case2.getNode!Asn1RootElementSetSpecNode;
+                    if(auto r = asn1AstToIr(root.getNode!Asn1ElementSetSpecNode, constraintIr, context, errors))
+                        return r;
+                    isExtensible = true;
+
+                    auto add = case2.getNode!Asn1AdditionalElementSetSpecNode;
+                    return asn1AstToIr(add.getNode!Asn1ElementSetSpecNode, additionalConstraintIr, context, errors);
+                },
+            );
+        },
+        (Asn1GeneralConstraintNode constraint){
+            assert(false, "Not implemented");
+            return Result.noError;
+        },
+    );
+}
+@("asn1AstToIrForConstraint")
+unittest
+{
+    import std.conv : to;
+
+    static struct T
+    {
+        string input;
+        void function(Asn1ConstraintIr main, bool isExtensible, Asn1ConstraintIr add) validate;
+    }
+
+    auto cases = [
+        "SingleValue": T("(1)", (main, isExtensible, add){
+            assert(cast(Asn1SingleValueConstraintIr)main !is null);
+            assert(!isExtensible);
+            assert(add is null);
+        }),
+        "ContainedSubtype": T("(INCLUDES INTEGER)", (main, isExtensible, add){
+            assert(cast(Asn1ContainedSubtypeConstraintIr)main !is null);
+        }),
+        "Intersection": T("(1 ^ 2)", (main, isExtensible, add){
+            auto inter = cast(Asn1IntersectionConstraintIr)main;
+            assert(inter !is null);
+            
+            size_t length;
+            inter.foreachIntersectionConstraint((ir){
+                assert(cast(Asn1SingleValueConstraintIr)ir);
+                length++;
+                return Result.noError;
+            }).resultAssert;
+            assert(length == 2);
+        }),
+        "ValueRange - values": T("(1..2)", (main, isExtensible, add){
+            auto range = cast(Asn1ValueRangeConstraintIr)main;
+            assert(range !is null);
+            assert(range.getLower().valueIr !is null);
+            assert(!range.getLower().isOpen);
+            assert(!range.getLower().isUnbounded);
+            assert(range.getUpper().valueIr !is null);
+            assert(!range.getUpper().isOpen);
+            assert(!range.getUpper().isUnbounded);
+            assert(range.getUpper().valueIr !is range.getLower().valueIr);
+        }),
+        "ValueRange - unbounded": T("(MIN..MAX)", (main, isExtensible, add){
+            auto range = cast(Asn1ValueRangeConstraintIr)main;
+            assert(range !is null);
+            assert(range.getLower().isUnbounded);
+            assert(range.getUpper().isUnbounded);
+        }),
+        "ValueRange - open": T("(MIN<..<MAX)", (main, isExtensible, add){
+            auto range = cast(Asn1ValueRangeConstraintIr)main;
+            assert(range !is null);
+            assert(range.getLower().isOpen);
+            assert(range.getUpper().isOpen);
+        }),
+        "PermittedAlphabet": T("(FROM (2))", (main, isExtensible, add){
+            assert(cast(Asn1PermittedAlphabetConstraintIr)main !is null);
+        }),
+        "Size": T("(SIZE (2))", (main, isExtensible, add){
+            assert(cast(Asn1SizeConstraintIr)main !is null);
+        }),
+        "Pattern": T("(PATTERN 123)", (main, isExtensible, add){
+            assert(cast(Asn1PatternConstraintIr)main !is null);
+        }),
+        "Union": T("(1 | 2)", (main, isExtensible, add){
+            auto onion = cast(Asn1UnionConstraintIr)main;
+            assert(onion !is null);
+            
+            size_t length;
+            onion.foreachUnionConstraint((ir){
+                assert(cast(Asn1SingleValueConstraintIr)ir);
+                length++;
+                return Result.noError;
+            }).resultAssert;
+            assert(length == 2);
+        }),
+        "Extension - Case1": T("(1, ...)", (main, isExtensible, add){
+            assert(isExtensible);
+        }),
+        "Extension - Case2": T("(1, ..., 2)", (main, isExtensible, add){
+            assert(isExtensible);
+            assert(cast(Asn1SingleValueConstraintIr)add !is null);
+        }),
+    ];
+
+    foreach(name, test; cases)
+    {
+        try
+        {
+            Asn1ParserContext context;
+            auto lexer = Asn1Lexer(test.input);
+            auto parser = Asn1Parser(lexer, &context);
+
+            Asn1ConstraintNode node;
+            parser.Constraint(node).resultAssert;
+
+            Asn1ConstraintIr main, add;
+            bool isExtensible;
+            auto result = asn1AstToIrForConstraint(
+                node, 
+                main,
+                isExtensible,
+                add,
+                context, 
+                Asn1NullSemanticErrorHandler.instance
+            );
+
+            if(test.validate !is null)
+            {
+                resultAssert(result);
+                Asn1Token token;
+                parser.consume(token).resultAssert;
+                assert(token.type == Asn1Token.Type.eof, "Expected no more tokens, but got: "~token.to!string);
+
+                test.validate(main, isExtensible, add);
+            }
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]:\n"~err.msg);
+    }
+}
+
+Result asn1AstToIr(
+    scope Asn1ElementSetSpecNode node,
+    scope out Asn1ConstraintIr ir,
+    scope ref Asn1ParserContext context,
+    scope Asn1SemanticErrorHandler errors,
+) @nogc nothrow
+{
+    return node.match(
+        (Asn1UnionsNode constraint){
+            assert(constraint.items.length > 0, "bug: UnionsNode has 0 items?");
+            if(constraint.items.length == 1) // Flatten tree structure
+                return asn1AstToIr(constraint.items[0], ir, context, errors);
+
+            // TODO: Location?
+            auto unionsIr = context.allocNode!Asn1UnionConstraintIr(Asn1Location());
+            foreach(item; constraint.items)
+            {
+                Asn1ConstraintIr constraintIr;
+                if(auto r = asn1AstToIr(item, constraintIr, context, errors))
+                    return r;
+                unionsIr.addUnionConstraint(constraintIr);
+            }
+            
+            ir = unionsIr;
+            return Result.noError;
+        },
+        (Asn1ExclusionsNode constraint){
+            assert(false, "Not implemented");
+            return Result.noError;
+        },
+    );
+}
+// Tested by asn1AstToIrForConstraint as the parser cannot individually generate an ElementSetSpecsNode
+
+Result asn1AstToIr(
+    scope Asn1IntersectionsNode node,
+    scope out Asn1ConstraintIr ir,
+    scope ref Asn1ParserContext context,
+    scope Asn1SemanticErrorHandler errors,
+) @nogc nothrow
+{
+    assert(node.items.length > 0, "bug: IntersectionsNode has 0 items?");
+
+    Result handleItem(
+        Asn1IntersectionElementsNode item, 
+        scope out Asn1ConstraintIr itemIr,
+    )
+    {
+        return item.match(
+            (Asn1ElementsNode elements){
+                return asn1AstToIr(elements, itemIr, context, errors);
+            },
+            (Asn1IntersectionElementsNode.Case1 case1){
+                Asn1ConstraintIr constraintIr;
+                auto result = asn1AstToIr(
+                    case1.getNode!Asn1ElemsNode.getNode!Asn1ElementsNode,
+                    constraintIr,
+                    context,
+                    errors
+                );
+                if(result.isError)
+                    return result;
+
+                Asn1ConstraintIr exlcusionIr;
+                result = asn1AstToIr(
+                    case1.getNode!Asn1ExclusionsNode.getNode!Asn1ElementsNode,
+                    exlcusionIr,
+                    context,
+                    errors
+                );
+                if(result.isError)
+                    return result;
+
+                itemIr = context.allocNode!Asn1ConstraintWithExclusionsIr(constraintIr, exlcusionIr);
+                return Result.noError;
+            }
+        );
+    }
+
+    if(node.items.length == 1) // Flatten tree structure
+        return handleItem(node.items[0], ir);
+
+    // TODO: Location?
+    auto intersectionsIr = context.allocNode!Asn1IntersectionConstraintIr(Asn1Location());
+    foreach(item; node.items)
+    {
+        Asn1ConstraintIr constraintIr;
+        if(auto r = handleItem(item, constraintIr))
+            return r;
+        intersectionsIr.addIntersectionConstraint(constraintIr);
+    }
+    
+    ir = intersectionsIr;
+    return Result.noError;
+}
+// Tested by asn1AstToIrForConstraint as the parser cannot individually generate an IntersectionsNode
+
+Result asn1AstToIr(
+    scope Asn1ElementsNode node,
+    scope out Asn1ConstraintIr ir,
+    scope ref Asn1ParserContext context,
+    scope Asn1SemanticErrorHandler errors,
+) @nogc nothrow
+{
+    return node.match(
+        (Asn1SubtypeElementsNode element){
+            return element.match(
+                (Asn1SingleValueNode constraint){
+                    Asn1ValueIr valueIr;
+                    if(auto r = asn1AstToIr(constraint.getNode!Asn1ValueNode, valueIr, context, errors))
+                        return r;
+                    ir = context.allocNode!Asn1SingleValueConstraintIr(valueIr);
+                    return Result.noError;
+                },
+                (Asn1ContainedSubtypeNode constraint){
+                    Asn1TypeIr typeIr;
+                    if(auto r = asn1AstToIr(constraint.getNode!Asn1TypeNode, typeIr, context, errors))
+                        return r;
+                    ir = context.allocNode!Asn1ContainedSubtypeConstraintIr(typeIr);
+                    return Result.noError;
+                },
+                (Asn1ValueRangeNode constraint){
+                    Asn1ValueRangeConstraintIr constraintIr;
+                    if(auto r = asn1AstToIr(constraint, constraintIr, context, errors))
+                        return r;
+                    ir = constraintIr;
+                    return Result.noError;
+                },
+                (Asn1PermittedAlphabetNode constraint){
+                    Asn1ConstraintIr constraintIr, additionalIr;
+                    bool isExtensible;
+                    if(auto r = asn1AstToIrForConstraint(constraint.getNode!Asn1ConstraintNode, constraintIr, isExtensible, additionalIr, context, errors)) // @suppress(dscanner.style.long_line)
+                        return r;
+                    ir = context.allocNode!Asn1PermittedAlphabetConstraintIr(constraintIr, isExtensible, additionalIr);
+                    return Result.noError;
+                },
+                (Asn1SizeConstraintNode constraint){
+                    Asn1ConstraintIr constraintIr, additionalIr;
+                    bool isExtensible;
+                    if(auto r = asn1AstToIrForConstraint(constraint.getNode!Asn1ConstraintNode, constraintIr, isExtensible, additionalIr, context, errors)) // @suppress(dscanner.style.long_line)
+                        return r;
+                    ir = context.allocNode!Asn1SizeConstraintIr(constraintIr, isExtensible, additionalIr);
+                    return Result.noError;
+                },
+                (Asn1TypeConstraintNode constraint){
+                    assert(false, "Not implemented");
+                    return Result.noError;
+                },
+                (Asn1InnerTypeConstraintsNode constraint){
+                    assert(false, "Not implemented");
+                    return Result.noError;
+                },
+                (Asn1PatternConstraintNode constraint){
+                    Asn1ValueIr valueIr;
+                    if(auto r = asn1AstToIr(constraint.getNode!Asn1ValueNode, valueIr, context, errors))
+                        return r;
+                    ir = context.allocNode!Asn1PatternConstraintIr(valueIr);
+                    return Result.noError;
+                },
+            );
+        },
+        (Asn1ObjectSetElementsNode element){
+            assert(false, "Not implemented");
+            return Result.noError;
+        },
+        (Asn1ElementSetSpecNode element){
+            return asn1AstToIr(element, ir, context, errors);
+        },
+    );
+}
+// Tested by asn1AstToIrForConstraint as the parser cannot individually generate an ElementsNode
+
+Result asn1AstToIr(
+    scope Asn1ValueRangeNode node,
+    scope out Asn1ValueRangeConstraintIr ir,
+    scope ref Asn1ParserContext context,
+    scope Asn1SemanticErrorHandler errors,
+) @nogc nothrow
+{
+    Asn1ValueRangeConstraintIr.Endpoint lowerEndpoint, upperEndpoint;
+
+    Result handleEndpoint(
+        UnboundedNodeT,
+        ValueNodeT,
+    )(ValueNodeT valueNode, out Asn1ValueRangeConstraintIr.Endpoint endpoint)
+    {
+        return valueNode.match(
+            (Asn1ValueNode value){
+                if(auto r = asn1AstToIr(value, endpoint.valueIr, context, errors))
+                    return r;
+                return Result.noError;
+            },
+            (UnboundedNodeT _){
+                endpoint.isUnbounded = true;
+                return Result.noError;
+            }
+        );
+    }
+
+    auto result = node.getNode!Asn1LowerEndpointNode.match(
+        (Asn1LowerEndValueNode lower){
+            return handleEndpoint!Asn1MinNode(lower, lowerEndpoint);
+        },
+        (Asn1LowerEndpointNode.Case1 case1) {
+            if(auto r = handleEndpoint!Asn1MinNode(case1.getNode!Asn1LowerEndValueNode, lowerEndpoint))
+                return r;
+            lowerEndpoint.isOpen = true;
+            return Result.noError;
+        }
+    );
+    if(result.isError)
+        return result;
+
+    result = node.getNode!Asn1UpperEndpointNode.match(
+        (Asn1UpperEndValueNode upper){
+            return handleEndpoint!Asn1MaxNode(upper, upperEndpoint);
+        },
+        (Asn1UpperEndpointNode.Case1 case1) {
+            if(auto r = handleEndpoint!Asn1MaxNode(case1.getNode!Asn1UpperEndValueNode, upperEndpoint))
+                return r;
+            upperEndpoint.isOpen = true;
+            return Result.noError;
+        }
+    );
+    if(result.isError)
+        return result;
+    
+    // TODO: Location?
+    ir = context.allocNode!Asn1ValueRangeConstraintIr(Asn1Location(), lowerEndpoint, upperEndpoint);
+    return Result.noError;
+}
+// Tested by asn1AstToIrForConstraint as the parser cannot individually generate a Asn1ValueRangeNode
+
 /++++ Values ++++/
 
 Result asn1AstToIr(
@@ -992,11 +1974,26 @@ Result asn1AstToIr(
         (Asn1BuiltinValueNode builtin){
             return builtin.match(
                 (Asn1BooleanValueNode node){
-                    assert(false, "Not implemented");
-                    return Result.noError;
+                    return node.match(
+                        (Asn1BooleanValueNode.True true_) {
+                            ir = context.allocNode!Asn1BooleanValueIr(true_.token.location, true);
+                            return Result.noError;
+                        },
+                        (Asn1BooleanValueNode.False false_) {
+                            ir = context.allocNode!Asn1BooleanValueIr(false_.token.location, false);
+                            return Result.noError;
+                        },
+                    );
                 },
                 (Asn1ChoiceValueNode node){
-                    assert(false, "Not implemented");
+                    Asn1ValueIr valueIr;
+                    if(auto r = asn1AstToIr(node.getNode!Asn1ValueNode, valueIr, context, errors))
+                        return r;
+                    ir = context.allocNode!Asn1ChoiceValueIr(
+                        node.getNode!Asn1IdentifierTokenNode.token.location,
+                        node.getNode!Asn1IdentifierTokenNode.token.text,
+                        valueIr
+                    );
                     return Result.noError;
                 },
                 (Asn1IntegerValueNode node){
@@ -1018,7 +2015,7 @@ Result asn1AstToIr(
                     );
                 },
                 (Asn1NullValueNode node){
-                    assert(false, "Not implemented");
+                    ir = context.allocNode!Asn1NullValueIr(node.token.location);
                     return Result.noError;
                 },
                 (Asn1RealValueNode node){
@@ -1026,23 +2023,135 @@ Result asn1AstToIr(
                     return Result.noError;
                 },
                 (Asn1UnresolvedStringValueNode node){
-                    assert(false, "Not implemented");
-                    return Result.noError;
+                    return node.match(
+                        (Asn1CstringTokenNode cstring){
+                            ir = context.allocNode!Asn1CstringValueIr(
+                                cstring.token.location, 
+                                cstring.token.asSubString().slice
+                            );
+                            return Result.noError;
+                        },
+                        (Asn1HstringTokenNode hstring){
+                            ir = context.allocNode!Asn1HstringValueIr(
+                                hstring.token.location, 
+                                hstring.token.asSubString().slice
+                            );
+                            return Result.noError;
+                        },
+                        (Asn1BstringTokenNode bstring){
+                            ir = context.allocNode!Asn1BstringValueIr(
+                                bstring.token.location, 
+                                bstring.token.asSubString().slice
+                            );
+                            return Result.noError;
+                        },
+                        (Asn1UnresolvedStringValueNode.Containing node){
+                            assert(false, "Not implemented");
+                            return Result.noError;
+                        },
+                    );
                 },
                 (Asn1UnresolvedSequenceValueNode node){
-                    assert(false, "Not implemented");
+                    return node.match(
+                        (Asn1ValueListNode valueList) {
+                            auto valueListIr = context.allocNode!Asn1ValueSequenceIr(Asn1Location()); // TODO: Location
+                            foreach(item; valueList.items)
+                            {
+                                Asn1ValueIr valueIr;
+                                if(auto r = asn1AstToIr(item, valueIr, context, errors))
+                                    return r;
+                                valueListIr.addSequenceValue(valueIr);
+                            }
+                            ir = valueListIr;
+                            return Result.noError;
+                        },
+                        (Asn1NamedValueListNode namedList) {
+                            auto namedListIr = context.allocNode!Asn1NamedValueSequenceIr(Asn1Location()); // TODO: Location
+                            foreach(item; namedList.items)
+                            {
+                                Asn1ValueIr namedIr;
+                                if(auto r = asn1AstToIr(item.getNode!Asn1ValueNode, namedIr, context, errors))
+                                    return r;
+                                namedListIr.addSequenceNamedValue(
+                                    item.getNode!Asn1IdentifierTokenNode.token.text, 
+                                    namedIr
+                                );
+                            }
+                            ir = namedListIr;
+                            return Result.noError;
+                        },
+                        (Asn1ObjIdComponentsListNode listNode) {
+                            auto objIdIr = context.allocNode!Asn1ObjectIdSequenceValueIr(Asn1Location()); // TODO: Location
+
+                            Result pushNumber(Asn1NumberFormNode objIdNode)
+                            {
+                                return objIdNode.match(
+                                    (Asn1NumberTokenNode numberNode){
+                                        auto numberIr = context.allocNode!Asn1IntegerValueIr(
+                                            numberNode.token, 
+                                            false
+                                        );
+                                        objIdIr.addObjectId(numberIr);
+                                        return Result.noError;
+                                    },
+                                    (Asn1DefinedValueNode definedValue) {
+                                        Asn1ValueReferenceIr definedIr;
+                                        if(auto r = asn1AstToIr(definedValue, definedIr, context, errors))
+                                            return r;
+                                        objIdIr.addObjectId(definedIr);
+                                        return Result.noError;
+                                    }
+                                );
+                            }
+
+                            foreach(item; listNode.items)
+                            {
+                                auto result = item.match(
+                                    (Asn1NumberFormNode objIdNode){
+                                        return pushNumber(objIdNode);
+                                    },
+                                    (Asn1NameAndNumberFormNode objIdNode){
+                                        return pushNumber(objIdNode.getNode!Asn1NumberFormNode);
+                                    },
+                                    (Asn1DefinedValueNode objIdNode){
+                                        Asn1ValueReferenceIr definedIr;
+                                        if(auto r = asn1AstToIr(objIdNode, definedIr, context, errors))
+                                            return r;
+                                        objIdIr.addObjectId(definedIr);
+                                        return Result.noError;
+                                    },
+                                );
+                                if(result.isError)
+                                    return result;
+                            }
+                            ir = objIdIr;
+                            return Result.noError;
+                        },
+                        (Asn1EmptyNode emptyNode) {
+                            ir = context.allocNode!Asn1EmptySequenceValueIr(emptyNode.token.location);
+                            return Result.noError;
+                        },
+                    );
+                },
+            );
+        },
+        (Asn1ReferencedValueNode referenced){
+            return referenced.match(
+                (Asn1DefinedValueNode refNode){
+                    Asn1ValueReferenceIr refIr;
+                    if(auto r = asn1AstToIr(refNode, refIr, context, errors))
+                        return r;
+                    ir = refIr;
                     return Result.noError;
                 },
-                (Asn1UnresolvedIdentifierValueNode node){
+                (Asn1ValueFromObjectNode refNode){
                     assert(false, "Not implemented");
                     return Result.noError;
                 },
             );
         },
-        (Asn1ReferencedValueNode referenced){
-            return Result.noError;
-        },
         (Asn1ObjectClassFieldValueNode _){
+            assert(false, "Not implemented");
             return Result.noError;
         },
     );

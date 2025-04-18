@@ -3153,6 +3153,22 @@ struct Asn1Parser
                 );
                 return Result.noError;
 
+            case leftParenthesis:
+                consume().resultAssert;
+
+                Asn1ElementSetSpecNode elementSetSpec;
+                if(auto r = ElementSetSpec(elementSetSpec))
+                    return r;
+
+                if(auto r = consume(token)) return r;
+                if(token.type != rightParenthesis) return _lexer.makeError(
+                    Asn1ParserError.nonInitialTokenNotFound,
+                    "expected `)` to denote end of parenthesis-wrapped constraint",
+                    token.location, "encountered token of type ", token.type
+                );
+                node = _context.allocNode!(typeof(node))(elementSetSpec);
+                return Result.noError;
+
             default: break;
         }
 
@@ -3851,6 +3867,24 @@ unittest
             `INTEGER (WITH COMPONENTS { ..., a })`, (n){
             assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode.asNode!Asn1SubtypeElementsNode
                 .asNode!Asn1InnerTypeConstraintsNode.isNode!Asn1MultipleTypeConstraintsNode
+            );
+        }),
+        "Constraint - Case1": T(
+            `INTEGER (1, ...)`, (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode
+                .isNode!(Asn1ElementSetSpecsNode.Case1)
+            );
+        }),
+        "Constraint - Case2": T(
+            `INTEGER (1, ..., 2)`, (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode
+                .isNode!(Asn1ElementSetSpecsNode.Case2)
+            );
+        }),
+        "Constraint - Nested constraint": T(
+            `INTEGER ((1))`, (n){
+            assert(n.asNode!Asn1ConstrainedTypeNode.asNode!(Asn1ConstrainedTypeNode.Case1).getNode!Asn1ConstraintNode.getNode!Asn1ConstraintSpecNode.asNode!Asn1SubtypeConstraintNode.getNode!Asn1ElementSetSpecsNode.asNode!Asn1RootElementSetSpecNode.getNode!Asn1ElementSetSpecNode.asNode!Asn1UnionsNode.items[0].items[0].asNode!Asn1ElementsNode
+                .isNode!Asn1ElementSetSpecNode
             );
         }),
         "ReferencedType - TypeReference": T(`MyType`, (n) {

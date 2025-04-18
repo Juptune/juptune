@@ -10,6 +10,7 @@ import juptune.data.asn1.lang.common : Asn1ParserContext;
 import juptune.data.asn1.lang.lexer  : Asn1Token;
 
 // NOTE: This aims to stay 1:1 with the spec for my own sanity, even if a lot of it is a waste of memory.
+//       ... p.s. I'm an absolute muppet and I've based this entire thing off of the 2003 revision, not the 2021 one. fml
 // NOTE: Not all nodes are actually used, since the parser either lacks information, or prefers to represent things in a different way.
 
 enum Asn1NodeType // For faster/easier to write type checks, instead of using casting.
@@ -1382,7 +1383,6 @@ final class Asn1BuiltinValueNode : Asn1BaseNode
         // Non-standard, helps with parsing logic
         Asn1UnresolvedStringValueNode,
         Asn1UnresolvedSequenceValueNode,
-        Asn1UnresolvedIdentifierValueNode,
     );
 }
 
@@ -1412,13 +1412,6 @@ final class Asn1UnresolvedSequenceValueNode : Asn1BaseNode // Requires semantic 
         Asn1NamedValueListNode,
         Asn1ObjIdComponentsListNode,
         Asn1EmptyNode
-    );
-}
-
-final class Asn1UnresolvedIdentifierValueNode : Asn1BaseNode // Requires semantic analysis to determine exact meaning.
-{
-    mixin OneOf!(Asn1NodeType.FAILSAFE,
-        Asn1IdentifierTokenNode,
     );
 }
 
