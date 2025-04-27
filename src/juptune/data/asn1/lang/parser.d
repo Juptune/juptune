@@ -2518,14 +2518,35 @@ struct Asn1Parser
 
             case identifier:
             case typeReference:
-                _lexer = savedLexer;
-                
-                Asn1DefinedValueNode value;
-                if(auto r = DefinedValue(value)) return r;
-                
-                node = _context.allocNode!Asn1ValueNode(
-                    _context.allocNode!Asn1ReferencedValueNode(value)
-                );
+                auto identifierToken = token;
+                if(auto r = peek(token)) return r;
+
+                if(token.type == colon)
+                {
+                    consume().resultAssert;
+
+                    Asn1ValueNode value;
+                    if(auto r = Value(value)) return r;
+
+                    node = _context.allocNode!Asn1ValueNode(
+                        _context.allocNode!Asn1BuiltinValueNode(
+                            _context.allocNode!Asn1ChoiceValueNode(
+                                _context.allocNode!Asn1IdentifierTokenNode(identifierToken),
+                                value
+                            )
+                        )
+                    );
+                }
+                else
+                {
+                    _lexer = savedLexer;
+                    Asn1DefinedValueNode value;
+                    if(auto r = DefinedValue(value)) return r;
+                    
+                    node = _context.allocNode!Asn1ValueNode(
+                        _context.allocNode!Asn1ReferencedValueNode(value)
+                    );
+                }
                 return Result.noError;
 
             case leftBracket:
@@ -3966,6 +3987,9 @@ unittest
         }),
         "real - MINUS-INFINITY": T("MINUS-INFINITY", (n){ 
             assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1RealValueNode.asNode!Asn1SpecialRealValueNode.isNode!Asn1MinusInfinityNode); 
+        }),
+        "CHOICE": T("a: 123", (n){
+            assert(n.asNode!Asn1BuiltinValueNode.isNode!Asn1ChoiceValueNode);
         }),
         "UnresolvedSequence - Empty": T("{}", (n){ 
             assert(n.asNode!Asn1BuiltinValueNode.asNode!Asn1UnresolvedSequenceValueNode.isNode!Asn1EmptyNode); 

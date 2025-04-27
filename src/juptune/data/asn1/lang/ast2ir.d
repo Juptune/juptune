@@ -316,6 +316,34 @@ unittest
             }).resultAssert;
             assert(length == 2);
         }),
+        "TEMP - Semantics test": T(`
+            MyModule DEFINITIONS ::= BEGIN
+                a INTEGER ::= 400
+                I ::= INTEGER { a(1), b(a) } (I)
+                i I ::= b
+
+                C ::= CHOICE { a INTEGER }
+                c C ::= a: 20
+            END
+        `, (ir){
+            Asn1ParserContext context; // Don't do this in real code, use the original context, otherwise node lifetimes won't match up (memory corruption fun)
+            ir.doSemanticStage(
+                Asn1BaseIr.SemanticStageBit.resolveReferences,
+                (_) => Asn1BaseIr.LookupItemT.init,
+                context,
+                Asn1BaseIr.SemanticInfo(),
+            ).resultAssert;
+
+            auto i = cast(Asn1ValueAssignmentIr)ir.lookupSymbolOrNull("i");
+            assert(i !is null);
+
+            auto intIr = cast(Asn1IntegerValueIr)i.getSymbolValue();
+            assert(intIr !is null);
+
+            long number;
+            intIr.asSigned(number).resultAssert;
+            assert(number == 400);
+        })
     ]);
 }
 
@@ -1030,7 +1058,11 @@ Result asn1AstToIr(
         {
             auto result = item.match(
                 (Asn1IdentifierTokenNode identifier) {
-                    return ir.addEnumerationImplicit(identifier.token.text, errors);
+                    return ir.addEnumerationImplicit(
+                        identifier.token.text,
+                        context.allocNode!Asn1IntegerValueIr(identifier.token.location),
+                        errors
+                    );
                 },
                 (Asn1NamedNumberNode number) {
                     return number.match(
@@ -1103,17 +1135,20 @@ unittest
                 if(name == "a")
                 {
                     length++;
-                    assert(number.isNull);
+                    assert(number is null);
                 }
                 else if(name == "b")
                 {
                     length++;
-                    assert(number == 1);
+
+                    long value;
+                    (cast(Asn1IntegerValueIr)number).asSigned(value).resultAssert;
+                    assert(value == 1);
                 }
                 else if(name == "c")
                 {
                     length++;
-                    assert(number.isNull);
+                    assert(cast(Asn1ValueReferenceIr)number);
                 }
                 else
                     assert(false, name);
@@ -2256,7 +2291,7 @@ version(unittest)
     import juptune.core.util : resultAssert, resultAssertSameCode;
     import juptune.data.asn1.lang.lexer; // Intentionally everything
 
-    template GenericTestHarness(IrT, alias ParseFunc, alias Converter = asn1AstToIr)
+    private template GenericTestHarness(IrT, alias ParseFunc, alias Converter = asn1AstToIr)
     {
         static struct T
         {

@@ -9,10 +9,14 @@ module juptune.data.asn1.lang.common;
 import std.experimental.allocator.mallocator                        : Mallocator;
 import std.experimental.allocator.building_blocks.allocator_list    : AllocatorList;
 import std.experimental.allocator.building_blocks.region            : Region;
+import std.experimental.allocator.building_blocks.stats_collector   : StatsCollector, Stats = Options;
 
-private alias NodeAllocator = AllocatorList!(
-    (n) => Region!Mallocator(1024 * 1024),
-    Mallocator
+private alias NodeAllocator = StatsCollector!(
+    AllocatorList!(
+        (n) => Region!Mallocator(1024 * 1024),
+        Mallocator
+    ),
+    Stats.bytesAllocated
 );
 
 struct Asn1Location
@@ -66,4 +70,7 @@ struct Asn1ParserContext
         this.irToDtor.put(node);
         return node;
     }
+
+    // Just for monitoring memory (mis)usage
+    size_t bytesAllocated() => this.allocator.bytesAllocated;
 }
