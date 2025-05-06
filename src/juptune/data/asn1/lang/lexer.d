@@ -1208,7 +1208,7 @@ struct Asn1HstringRange
         const(char)[] _hstring;
         size_t        _cursor;
         bool          _empty;
-        int           _front;
+        ubyte         _front;
     }
 
     @safe @nogc nothrow:
@@ -1224,7 +1224,7 @@ struct Asn1HstringRange
         return this._empty;
     }
 
-    int front() pure const
+    ubyte front() pure const
     {
         return this._front;
     }
@@ -1245,9 +1245,9 @@ struct Asn1HstringRange
             assert(false, "Unexpected character in bstring. Expected 0-9, A-F, or white space. PLEASE ensure you only pass data that's already been through the Asn1Lexer to this range."); // @suppress(dscanner.style.long_line)
 
         if(ch >= '0' && ch <= '9')
-            this._front = ch - '0';
+            this._front = cast(ubyte)(ch - '0');
         else if(ch >= 'A' && ch <= 'F')
-            this._front = 10 + (ch - 'A');
+            this._front = cast(ubyte)(10 + (ch - 'A'));
         else
             assert(false, "bug: Invalid hex digit, this should've been caught earlier.");
     }
@@ -1546,20 +1546,20 @@ unittest
     import juptune.core.util : resultAssert, resultAssertSameCode, Result;
     import core.exception    : AssertError;
     import std.array         : array;
-    import std.algorithm     : equal;
+    import std.algorithm     : equal, map;
     import std.format        : format;
     import std.typecons      : Nullable;
     
     static struct T
     {
         string input;
-        int[] expected;
+        ubyte[] expected;
         bool expectedError;
 
         this(string input, int[] expected)
         {
             this.input = input;
-            this.expected = expected;
+            this.expected = expected.map!(i => cast(ubyte)i).array;
         }
 
         this(string input, bool error)
@@ -1580,7 +1580,7 @@ unittest
     {
         try
         {
-            int[] got;
+            ubyte[] got;
 
             try
                 got = Asn1HstringRange(test.input).array;

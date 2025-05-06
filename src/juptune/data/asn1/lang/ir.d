@@ -1044,6 +1044,14 @@ final class Asn1BitStringTypeIr : Asn1TypeIr
         return cast(IrT)this._namedBits[name];
     }
 
+    // I'm intentionally preventing access to the underlying data store for user code in order to
+    // avoid some potentially dodgy memory access patterns; but it makes some semantic checks awkward as hell,
+    // so the lang package gets an escape hatch.
+    package auto byNamedBitKvp()
+    {
+        return this._namedBits.byKeyValue;
+    } 
+
     override string getKindName() => "BIT STRING";
 
     override LookupItemT lookup(Asn1BaseIr refIr)
@@ -2027,6 +2035,7 @@ final class Asn1TypeReferenceIr : Asn1TypeIr
 
         if(stageBit == SemanticStageBit.resolveReferences)
         {
+            // TODO: Ensure the type reference's constraints are allowed on the base type.
             auto resolved = lookup(this);
             if(auto typeAss = cast(Asn1TypeAssignmentIr)resolved.get(null))
             {
