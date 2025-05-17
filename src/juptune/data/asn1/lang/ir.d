@@ -31,6 +31,8 @@ enum Asn1SemanticError
     typeMismatch,
     duplicateNamedNumber,
     constraint,
+    fieldNotFound,
+    impossibleValue,
 
     bug,
 }
@@ -936,6 +938,13 @@ abstract class Asn1TypeIr : Asn1BaseIr
         scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
     ) @nogc nothrow
     {
+        // Allow constraints to reference type-specific values
+        auto fallbackLookup = lookup;
+        lookup = (refNode) {
+            auto resultIr = this.lookup(refNode);
+            return resultIr.isNull ? fallbackLookup(refNode) : resultIr;
+        };
+
         if(this._mainConstraint !is null)
         {
             auto result = this._mainConstraint.doSemanticStage(stageBit, lookup, context, info, errors);
@@ -1105,17 +1114,17 @@ final class Asn1BitStringTypeIr : Asn1TypeIr
 alias Asn1BooleanTypeIr = Asn1BasicTypeIr!("BOOLEAN", ConstraintBit.singleValue | ConstraintBit.containedSubtype);
 alias Asn1CharacterStringTypeIr = Asn1BasicTypeIr!("CHARACTER STRING", ConstraintBit.singleValue | ConstraintBit.size | ConstraintBit.innerType); // @suppress(dscanner.style.long_line)
 alias Asn1BMPStringTypeIr = Asn1BasicTypeIr!("BMPString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1GeneralStringTypeIr = Asn1BasicTypeIr!("GeneralString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1GraphicStringTypeIr = Asn1BasicTypeIr!("GraphicString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1GeneralStringTypeIr = Asn1BasicTypeIr!("GeneralString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1GraphicStringTypeIr = Asn1BasicTypeIr!("GraphicString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
 alias Asn1IA5StringTypeIr = Asn1BasicTypeIr!("IA5String", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1ISO646StringTypeIr = Asn1BasicTypeIr!("ISO646String", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1ISO646StringTypeIr = Asn1BasicTypeIr!("ISO646String", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
 alias Asn1NumericStringTypeIr = Asn1BasicTypeIr!("NumericString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
 alias Asn1PrintableStringTypeIr = Asn1BasicTypeIr!("PrintableString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1TeletexStringTypeIr = Asn1BasicTypeIr!("TeletexString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1T61StringTypeIr = Asn1BasicTypeIr!("T61String", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1TeletexStringTypeIr = Asn1BasicTypeIr!("TeletexString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1T61StringTypeIr = Asn1BasicTypeIr!("T61String", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
 alias Asn1UniversalStringTypeIr = Asn1BasicTypeIr!("UniversalString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
 alias Asn1UTF8StringTypeIr = Asn1BasicTypeIr!("UTF8String", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1VideotexStringTypeIr = Asn1BasicTypeIr!("VideotexString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1VideotexStringTypeIr = Asn1BasicTypeIr!("VideotexString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
 alias Asn1VisibleStringTypeIr = Asn1BasicTypeIr!("VisibleString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
 
 final class Asn1ChoiceTypeIr : Asn1TypeIr
@@ -1560,32 +1569,33 @@ private final class Asn1SequenceTypeBase(string Kind) : Asn1TypeIr
     mixin IrBoilerplate;
 
     @nogc nothrow:
+    
+    static struct Item
+    {
+        enum Flags : ubyte
+        {
+            none,
+
+            // Not compatible with any other flag.
+            isComponentsOf = 1 << 0,
+            isOptional = 1 << 1,
+            isExtensible = 1 << 2, // exists after the `...` token
+        }
+
+        Flags flags;
+        const(char)[] name;
+        Asn1TypeIr type;
+        Asn1ValueIr defaultValue; // May be null
+
+        @nogc nothrow:
+
+        bool isOptional() => (this.flags & Flags.isOptional) > 0;
+        bool isComponentsOf() => (this.flags & Flags.isComponentsOf) > 0;
+        bool isExtensible() => (this.flags & Flags.isExtensible) > 0;
+    }
 
     private
     {
-        static struct Item
-        {
-            enum Flags : ubyte
-            {
-                none,
-
-                // Not compatible with any other flag.
-                isComponentsOf = 1 << 0,
-                isOptional = 1 << 1,
-            }
-
-            Flags flags;
-            const(char)[] name;
-            Asn1TypeIr type;
-            Asn1ValueIr defaultValue; // May be null
-
-            @nogc nothrow:
-
-            bool isOptional() => (this.flags & Flags.isOptional) > 0;
-            bool isComponentsOf() => (this.flags & Flags.isComponentsOf) > 0;
-            bool hasDefault() => this.defaultValue !is null;
-        }
-
         Array!Item _components;
         Nullable!size_t _extensibleIndex; // Points to the first element that appears after the extensible marker (if one was provided). When == to _choices, it means no further types follow the marker.
     }
@@ -1626,6 +1636,8 @@ private final class Asn1SequenceTypeBase(string Kind) : Asn1TypeIr
         item.type = node;
         if(isOptional)
             item.flags |= Item.Flags.isOptional;
+        if(this.isExtensible)
+            item.flags |= Item.Flags.isExtensible;
         this._components.put(item);
 
         return Result.noError;
@@ -1654,6 +1666,8 @@ private final class Asn1SequenceTypeBase(string Kind) : Asn1TypeIr
         item.name = name;
         item.type = node;
         item.defaultValue = value;
+        if(this.isExtensible)
+            item.flags |= Item.Flags.isExtensible;
         this._components.put(item);
 
         return Result.noError;
@@ -1665,6 +1679,8 @@ private final class Asn1SequenceTypeBase(string Kind) : Asn1TypeIr
         Item item;
         item.type = node;
         item.flags |= Item.Flags.isComponentsOf;
+        if(this.isExtensible)
+            item.flags |= Item.Flags.isExtensible;
         this._components.put(item);
     }
 
@@ -1675,6 +1691,17 @@ private final class Asn1SequenceTypeBase(string Kind) : Asn1TypeIr
     }
 
     bool isExtensible() => !this._extensibleIndex.isNull;
+
+    Nullable!Item getByNameOrNull(const(char)[] name)
+    {
+        foreach(item; this._components)
+        {
+            if(item.name == name)
+                return typeof(return)(item);
+        }
+
+        return typeof(return).init;
+    }
 
     version(unittest) auto componentsUnittest()
     {
@@ -2052,7 +2079,7 @@ final class Asn1TypeReferenceIr : Asn1TypeIr
                     "bug: lookup() didn't return a type for a type reference lookup?",
                     errors.errorAndString(this.getRoughLocation(),
                         "bug: when performing lookup for type reference ", this._moduleRef, ".", this._typeRef,
-                        "a non-type was returned"
+                        " a non-type was returned"
                     )
                 );
             }
@@ -2709,7 +2736,7 @@ final class Asn1ValueReferenceIr : Asn1ValueIr
                     "bug: lookup() didn't return a value for a value reference lookup?",
                     errors.errorAndString(this.getRoughLocation(),
                         "bug: when performing lookup for value reference ", this._moduleRef, ".", this._valueRef,
-                        "a non-value was returned"
+                        " a non-value was returned"
                     )
                 );
             }

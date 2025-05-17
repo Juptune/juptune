@@ -17,7 +17,25 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
     private
     {
+        import std.meta : AliasSeq;
+
         Asn1SemanticErrorHandler _errors;
+
+        alias RestrictedCharacterTypes = AliasSeq!(
+            Asn1BMPStringTypeIr,
+            Asn1GeneralStringTypeIr,
+            Asn1GraphicStringTypeIr,
+            Asn1IA5StringTypeIr,
+            Asn1ISO646StringTypeIr,
+            Asn1NumericStringTypeIr,
+            Asn1PrintableStringTypeIr,
+            Asn1TeletexStringTypeIr,
+            Asn1T61StringTypeIr,
+            Asn1UniversalStringTypeIr,
+            Asn1UTF8StringTypeIr,
+            Asn1VideotexStringTypeIr,
+            Asn1VisibleStringTypeIr,
+        );
     }
 
     @nogc nothrow:
@@ -63,40 +81,77 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
     override Result visit(Asn1TypeAssignmentIr ir)
     {
-        return Result.noError;
+        return ir.getSymbolType().visit(this);
     }
 
     override Result visit(Asn1ValueAssignmentIr ir)
     {
-        auto result = ir.getSymbolType().visit(this);
+        return this.visitValueAssignment(ir.getSymbolType(), ir.getSymbolValue(), ir.getSymbolName());
+    }
+
+    // Needs to be reusable so we can easily check sequence/choice field assignments
+    private Result visitValueAssignment(Asn1TypeIr typeIr, Asn1ValueIr valueIr, const(char)[] symbolName)
+    {
+        auto result = typeIr.visit(this);
         if(result.isError)
             return result;
 
-        result = ir.getSymbolValue().visit(this);
+        result = valueIr.visit(this);
         if(result.isError)
             return result;
 
-        auto typeIr = ir.getSymbolType();
-        auto exactTypeIr = this.getExactUnderlyingType(ir.getSymbolType());
+        auto exactTypeIr = this.getExactUnderlyingType(typeIr);
         if(auto type = cast(Asn1TaggedTypeIr)typeIr)
             typeIr = type.getUnderlyingTypeSkipTags();
 
+        // TODO: Could technically make a second visitor for this for easier dispatch.
         if(auto _ = cast(Asn1BitStringTypeIr)exactTypeIr)
-            return checkBitStringAss(ir.getSymbolName(), typeIr, ir.getSymbolValue());
+            return checkBitStringAss(symbolName, typeIr, valueIr);
         else if(auto _ = cast(Asn1BooleanTypeIr)exactTypeIr)
-            return checkBooleanAss(ir.getSymbolName(), typeIr, ir.getSymbolValue());
+            return checkBooleanAss(symbolName, typeIr, valueIr);
+        else if(auto _ = cast(Asn1ChoiceTypeIr)exactTypeIr)
+            return checkChoiceAss(symbolName, typeIr, valueIr);
+        else if(auto _ = cast(Asn1EnumeratedTypeIr)exactTypeIr)
+            return checkEnumeratedAss(symbolName, typeIr, valueIr);
+        else if(auto _ = cast(Asn1NullTypeIr)exactTypeIr)
+            return checkNullAss(symbolName, typeIr, valueIr);
         else if(auto _ = cast(Asn1IntegerTypeIr)exactTypeIr)
-            return checkIntegerAss(ir.getSymbolName(), typeIr, ir.getSymbolValue());
+            return checkIntegerAss(symbolName, typeIr, valueIr);
+        else if(auto _ = cast(Asn1ObjectIdentifierTypeIr)exactTypeIr)
+            return checkObjectIdentifierAss(symbolName, typeIr, valueIr);
+        else if(auto _ = cast(Asn1OctetStringTypeIr)exactTypeIr)
+            return checkOctetStringAss(symbolName, typeIr, valueIr);
+        else if(auto _ = cast(Asn1RelativeOidTypeIr)exactTypeIr)
+            return checkRelativeOidAss(symbolName, typeIr, valueIr);
+        else if(auto _ = cast(Asn1SequenceTypeIr)exactTypeIr)
+            return checkSequenceAss(symbolName, typeIr, valueIr);
+        else if(auto _ = cast(Asn1SequenceOfTypeIr)exactTypeIr)
+            return checkSequenceOfAss(symbolName, typeIr, valueIr);
+        else if(auto _ = cast(Asn1SetTypeIr)exactTypeIr)
+            return checkSetAss(symbolName, typeIr, valueIr);
+        else if(auto _ = cast(Asn1SetOfTypeIr)exactTypeIr)
+            return checkSetOfAss(symbolName, typeIr, valueIr);
+        else if(auto _ = cast(Asn1CharacterStringTypeIr)exactTypeIr)
+            return checkCharacterStringAss(symbolName, typeIr, valueIr);
+
+        static foreach(GenericStringT; RestrictedCharacterTypes)
+        {
+            if(auto _ = cast(GenericStringT)exactTypeIr)
+                return checkRestrictedStringAss!GenericStringT(symbolName, typeIr, valueIr);
+        }
 
         assert(false, "bug: Missing type check case");
     }
 
     override Result visit(Asn1BooleanValueIr ir) => Result.noError;
+    override Result visit(Asn1ChoiceValueIr ir) => Result.noError;
     override Result visit(Asn1HstringValueIr ir) => Result.noError;
     override Result visit(Asn1BstringValueIr ir) => Result.noError;
+    override Result visit(Asn1CstringValueIr ir) => Result.noError;
     override Result visit(Asn1EmptySequenceValueIr ir) => Result.noError;
     override Result visit(Asn1ValueSequenceIr ir) => Result.noError;
     override Result visit(Asn1IntegerValueIr ir) => Result.noError;
+    override Result visit(Asn1NullValueIr ir) => Result.noError;
 
     /++++ Type checkers ++++/
 
@@ -200,6 +255,133 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         }, false, _);
     }
 
+    override Result visit(Asn1ChoiceTypeIr ir)
+    {
+        bool _;
+        auto result = this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+            if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
+            {
+                assert(false, "TODO: There's like 3 ways I can think of how this works, and of course the spec doesn't mention/hides this case."); // @suppress(dscanner.style.long_line)
+                return Result.noError;
+            }
+
+            assert(false, "bug: Missing constraint case for CHOICE (type check variant)?");
+        }, false, _);
+        if(result.isError)
+            return result;
+
+        return ir.foreachChoice((_, typeIr, __){
+            return typeIr.visit(this);
+        });
+    }
+
+    override Result visit(Asn1EnumeratedTypeIr ir)
+    {
+        auto result = ir.foreachEnumeration((name, valueIr, isExtensible){
+            auto intIr = cast(Asn1IntegerValueIr)valueIr;
+            if(intIr is null)
+            {
+                this.reportError(
+                    valueIr.getRoughLocation(),
+                    Asn1SemanticError.bug,
+                    "integer value for ENUMERATED named number isn't an Asn1IntegerValueIr? Has the caller ran semantic passes yet?" // @suppress(dscanner.style.long_line)
+                );
+                return Result.noError;
+            }
+
+            return ir.foreachEnumeration((compareName, compareValueIr, _){
+                if(name == compareName)
+                    return Result.noError;
+
+                auto compareNumber = cast(Asn1IntegerValueIr)compareValueIr;
+                if(compareNumber is null)
+                    return Result.noError; // Don't need to bother reporting an error, it'll get caught in its own iteration.
+
+                if(compareNumber.getNumber() == intIr.getNumber())
+                {
+                    this.reportError(
+                        compareValueIr.getRoughLocation(),
+                        Asn1SemanticError.duplicateNamedNumber,
+                        "named number '", compareName, "' has a value of ", compareNumber.getNumberText(),
+                        " which conflicts with named number '", name, "'"
+                    );
+                }
+                return Result.noError;
+            });
+        });
+        if(result.isError)
+            return result;
+
+        // Check all the constraint values are INTEGERS, and exist within the named number list
+        bool _;
+        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+            if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
+            {
+                this.checkType!Asn1IntegerTypeIr(
+                    constraintIr.getValue(), 
+                    "single value constraint's value", 
+                    shouldReport, 
+                    wasSuccess
+                );
+                if(!wasSuccess)
+                    return Result.noError;
+
+                auto constraintValueIr = cast(Asn1IntegerValueIr)constraintIr.getValue();
+                assert(constraintValueIr !is null, "bug: how is this null?");
+
+                bool foundValidValue;
+                auto result = ir.foreachEnumeration((name, valueIr, _){
+                    auto valueNumberIr = cast(Asn1IntegerValueIr)valueIr;
+                    if(valueNumberIr is null)
+                        return Result.noError; // Type error would've been generated already.
+
+                    if(valueNumberIr.getNumber() == constraintValueIr.getNumber())
+                        foundValidValue = true;
+                    return Result.noError;
+                });
+                if(result.isError)
+                    return result;
+                if(!foundValidValue)
+                {
+                    wasSuccess = false;
+                    if(shouldReport)
+                    {
+                        this.reportError(
+                            constraintValueIr.getRoughLocation(),
+                            Asn1SemanticError.impossibleValue,
+                            "value ", constraintValueIr.getNumberText(),
+                            " cannot be used as a single value constraint for this ENUMERATED type as no ",
+                            " named number exists with the same value"
+                        );
+                    }
+                }
+                
+                return Result.noError;
+            }
+
+            assert(false, "bug: Missing constraint case for INTEGER (type check variant)?");
+        }, false, _);
+    }
+
+    override Result visit(Asn1NullTypeIr ir)
+    {
+        bool _;
+        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+            if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
+            {
+                this.checkType!Asn1NullValueIr(
+                    constraintIr.getValue(), 
+                    "single value constraint's value", 
+                    shouldReport, 
+                    wasSuccess
+                );
+                return Result.noError;
+            }
+
+            assert(false, "bug: Missing constraint case for INTEGER (type check variant)?");
+        }, false, _);
+    }
+
     override Result visit(Asn1IntegerTypeIr ir)
     {
         // Not efficient, but it's simple
@@ -220,7 +402,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             {
                 if(toCompare.key == kvp.key)
                     continue;
-                
+
                 auto compareNumber = cast(Asn1IntegerValueIr)toCompare.value;
                 if(compareNumber is null)
                     continue; // Don't need to bother reporting an error, it'll get caught in its own iteration.
@@ -257,6 +439,128 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             }
 
             assert(false, "bug: Missing constraint case for INTEGER (type check variant)?");
+        }, false, _);
+    }
+
+    override Result visit(Asn1ObjectIdentifierTypeIr ir)
+    {
+        bool _;
+        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+            if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
+            {
+                assert(false, "TODO: I'm so sick of looking at this code");
+                return Result.noError;
+            }
+
+            assert(false, "bug: Missing constraint case for OBJECT IDENTIFIER (type check variant)?");
+        }, false, _);
+    }
+
+    override Result visit(Asn1OctetStringTypeIr ir)
+    {
+        bool _;
+        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+            if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
+            {
+                wasSuccess = true;
+
+                if(auto _ = cast(Asn1BstringValueIr)constraintIr.getValue())
+                    return Result.noError;
+                else if(auto _ = cast(Asn1HstringValueIr)constraintIr.getValue())
+                    return Result.noError;
+
+                wasSuccess = false;
+                if(shouldReport)
+                {
+                    this.reportError(
+                        constraintIr.getRoughLocation(),
+                        Asn1SemanticError.none,
+                        "expected single value constraint's value", 
+                        " to be of type BSTRING; or HSTRING,",
+                        " instead of type ", constraintIr.getValue().getValueKind()
+                    );
+                }
+                return Result.noError;
+            }
+            else if(auto constraintIr = cast(Asn1SizeConstraintIr)constraint)
+            {
+                this.checkSizeConstraintTypeOnly(constraintIr, shouldReport, wasSuccess);
+                return Result.noError;
+            }
+
+            assert(false, "bug: Missing constraint case for OCTET STRING (type check variant)?");
+        }, false, _);
+    }
+
+    override Result visit(Asn1RelativeOidTypeIr ir)
+    {
+        bool _;
+        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+            if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
+            {
+                assert(false, "TODO: I'm so sick of looking at this code");
+                return Result.noError;
+            }
+
+            assert(false, "bug: Missing constraint case for RELATIVE-OID (type check variant)?");
+        }, false, _);
+    }
+
+    static foreach(RestrictedCharacterT; RestrictedCharacterTypes)
+    {
+        override Result visit(RestrictedCharacterT ir)
+        {
+            bool _;
+            return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+                // Restricted character type support is kinda complex, so TODO: implement a bit later
+                assert(false, "bug: Missing constraint case for TODO (type check variant)?");
+                return Result.noError;
+            }, false, _);
+        }
+    }
+
+    override Result visit(Asn1SequenceTypeIr ir)
+    {
+        bool _;
+        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+            assert(false, "bug: Missing constraint case for SEQUENCE (type check variant)?");
+            return Result.noError;
+        }, false, _);
+    }
+
+    override Result visit(Asn1SequenceOfTypeIr ir)
+    {
+        bool _;
+        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+            assert(false, "bug: Missing constraint case for SEQUENCE OF (type check variant)?");
+            return Result.noError;
+        }, false, _);
+    }
+
+    override Result visit(Asn1SetTypeIr ir)
+    {
+        bool _;
+        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+            assert(false, "bug: Missing constraint case for SET (type check variant)?");
+            return Result.noError;
+        }, false, _);
+    }
+
+    override Result visit(Asn1SetOfTypeIr ir)
+    {
+        bool _;
+        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+            assert(false, "bug: Missing constraint case for SET OF (type check variant)?");
+            return Result.noError;
+        }, false, _);
+    }
+
+    override Result visit(Asn1CharacterStringTypeIr ir)
+    {
+        bool _;
+        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+            assert(false, "bug: Missing constraint case for CHARACTER STRING (type check variant)?");
+            return Result.noError;
         }, false, _);
     }
 
@@ -485,6 +789,77 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         handle(constraintIr.getAdditionalConstraint());
     }
 
+    Result checkSizeConstraintValueOnly(string KindName, string Measurement)(
+        Asn1SizeConstraintIr sizeConstraintIr,
+        ulong gotSize,
+        bool shouldReport, 
+        out bool wasSuccess
+    )
+    {
+        Result handle(Asn1ConstraintIr sizeConstraintIr)
+        {
+            if(sizeConstraintIr is null)
+                return Result.noError;
+
+            if(auto sizeIr = cast(Asn1SingleValueConstraintIr)sizeConstraintIr)
+            {
+                auto intIr = cast(Asn1IntegerValueIr)sizeIr.getValue();
+                if(intIr is null)
+                {
+                    wasSuccess = false; // No error needed - will get caught in the type-only checks.
+                    return Result.noError;
+                }
+
+                ulong length;
+                auto result = intIr.asUnsigned(length, this._errors);
+                if(result.isError)
+                {
+                    // asUnsigned already reported the error, and we don't return non-critical errors
+                    return Result.noError;
+                }
+
+                if(gotSize != length)
+                {
+                    wasSuccess = false;
+                    if(shouldReport)
+                    {
+                        this.reportError(
+                            sizeConstraintIr.getRoughLocation(),
+                            Asn1SemanticError.none,
+                            "expected ", KindName, " value to contain exactly ", length, " ", Measurement,
+                            " but instead got ", gotSize, " ", Measurement
+                        );
+                    }
+                }
+            }
+            else if(auto rangeIr = cast(Asn1ValueRangeConstraintIr)sizeConstraintIr)
+            {
+                enum Message = KindName ~ " value length";
+                return this.checkValueRangeValueOnly(
+                    rangeIr,
+                    gotSize,
+                    gotSize,
+                    rangeIr.getRoughLocation(),
+                    Message,
+                    shouldReport,
+                    wasSuccess
+                );
+            }
+            else
+            {
+                wasSuccess = false; // No error needed - will get caught in the type-only checks.
+            }
+
+            return Result.noError;
+        }
+
+        wasSuccess = true;
+        auto result = handle(sizeConstraintIr.getMainConstraint());
+        if(result.isError)
+            return result;
+        return handle(sizeConstraintIr.getAdditionalConstraint());
+    }
+
     Result checkBitStringAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
         import juptune.core.ds : Array;
@@ -576,67 +951,12 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             }
             else if(auto constraintIr = cast(Asn1SizeConstraintIr)constraint)
             {
-                Result handle(Asn1ConstraintIr sizeConstraintIr)
-                {
-                    if(sizeConstraintIr is null)
-                        return Result.noError;
-
-                    if(auto sizeIr = cast(Asn1SingleValueConstraintIr)sizeConstraintIr)
-                    {
-                        auto intIr = cast(Asn1IntegerValueIr)sizeIr.getValue();
-                        if(intIr is null)
-                        {
-                            wasSuccess = false; // No error needed - will get caught in the type-only checks.
-                            return Result.noError;
-                        }
-
-                        ulong length;
-                        auto result = intIr.asUnsigned(length, this._errors);
-                        if(result.isError)
-                        {
-                            // asUnsigned already reported the error, and we don't return non-critical errors
-                            return Result.noError;
-                        }
-
-                        if(bits.length != length)
-                        {
-                            wasSuccess = false;
-                            if(shouldReport)
-                            {
-                                this.reportError(
-                                    constraintIr.getRoughLocation(),
-                                    Asn1SemanticError.none,
-                                    "expected BIT STRING value to contain exactly ", length, " bits",
-                                    " but instead got ", bits.length, " bits"
-                                );
-                            }
-                        }
-                    }
-                    else if(auto rangeIr = cast(Asn1ValueRangeConstraintIr)sizeConstraintIr)
-                    {
-                        return this.checkValueRangeValueOnly(
-                            rangeIr,
-                            bits.length,
-                            bits.length,
-                            rangeIr.getRoughLocation(),
-                            "BIT STRING value length",
-                            shouldReport,
-                            wasSuccess
-                        );
-                    }
-                    else
-                    {
-                        wasSuccess = false; // No error needed - will get caught in the type-only checks.
-                    }
-
-                    return Result.noError;
-                }
-
-                wasSuccess = true;
-                auto result = handle(constraintIr.getMainConstraint());
-                if(result.isError)
-                    return result;
-                return handle(constraintIr.getAdditionalConstraint());
+                return this.checkSizeConstraintValueOnly!("BIT STRING", "bits")(
+                    constraintIr,
+                    bits.length,
+                    shouldReport,
+                    wasSuccess
+                );
             }
             assert(false, "bug: Unhandled constraint case for BIT STRING?");
         }, false, _);
@@ -668,6 +988,145 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 );
             }
             assert(false, "bug: Unhandled constraint case for BOOLEAN?");
+        }, false, _);
+    }
+
+    Result checkChoiceAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        auto choiceType = cast(Asn1ChoiceTypeIr)this.getExactUnderlyingType(type);
+        assert(choiceType !is null, "bug: checkChoiceAss was called for a non-CHOICE type?");
+
+        auto choiceValue = cast(Asn1ChoiceValueIr)value;
+        if(choiceValue is null)
+        {
+            this.reportError(
+                value.getRoughLocation(), 
+                Asn1SemanticError.typeMismatch,
+                "symbol '", symbolName, "' of type ", type.getKindName(),
+                " cannot be assigned value of type ", value.getValueKind(),
+                " - CHOICE has a special syntax (`c MyChoice ::= choice1: 123`)"
+            );
+            return Result.noError;
+        }
+
+        bool isValidAss;
+        auto result = choiceType.foreachChoice((choiceName, choiceTypeIr, isExtensible){
+            if(choiceName != choiceValue.getChoiceName())
+                return Result.noError;
+            
+            assert(!isValidAss, "bug: Somehow there's multiple choices with the same name? How wasn't this caught earlier?"); // @suppress(dscanner.style.long_line)
+            isValidAss = true;
+
+            return this.visitValueAssignment(
+                choiceTypeIr, 
+                choiceValue.getChoiceValue(), 
+                choiceValue.getChoiceName()
+            );
+        });
+        if(result.isError)
+            return result;
+        if(!isValidAss)
+        {
+            this.reportError(
+                value.getRoughLocation(),
+                Asn1SemanticError.fieldNotFound,
+                "symbol '", symbolName, "' does not define a CHOICE field named '", choiceValue.getChoiceName(), "'"
+            );
+            return Result.noError;
+        }
+
+        bool _;
+        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+            if(auto ir = cast(Asn1SingleValueConstraintIr)constraint)
+            {
+                assert(false, "TODO: Figure out how SingleValue and CHOICE are supposed to work...");
+            }
+            assert(false, "bug: Unhandled constraint case for BOOLEAN?");
+            return Result.noError;
+        }, false, _);
+    }
+
+    Result checkEnumeratedAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        auto enumTypeIr = cast(Asn1EnumeratedTypeIr)type;
+        assert(enumTypeIr !is null, "bug: checkEnumeratedAss was called with a non-ENUMERATED type?");
+
+        auto intValue = cast(Asn1IntegerValueIr)value;
+        if(intValue is null)
+        {
+            this.reportError(
+                value.getRoughLocation(), 
+                Asn1SemanticError.typeMismatch,
+                "symbol '", symbolName, "' of type ", type.getKindName(),
+                " cannot be assigned value of type ", value.getValueKind(),
+            );
+            return Result.noError;
+        }
+
+        bool isValidValue;
+        auto result = enumTypeIr.foreachEnumeration((name, valueIr, _){
+            auto valueNumberIr = cast(Asn1IntegerValueIr)valueIr;
+            if(valueNumberIr is null)
+                return Result.noError; // A type error would've already been created
+
+            if(valueNumberIr.getNumber() == intValue.getNumber())
+                isValidValue = true;
+            return Result.noError;
+        });
+        if(!isValidValue)
+        {
+            this.reportError(
+                intValue.getRoughLocation(),
+                Asn1SemanticError.impossibleValue,
+                "symbol '", symbolName, 
+                "' cannot be assigned value ", intValue.getNumberText(),
+                " as there is no named number in the underlying ENUMERATED type with the same value"
+            );
+        }
+        if(result.isError)
+            return result;
+
+        bool _;
+        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+            if(auto ir = cast(Asn1SingleValueConstraintIr)constraint)
+            {
+                return this.checkSingleValue!Asn1IntegerValueIr(ir, intValue, 
+                    (expected, got) => expected.getNumber() == got.getNumber(),
+                    (value) => value.getNumberText(),
+                    wasSuccess, 
+                    shouldReport
+                );
+            }
+            assert(false, "bug: Unhandled constraint case for ENUMERATED?");
+        }, false, _);
+    }
+
+    Result checkNullAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        auto nullValue = cast(Asn1NullValueIr)value;
+        if(nullValue is null)
+        {
+            this.reportError(
+                value.getRoughLocation(), 
+                Asn1SemanticError.typeMismatch,
+                "symbol '", symbolName, "' of type ", type.getKindName(),
+                " cannot be assigned value of type ", value.getValueKind(),
+            );
+            return Result.noError;
+        }
+
+        bool _;
+        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+            if(auto ir = cast(Asn1SingleValueConstraintIr)constraint)
+            {
+                return this.checkSingleValue!Asn1NullValueIr(ir, nullValue, 
+                    (expected, got) => true,
+                    (value) => "NULL",
+                    wasSuccess, 
+                    shouldReport
+                );
+            }
+            assert(false, "bug: Unhandled constraint case for NULL?");
         }, false, _);
     }
 
@@ -728,7 +1187,216 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             assert(false, "bug: Unhandled constraint case for INTEGER?");
         }, false, _);
     }
-    
+
+    Result checkObjectIdentifierAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        bool _;
+        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+            if(auto ir = cast(Asn1SingleValueConstraintIr)constraint)
+            {
+                assert(false, "TODO: I need to implement sequence equality");
+                return Result.noError;
+            }
+            assert(false, "bug: Unhandled constraint case for OBJECT IDENTIFIER?");
+        }, false, _);
+    }
+
+    Result checkOctetStringAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        import juptune.core.ds : Array;
+
+        // Not efficient, but simplifies this function a lot.
+        // TODO: Make another range for Bstrings -> bytes, because then we can avoid allocations while still keeping
+        //       the code clean.
+        Result toByteArray(Asn1ValueIr value, scope ref Array!byte bytes)
+        {
+            if(auto bstringIr = cast(Asn1BstringValueIr)value)
+            {
+                byte byte_;
+                uint count;
+                foreach(bit; bstringIr.asBstringRange)
+                {
+                    byte_ <<= 1;
+                    byte_ |= bit;
+                    count++;
+
+                    if(count == 8)
+                    {
+                        bytes.put(byte_);
+                        byte_ = 0;
+                        count = 0;
+                    }
+                }
+
+                if(count > 0)
+                {
+                    byte_ <<= 8 - count;
+                    bytes.put(byte_);
+                }
+            }
+            else if (auto hstring = cast(Asn1HstringValueIr)value)
+            {
+                import std.range : chunks;
+                foreach(chunk; hstring.asHstringRange.chunks(2))
+                {
+                    byte byte_ = cast(byte)(chunk.front << 4);
+                    chunk.popFront();
+                    if(!chunk.empty)
+                        byte_ |= chunk.front;
+                    bytes.put(byte_);
+                }
+            }
+            else
+            {
+                this.reportError(
+                    value.getRoughLocation(),
+                    Asn1SemanticError.typeMismatch,
+                    "symbol '", symbolName, "' of type ", type.getKindName(),
+                    " canot be assigned value of type ", value.getValueKind(),
+                );
+            }
+
+            return Result.noError;
+        }
+
+        Array!byte bytes;
+        auto result = toByteArray(value, bytes);
+        if(result.isError)
+            return result;
+        
+        bool _;
+        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+            if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
+            {
+                Array!byte constraintBytes;
+                auto result = toByteArray(constraintIr.getValue(), constraintBytes);
+                if(result.isError)
+                    return result;
+
+                if(bytes != constraintBytes)
+                {
+                    wasSuccess = false;
+                    if(shouldReport)
+                    {
+                        this.reportError(
+                            constraintIr.getRoughLocation(),
+                            Asn1SemanticError.none,
+                            "expected octets ", constraintBytes[],
+                            " but got octets ", bytes[]
+                        );
+                    }
+                }
+                else
+                    wasSuccess = true;
+
+                return Result.noError;
+            }
+            else if(auto constraintIr = cast(Asn1SizeConstraintIr)constraint)
+            {
+                return this.checkSizeConstraintValueOnly!("OCTET STRING", "bytes")(
+                    constraintIr,
+                    bytes.length,
+                    shouldReport,
+                    wasSuccess
+                );
+            }
+            assert(false, "bug: Unhandled constraint case for OCTET STRING?");
+        }, false, _);
+    }
+
+    Result checkRelativeOidAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        bool _;
+        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+            if(auto ir = cast(Asn1SingleValueConstraintIr)constraint)
+            {
+                assert(false, "TODO: I need to implement sequence equality");
+                return Result.noError;
+            }
+            assert(false, "bug: Unhandled constraint case for RELATIVE-OID?");
+        }, false, _);
+    }
+
+    Result checkRestrictedStringAss(GenericStringT)(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        // TODO: Ensure all characters match the type's alphabet.
+
+        bool _;
+        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+            if(auto ir = cast(Asn1SingleValueConstraintIr)constraint)
+            {
+                assert(false, "TODO: implement");
+                return Result.noError;
+            }
+            else if(auto ir = cast(Asn1ValueRangeConstraintIr)constraint)
+            {
+                assert(false, "TODO: implement");
+                return Result.noError;
+            }
+            else if(auto ir = cast(Asn1SizeConstraintIr)constraint)
+            {
+                assert(false, "TODO: implement");
+                return Result.noError;
+            }
+            else if(auto ir = cast(Asn1PermittedAlphabetConstraintIr)constraint)
+            {
+                assert(false, "TODO: implement");
+                return Result.noError;
+            }
+            else if(auto ir = cast(Asn1PatternConstraintIr)constraint)
+            {
+                assert(false, "TODO: implement");
+                return Result.noError;
+            }
+            assert(false, "bug: Unhandled constraint case for restricted character string?");
+        }, false, _);
+    }
+
+    Result checkSequenceAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        bool _;
+        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+            assert(false, "bug: Unhandled constraint case for SEQUENCE?");
+            return Result.noError;
+        }, false, _);
+    }
+
+    Result checkSequenceOfAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        bool _;
+        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+            assert(false, "bug: Unhandled constraint case for SEQUENCE OF?");
+            return Result.noError;
+        }, false, _);
+    }
+
+    Result checkSetAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        bool _;
+        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+            assert(false, "bug: Unhandled constraint case for SET?");
+            return Result.noError;
+        }, false, _);
+    }
+
+    Result checkSetOfAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        bool _;
+        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+            assert(false, "bug: Unhandled constraint case for SET OF?");
+            return Result.noError;
+        }, false, _);
+    }
+
+    Result checkCharacterStringAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        bool _;
+        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+            assert(false, "bug: Unhandled constraint case for CHARACTER STRING?");
+            return Result.noError;
+        }, false, _);
+    }
+
     /++++ Helpers ++++/
 
     void checkType(ExpectedT)(
@@ -1322,6 +1990,130 @@ unittest
     ]);
 }
 
+@("ValueAssignment - CHOICE")
+unittest
+{
+    alias Harness = GenericTestHarness!(Asn1ModuleIr, Asn1ModuleIr, (ref parser){
+        Asn1ModuleDefinitionNode node;
+        parser.ModuleDefinition(node).resultAssert;
+        return node;
+    });
+
+    with(Harness) run([
+        "No constraint - success": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                C ::= CHOICE {
+                    b BOOLEAN,
+                    i INTEGER
+                }
+                c C ::= b: TRUE
+            END
+        `, Asn1SemanticError.none),
+        "No constraint - success - nested choices": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                C ::= CHOICE {
+                    c CHOICE {
+                        b BOOLEAN
+                    }
+                }
+                c C ::= c: b: TRUE
+            END
+        `, Asn1SemanticError.none),
+        "No constraint - invalid name": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                C ::= CHOICE {
+                    b BOOLEAN,
+                    i INTEGER
+                }
+                c C ::= bb: TRUE
+            END
+        `, Asn1SemanticError.fieldNotFound),
+        "No constraint - field type mismatch": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                C ::= CHOICE {
+                    b BOOLEAN,
+                    i INTEGER
+                }
+                c C ::= b: 1
+            END
+        `, Asn1SemanticError.typeMismatch),
+        "No constraint - field type constraint failure": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                C ::= CHOICE {
+                    b BOOLEAN (FALSE),
+                    i INTEGER
+                }
+                c C ::= b: TRUE
+            END
+        `, Asn1SemanticError.constraint),
+    ]);
+}
+
+@("ValueAssignment - ENUMERATED")
+unittest
+{
+    alias Harness = GenericTestHarness!(Asn1ModuleIr, Asn1ModuleIr, (ref parser){
+        Asn1ModuleDefinitionNode node;
+        parser.ModuleDefinition(node).resultAssert;
+        return node;
+    });
+
+    with(Harness) run([
+        "SingleValue - non-integer constraint": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                E ::= ENUMERATED { a(0) } (TRUE)
+            END
+        `, Asn1SemanticError.constraint),
+        "SingleValue - failure": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                E ::= ENUMERATED { a(0), b(1) } (a)
+                e E ::= b
+            END
+        `, Asn1SemanticError.constraint),
+        "SingleValue - value is not defined": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                E ::= ENUMERATED { a(0) } (1)
+            END
+        `, Asn1SemanticError.impossibleValue),
+        "SingleValue - success": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                E ::= ENUMERATED { a(0) } (a | 0)
+                e E ::= a
+            END
+        `, Asn1SemanticError.none),
+    ]);
+}
+
+@("ValueAssignment - NULL")
+unittest
+{
+    alias Harness = GenericTestHarness!(Asn1ModuleIr, Asn1ModuleIr, (ref parser){
+        Asn1ModuleDefinitionNode node;
+        parser.ModuleDefinition(node).resultAssert;
+        return node;
+    });
+
+    with(Harness) run([
+        "No constraint - success": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                n NULL ::= NULL
+            END
+        `, Asn1SemanticError.none),
+
+        "SingleValue - non-NULL constraint": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                N ::= NULL (TRUE)
+            END
+        `, Asn1SemanticError.constraint),
+        "SingleValue - success": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                N ::= NULL (NULL)
+                n N ::= NULL
+            END
+        `, Asn1SemanticError.none),
+    ]);
+}
+
 @("ValueAssignment - INTEGER")
 unittest
 {
@@ -1440,6 +2232,118 @@ unittest
     ]);
 }
 
+@("ValueAssignment - OCTET STRING")
+unittest
+{
+    alias Harness = GenericTestHarness!(Asn1ModuleIr, Asn1ModuleIr, (ref parser){
+        Asn1ModuleDefinitionNode node;
+        parser.ModuleDefinition(node).resultAssert;
+        return node;
+    });
+
+    with(Harness) run([
+        "No constraint - success - hstring": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING
+                b B ::= 'DEADBEEF'H
+            END
+        `, Asn1SemanticError.none),
+        "No constraint - success - bstring": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING
+                b B ::= '1010'B
+            END
+        `, Asn1SemanticError.none),
+        "No constraint - wrong type": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING
+                b B ::= "abc123"
+            END
+        `, Asn1SemanticError.typeMismatch),
+        
+        "SingleValue - failure - hstring": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING ('ABC'H)
+                b B ::= 'DEADBEEF'H
+            END
+        `, Asn1SemanticError.constraint),
+        "SingleValue - failure - bstring": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING ('ABC'H)
+                b B ::= '1010'B
+            END
+        `, Asn1SemanticError.constraint),
+        "SingleValue - success - hstring": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING ('DEADBEEF'H)
+                b B ::= 'DEADBEEF'H
+            END
+        `, Asn1SemanticError.none),
+        "SingleValue - success - bstring": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING ('1010'B)
+                b B ::= '1010'B
+            END
+        `, Asn1SemanticError.none),
+        "SingleValue - success - bstring constraint hstring value": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING ('1111111100001'B) -- Gets zero-extended to 16-bits
+                b B ::= 'FF08'H
+            END
+        `, Asn1SemanticError.none),
+        
+        "Size - SingleValue - failure - hstring": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING (SIZE (3))
+                b B ::= 'DEADBEEF'H
+            END
+        `, Asn1SemanticError.constraint),
+        "Size - SingleValue - failure - bstring": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING (SIZE (1))
+                b B ::= '111100001'B -- Zero extended to 16-bits
+            END
+        `, Asn1SemanticError.constraint),
+        "Size - SingleValue - success - hstring": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING (SIZE (4))
+                b B ::= 'DEADBEEF'H
+            END
+        `, Asn1SemanticError.none),
+        "Size - SingleValue - success - bstring": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING (SIZE (1))
+                b B ::= '1010'B
+            END
+        `, Asn1SemanticError.none),
+
+        "Size - ValueRange - failure - hstring": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING (SIZE (0..3))
+                b B ::= 'DEADBEEF'H
+            END
+        `, Asn1SemanticError.constraint),
+        "Size - ValueRange - failure - bstring": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING (SIZE (2..40))
+                b B ::= '1010'B
+            END
+        `, Asn1SemanticError.constraint),
+        "Size - ValueRange - success - hstring": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING (SIZE (0..4))
+                b B ::= 'DEADBEEF'H
+            END
+        `, Asn1SemanticError.none),
+        "Size - ValueRange - success - bstring": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                B ::= OCTET STRING (SIZE (0..1))
+                b B ::= '1010'B
+            END
+        `, Asn1SemanticError.none),
+    ]);
+}
+
 private final class ErrorCollector : Asn1SemanticErrorHandler
 {
     import juptune.core.util.conv : toStringSink;
@@ -1460,7 +2364,6 @@ private final class ErrorCollector : Asn1SemanticErrorHandler
         this.buffer.put("): ");
         foreach(i; 0..this._indent)
             this.buffer.put("  ");
-
     }
     override void putInLine(scope const(char)[] slice)
     {
