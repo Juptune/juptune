@@ -12,6 +12,35 @@ int main(string[] args)
            juptune.data.asn1.lang.typecheck,
            dasn1.generator;
 
+    final static class Asn1PrototypeErrorHandler : Asn1SemanticErrorHandler
+    {
+        import core.stdc.stdio : printf;
+
+        @nogc nothrow:
+
+        uint indentLevel;
+
+        override void startLine(Asn1Location location)
+        {
+            printf("[%lld..%lld]: ", location.start, location.end);
+            foreach(i; 0..this.indentLevel)
+                printf("  ");
+        }
+
+        override void putInLine(scope const(char)[] slice)
+        {
+            printf("%.*s", cast(uint)slice.length, slice.ptr);
+        }
+
+        override void endLine()
+        {
+            printf("\n");
+        }
+
+        override void indent() { this.indentLevel++; }
+        override void dedent() { this.indentLevel--; }
+    }
+
     import std.stdio : writeln;
 
     if(args.length != 2)
@@ -31,7 +60,7 @@ int main(string[] args)
     parser.ModuleDefinition(modDef).resultEnforce;
 
     Asn1ModuleIr modIr;
-    asn1AstToIr(modDef, modIr, context, Asn1NullSemanticErrorHandler.instance).resultEnforce;
+    asn1AstToIr(modDef, modIr, context, new Asn1PrototypeErrorHandler()).resultEnforce;
     foreach(semanticStage; [
         Asn1BaseIr.SemanticStageBit.resolveReferences,
         Asn1BaseIr.SemanticStageBit.implicitMutations,
@@ -45,7 +74,7 @@ int main(string[] args)
         ).resultEnforce;
     }
 
-    auto visitor = new Asn1TypeCheckVisitor(Asn1NullSemanticErrorHandler.instance);
+    auto visitor = new Asn1TypeCheckVisitor(new Asn1PrototypeErrorHandler());
     modIr.visit(visitor).resultEnforce;
     // TODO: I need to make an actual error handler, since errors right now will just be gobbled.
 
