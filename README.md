@@ -8,6 +8,8 @@ Only Linux is supported, and that likely won't ever change.
 
 **I currently don't accept MRs for this project - really small things like tiny bug fixes may be merged in however**
 
+**NOTE: This README is kind of outdated, which I'll eventually get around to fixing...**
+
 # Getting Started
 
 This library is super alpha, please don't use it for any serious work.
