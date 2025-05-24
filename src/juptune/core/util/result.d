@@ -9,8 +9,6 @@ module juptune.core.util.result;
 import core.attribute : mustuse;
 import juptune.core.ds : String, String2;
 
-@nogc nothrow:
-
 import std.traits : getUDAs;
 alias InheritResults(alias Symbol) = getUDAs!(Symbol, Result);
 
@@ -199,7 +197,7 @@ unittest
     assert(r == r2);
 }
 
-void resultAssert(Result result)
+void resultAssert(Result result) @nogc nothrow
 {
     if(!result.isError)
         return;
@@ -218,7 +216,7 @@ void resultAssert(Result result)
     assert(false, slice);
 }
 
-version(unittest) void resultAssertSameCode(ExpectedErrorT)(Result got, Result expected)
+version(unittest) void resultAssertSameCode(ExpectedErrorT)(Result got, Result expected) @nogc nothrow
 in(got.isError && expected.isError, "Both results must be errors")
 {
     import juptune.core.ds   : Array, String;
@@ -248,4 +246,25 @@ in(got.isError && expected.isError, "Both results must be errors")
         // Since this function is only ever used in unittests, we can bypass the global @nogc of this module.
         debug assert(false, "" ~ msg.slice);
     }
+}
+
+/++++ @gc helpers ++++/
+
+final class JuptuneResultException : Exception
+{
+    import std.exception : basicExceptionCtors;
+    mixin basicExceptionCtors;
+}
+
+void resultEnforce(Result result)
+{
+    import std.array        : Appender;
+    import std.exception    : assumeUnique;
+
+    if(!result.isError)
+        return;
+
+    Appender!(char[]) buffer;
+    result.toString(buffer);
+    throw new JuptuneResultException(buffer.data.assumeUnique);
 }

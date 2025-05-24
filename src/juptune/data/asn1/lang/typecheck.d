@@ -6,7 +6,7 @@
  */
 module juptune.data.asn1.lang.typecheck;
 
-import juptune.core.util : Result;
+import juptune.core.util : Result, resultAssert;
 import juptune.data.asn1.lang.common : Asn1Location;
 import juptune.data.asn1.lang.ir; // Intentionally everything
 
@@ -104,6 +104,9 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         if(auto type = cast(Asn1TaggedTypeIr)typeIr)
             typeIr = type.getUnderlyingTypeSkipTags();
 
+        if(auto value = cast(Asn1ValueReferenceIr)valueIr)
+            valueIr = value.getResolvedValueRecurse();
+
         // TODO: Could technically make a second visitor for this for easier dispatch.
         if(auto _ = cast(Asn1BitStringTypeIr)exactTypeIr)
             return checkBitStringAss(symbolName, typeIr, valueIr);
@@ -152,6 +155,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     override Result visit(Asn1ValueSequenceIr ir) => Result.noError;
     override Result visit(Asn1IntegerValueIr ir) => Result.noError;
     override Result visit(Asn1NullValueIr ir) => Result.noError;
+    override Result visit(Asn1ValueReferenceIr ir) => Result.noError;
 
     /++++ Type checkers ++++/
 
@@ -1048,7 +1052,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
     Result checkEnumeratedAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
-        auto enumTypeIr = cast(Asn1EnumeratedTypeIr)type;
+        auto enumTypeIr = cast(Asn1EnumeratedTypeIr)this.getExactUnderlyingType(type);
         assert(enumTypeIr !is null, "bug: checkEnumeratedAss was called with a non-ENUMERATED type?");
 
         auto intValue = cast(Asn1IntegerValueIr)value;

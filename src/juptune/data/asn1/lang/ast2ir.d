@@ -337,7 +337,7 @@ unittest
             auto i = cast(Asn1ValueAssignmentIr)ir.lookupSymbolOrNull("i");
             assert(i !is null);
 
-            auto intIr = cast(Asn1IntegerValueIr)i.getSymbolValue();
+            auto intIr = cast(Asn1IntegerValueIr)(cast(Asn1ValueReferenceIr)i.getSymbolValue()).getResolvedValue();
             assert(intIr !is null);
 
             long number;

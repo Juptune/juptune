@@ -152,6 +152,10 @@ juptune_all_unittest_exe = executable(
     d_unittest: true,
 )
 
+#### Subdirs ####
+
+subdir('tools/dasn1')
+
 #### Install ####
 
 install_subdir('src/juptune', install_dir: 'include/d/juptune/')

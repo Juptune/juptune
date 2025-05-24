@@ -139,7 +139,7 @@ private mixin template IrBoilerplate()
         return visitor.visit(this);
     }
 
-    override void visitGc(Asn1IrVisitorGc visitor)
+    override void visitGC(Asn1IrVisitorGC visitor)
     {
         visitor.visit(this);
     }
@@ -184,7 +184,7 @@ abstract class Asn1BaseIr
     void dispose() @nogc nothrow {}
 
     abstract Result visit(Asn1IrVisitor visitor) @nogc nothrow;
-    abstract void visitGc(Asn1IrVisitorGc visitor);
+    abstract void visitGC(Asn1IrVisitorGC visitor);
 
     /++++ Semantic Stages (I don't care it's a slow design, I can change it if it ever becomes an actual) ++++/
 
@@ -231,22 +231,6 @@ abstract class Asn1BaseIr
         SemanticInfo info,
         scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
     ) @nogc nothrow;
-
-    /++++ Some general helpers ++++/
-
-    // Purpose: To help flatten the tree to make it easier to work with.
-    protected static void replaceIfReference(scope ref Asn1ValueIr value) @nogc nothrow
-    {
-        if(auto valueRef = cast(Asn1ValueReferenceIr)value)
-            value = valueRef.getResolvedValueRecurse();
-    }
-
-    // Purpose: To help flatten the tree to make it easier to work with.
-    protected static void replaceIfReference(scope ref Asn1TypeIr type) @nogc nothrow
-    {
-        if(auto typeRef = cast(Asn1TypeReferenceIr)type)
-            type = typeRef.getResolvedTypeRecurse();
-    }
 }
 
 private struct OneOf(BaseIrT : Asn1BaseIr, IrTypes...) // @suppress(dscanner.suspicious.incomplete_operator_overloading)
@@ -293,8 +277,6 @@ final class Asn1ModuleIr : Asn1BaseIr
 {
     mixin IrBoilerplate;
 
-    @nogc nothrow:
-
     enum TagDefault
     {
         FAILSAFE,
@@ -321,7 +303,7 @@ final class Asn1ModuleIr : Asn1BaseIr
         bool extensibilityImplied,
         Asn1ExportsIr exports,
         Asn1ImportsIr imports,
-    )
+    ) @nogc nothrow
     in(name.length > 0)
     in(moduleVersion !is null)
     in(exports !is null)
@@ -336,18 +318,11 @@ final class Asn1ModuleIr : Asn1BaseIr
         this._imports = imports;
     }
 
-    Result addAssignment(
-        Asn1AssignmentIr ass,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
-    )
-    {
-        // TODO: Ensure name is unique.
-        this._assignments.put(ass);
-        return Result.noError;
-    }
+    alias foreachAssignment = foreachAssignmentImpl!(Result delegate(Asn1AssignmentIr ass) @nogc nothrow);
+    alias foreachAssignmentGC = foreachAssignmentImpl!(Result delegate(Asn1AssignmentIr ass));
 
-    Result foreachAssignment(
-        scope Result delegate(Asn1AssignmentIr ass) @nogc nothrow assHandler, // Believe it or not I'm 26
+    private Result foreachAssignmentImpl(DelegateT)(
+        scope DelegateT assHandler, // Believe it or not I'm 26
     )
     {
         foreach(ass; this._assignments)
@@ -357,6 +332,18 @@ final class Asn1ModuleIr : Asn1BaseIr
                 return result;
         }
 
+        return Result.noError;
+    }
+
+    @nogc nothrow:
+
+    Result addAssignment(
+        Asn1AssignmentIr ass,
+        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+    )
+    {
+        // TODO: Ensure name is unique.
+        this._assignments.put(ass);
         return Result.noError;
     }
 
@@ -763,9 +750,6 @@ final class Asn1ValueAssignmentIr : Asn1AssignmentIr
         if(result.isError)
             return result;
 
-        if(stageBit == SemanticStageBit.resolveReferences)
-            super.replaceIfReference(this._type);
-
         scope fallbackLookup = lookup;
         lookup = (ir) {
             auto resolved = this._type.lookup(ir);
@@ -775,9 +759,6 @@ final class Asn1ValueAssignmentIr : Asn1AssignmentIr
         result = this._value.doSemanticStage(stageBit, lookup, context, info, errors);
         if(result.isError)
             return result;
-
-        if(stageBit == SemanticStageBit.resolveReferences)
-            super.replaceIfReference(this._value);
 
         return Result.noError;
     }
@@ -818,9 +799,6 @@ final class Asn1TypeAssignmentIr : Asn1AssignmentIr
         auto result = this._type.doSemanticStage(stageBit, lookup, context, info, errors);
         if(result.isError)
             return result;
-
-        if(stageBit == SemanticStageBit.resolveReferences)
-            super.replaceIfReference(this._type);
 
         return Result.noError;
     }
@@ -1102,9 +1080,6 @@ final class Asn1BitStringTypeIr : Asn1TypeIr
             result = kvp.value.doSemanticStage(stageBit, lookup, context, info, errors);
             if(result.isError)
                 return result;
-
-            if(stageBit == SemanticStageBit.resolveReferences)
-                super.replaceIfReference(kvp.value);
         }
 
         return Result.noError;
@@ -1228,9 +1203,6 @@ final class Asn1ChoiceTypeIr : Asn1TypeIr
             result = nameAndType.type.doSemanticStage(stageBit, lookup, context, info, errors);
             if(result.isError)
                 return result;
-
-            if(stageBit == SemanticStageBit.resolveReferences)
-                super.replaceIfReference(nameAndType.type);
         }
 
         return Result.noError;
@@ -1568,8 +1540,6 @@ private final class Asn1SequenceTypeBase(string Kind) : Asn1TypeIr
 {
     mixin IrBoilerplate;
 
-    @nogc nothrow:
-    
     static struct Item
     {
         enum Flags : ubyte
@@ -1600,7 +1570,7 @@ private final class Asn1SequenceTypeBase(string Kind) : Asn1TypeIr
         Nullable!size_t _extensibleIndex; // Points to the first element that appears after the extensible marker (if one was provided). When == to _choices, it means no further types follow the marker.
     }
 
-    this(Asn1Location roughLocation)
+    this(Asn1Location roughLocation) @nogc nothrow
     {
         with(ConstraintBit)
         {
@@ -1611,6 +1581,25 @@ private final class Asn1SequenceTypeBase(string Kind) : Asn1TypeIr
             );
         }
     }
+
+    alias foreachComponent = foreachComponentImpl!(Result delegate(Item) @nogc nothrow);
+    alias foreachComponentGC = foreachComponentImpl!(Result delegate(Item));
+
+    private Result foreachComponentImpl(DelegateT)(
+        scope DelegateT handler,
+    )
+    {
+        foreach(item; this._components)
+        {
+            auto result = handler(item);
+            if(result.isError)
+                return result;
+        }
+
+        return Result.noError;
+    }
+
+    @nogc nothrow:
 
     Result addComponent(
         const(char)[] name,
@@ -1739,13 +1728,7 @@ private final class Asn1SequenceTypeBase(string Kind) : Asn1TypeIr
                 result = item.defaultValue.doSemanticStage(stageBit, lookup, context, info, errors);
                 if(result.isError)
                     return result;
-
-                if(stageBit == SemanticStageBit.resolveReferences)
-                    super.replaceIfReference(item.defaultValue);
             }
-
-            if(stageBit == SemanticStageBit.resolveReferences)
-                super.replaceIfReference(item.type);
         }
 
         return Result.noError;
@@ -1814,9 +1797,6 @@ private final class Asn1SequenceOfTypeBase(string Kind) : Asn1TypeIr
         result = this._type.doSemanticStage(stageBit, lookup, context, info, errors);
         if(result.isError)
             return result;
-
-        if(stageBit == SemanticStageBit.resolveReferences)
-            super.replaceIfReference(this._type);
 
         return Result.noError;
     }
@@ -1922,8 +1902,6 @@ final class Asn1TaggedTypeIr : Asn1TypeIr
 
         if(stageBit == SemanticStageBit.resolveReferences)
         {
-            super.replaceIfReference(this._type);
-
             if(auto valueRefIr = cast(Asn1ValueReferenceIr)this._number)
             {
                 auto numberValueIr = cast(Asn1IntegerValueIr)valueRefIr.getResolvedValueRecurse();
@@ -2047,6 +2025,9 @@ final class Asn1TypeReferenceIr : Asn1TypeIr
 
     const(char)[] moduleRef() => this._moduleRef;
     const(char)[] typeRef() => this._typeRef;
+
+    override LookupItemT lookup(Asn1BaseIr refIr) => 
+        this._resolvedType is null ? LookupItemT.init : this._resolvedType.lookup(refIr);
 
     protected override Result doSemanticStageImpl(
         SemanticStageBit stageBit, 
@@ -2184,9 +2165,6 @@ final class Asn1ChoiceValueIr : Asn1ValueIr
         auto result = this._value.doSemanticStage(stageBit, lookup, context, info, errors);
         if(result.isError)
             return result;
-
-        if(stageBit == SemanticStageBit.resolveReferences)
-            super.replaceIfReference(this._value);
 
         return Result.noError;
     }
@@ -2466,9 +2444,6 @@ final class Asn1ValueSequenceIr : Asn1ValueIr
             auto result = value.doSemanticStage(stageBit, lookup, context, info, errors);
             if(result.isError)
                 return result;
-
-            if(stageBit == SemanticStageBit.resolveReferences)
-                super.replaceIfReference(value);
         }
 
         return Result.noError;
@@ -2540,9 +2515,6 @@ final class Asn1NamedValueSequenceIr : Asn1ValueIr
             auto result = value.value.doSemanticStage(stageBit, lookup, context, info, errors);
             if(result.isError)
                 return result;
-
-            if(stageBit == SemanticStageBit.resolveReferences)
-                super.replaceIfReference(value.value);
         }
 
         return Result.noError;
@@ -2607,9 +2579,6 @@ final class Asn1ObjectIdSequenceValueIr : Asn1ValueIr
             auto result = value.doSemanticStage(stageBit, lookup, context, info, errors);
             if(result.isError)
                 return result;
-
-            if(stageBit == SemanticStageBit.resolveReferences)
-                super.replaceIfReference(value);
         }
 
         return Result.noError;
@@ -2694,7 +2663,7 @@ final class Asn1ValueReferenceIr : Asn1ValueIr
         {
             if(auto valueRefIr = cast(Asn1ValueReferenceIr)value)
             {
-                value = valueRefIr;
+                value = valueRefIr.getResolvedValue();
                 continue;
             }
             break;
@@ -2979,9 +2948,6 @@ final class Asn1SingleValueConstraintIr : Asn1ConstraintIr
         if(result.isError)
             return result;
 
-        if(stageBit == SemanticStageBit.resolveReferences)
-            super.replaceIfReference(this._value);
-
         return Result.noError;
     }
 }
@@ -3020,9 +2986,6 @@ final class Asn1ContainedSubtypeConstraintIr : Asn1ConstraintIr
         auto result = this._type.doSemanticStage(stageBit, lookup, context, info, errors);
         if(result.isError)
             return result;
-
-        if(stageBit == SemanticStageBit.resolveReferences)
-            super.replaceIfReference(this._type);
 
         return Result.noError;
     }
@@ -3073,9 +3036,6 @@ final class Asn1ValueRangeConstraintIr : Asn1ConstraintIr
             auto result = this._lower.valueIr.doSemanticStage(stageBit, lookup, context, info, errors);
             if(result.isError)
                 return result;
-
-            if(stageBit == SemanticStageBit.resolveReferences)
-                super.replaceIfReference(this._lower.valueIr);
         }
 
         if(this._upper.valueIr !is null)
@@ -3083,9 +3043,6 @@ final class Asn1ValueRangeConstraintIr : Asn1ConstraintIr
             auto result = this._upper.valueIr.doSemanticStage(stageBit, lookup, context, info, errors);
             if(result.isError)
                 return result;
-
-            if(stageBit == SemanticStageBit.resolveReferences)
-                super.replaceIfReference(this._upper.valueIr);
         }
 
         return Result.noError;
@@ -3233,9 +3190,6 @@ final class Asn1PatternConstraintIr : Asn1ConstraintIr
         if(result.isError)
             return result;
 
-        if(stageBit == SemanticStageBit.resolveReferences)
-            super.replaceIfReference(this._value);
-
         return Result.noError;
     }
 }
@@ -3330,7 +3284,7 @@ abstract class Asn1IrVisitor
     mixin IrVisitor!Result;
 }
 
-abstract class Asn1IrVisitorGc
+abstract class Asn1IrVisitorGC
 {
     mixin IrVisitor!void;
 }
@@ -3364,8 +3318,8 @@ unittest
                 d T2 ::= a -- Also tests clause 19.12
             END
         `, (Asn1ModuleIr ir){
-            auto cValue = cast(Asn1IntegerValueIr)ir.mustLookupAs!Asn1ValueAssignmentIr("c").getSymbolValue();
-            auto dValue = cast(Asn1IntegerValueIr)ir.mustLookupAs!Asn1ValueAssignmentIr("d").getSymbolValue();
+            auto cValue = cast(Asn1IntegerValueIr)(cast(Asn1ValueReferenceIr)ir.mustLookupAs!Asn1ValueAssignmentIr("c").getSymbolValue()).getResolvedValue(); // @suppress(dscanner.style.long_line)
+            auto dValue = cast(Asn1IntegerValueIr)(cast(Asn1ValueReferenceIr)ir.mustLookupAs!Asn1ValueAssignmentIr("d").getSymbolValue()).getResolvedValue(); // @suppress(dscanner.style.long_line)
 
             ulong number;
             assert(cValue !is null);

@@ -36,7 +36,6 @@ private immutable BASE16_MAP = (){
     return map;
 }();
 
-@nogc nothrow:
 
 enum ConvError
 {
