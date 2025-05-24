@@ -254,6 +254,18 @@ END
 
     Asn1ModuleIr modIr;
     asn1AstToIr(modDef, modIr, context, Asn1NullSemanticErrorHandler.instance).resultEnforce;
+    modIr.doSemanticStage(
+        Asn1BaseIr.SemanticStageBit.resolveReferences,
+        (_) => Asn1ModuleIr.LookupItemT.init,
+        context,
+        Asn1BaseIr.SemanticInfo()
+    ).resultEnforce;
+    modIr.doSemanticStage(
+        Asn1BaseIr.SemanticStageBit.implicitMutations,
+        (_) => Asn1ModuleIr.LookupItemT.init,
+        context,
+        Asn1BaseIr.SemanticInfo()
+    ).resultEnforce;
 
     import std.file : write;
     auto test = generateD(modIr, GeneratorInput(["foo", "bar"]));

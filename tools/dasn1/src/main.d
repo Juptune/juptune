@@ -1,5 +1,7 @@
 int main(string[] args)
 {
+    // This is just insanely rough, prototype-level code to get
+    // something very very basic working.
     import juptune.core.util.result,
            juptune.data.asn1.lang.ast, 
            juptune.data.asn1.lang.ast2ir,
@@ -30,6 +32,22 @@ int main(string[] args)
 
     Asn1ModuleIr modIr;
     asn1AstToIr(modDef, modIr, context, Asn1NullSemanticErrorHandler.instance).resultEnforce;
+    foreach(semanticStage; [
+        Asn1BaseIr.SemanticStageBit.resolveReferences,
+        Asn1BaseIr.SemanticStageBit.implicitMutations,
+    ])
+    {
+        modIr.doSemanticStage(
+            semanticStage,
+            (_) => Asn1ModuleIr.LookupItemT.init,
+            context,
+            Asn1BaseIr.SemanticInfo()
+        ).resultEnforce;
+    }
+
+    auto visitor = new Asn1TypeCheckVisitor(Asn1NullSemanticErrorHandler.instance);
+    modIr.visit(visitor).resultEnforce;
+    // TODO: I need to make an actual error handler, since errors right now will just be gobbled.
 
     import std.file : write;
     auto test = generateD(modIr, GeneratorInput(["foo", "bar"]));
