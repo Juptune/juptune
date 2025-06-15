@@ -822,13 +822,22 @@ abstract class Asn1TypeIr : Asn1BaseIr
         bool              _isConstraintExtensible;
         ConstraintBit     _allowedConstraints;
         Flags             _flags;
+        
+        // Default universal tag as specified by x.680, this value should
+        // be used as the IMPLICIT tag if no user-defined IMPLICIT or AUTOMATIC tagging is being used.
+        const ubyte _universalTag; // NOTE: 0 means "no universal tag" for types like CHOICE which don't have one assigned.
+
+        // Set if this type has been subjected to automatic tagging. This value
+        // should be used as the IMPLICIT tag when it's not null.
+        Nullable!ushort _automaticTag;
     }
 
-    this(Asn1Location roughLocation, ConstraintBit allowedConstraints, Flags flags = Flags.none)
+    this(Asn1Location roughLocation, ConstraintBit allowedConstraints, ubyte universalTag = 0, Flags flags = Flags.none)
     {
         super(roughLocation);
         this._allowedConstraints = allowedConstraints;
         this._flags = flags;
+        this._universalTag = universalTag;
     }
 
     ~this()
@@ -904,6 +913,9 @@ abstract class Asn1TypeIr : Asn1BaseIr
     Asn1ConstraintIr getMainConstraintOrNull() => this._mainConstraint;
     Asn1ConstraintIr getAdditionalConstraintOrNull() => this._additionalConstraint;
 
+    Nullable!ulong getUniversalTag() => this._universalTag == 0 ? typeof(return).init : typeof(return)(this._universalTag); // @suppress(dscanner.style.long_line)
+    Nullable!ulong getAutomaticTag() => this._automaticTag.isNull ? typeof(return).init : typeof(return)(this._automaticTag.get); // @suppress(dscanner.style.long_line)
+
     LookupItemT lookup(Asn1BaseIr refNode) => LookupItemT.init; // Some types, like BIT STRING, have additional scoped values
 
     abstract string getKindName();
@@ -942,7 +954,7 @@ abstract class Asn1TypeIr : Asn1BaseIr
 }
 
 // A type that doesn't really have any special extras beyond being builtin.
-private final class Asn1BasicTypeIr(string Kind, ConstraintBit AllowedConstraints) : Asn1TypeIr
+private final class Asn1BasicTypeIr(string Kind, ubyte UniversalTag, ConstraintBit AllowedConstraints) : Asn1TypeIr
 {
     mixin IrBoilerplate;
 
@@ -950,7 +962,7 @@ private final class Asn1BasicTypeIr(string Kind, ConstraintBit AllowedConstraint
 
     this(Asn1Location roughLocation)
     {
-        super(roughLocation, AllowedConstraints);
+        super(roughLocation, AllowedConstraints, UniversalTag);
     }
 
     override string getKindName() => Kind;
@@ -990,7 +1002,8 @@ final class Asn1BitStringTypeIr : Asn1TypeIr
             super(roughLocation,
                 singleValue 
                 | containedSubtype
-                | size
+                | size,
+                3
             );
         }
     }
@@ -1086,21 +1099,21 @@ final class Asn1BitStringTypeIr : Asn1TypeIr
     }
 }
 
-alias Asn1BooleanTypeIr = Asn1BasicTypeIr!("BOOLEAN", ConstraintBit.singleValue | ConstraintBit.containedSubtype);
-alias Asn1CharacterStringTypeIr = Asn1BasicTypeIr!("CHARACTER STRING", ConstraintBit.singleValue | ConstraintBit.size | ConstraintBit.innerType); // @suppress(dscanner.style.long_line)
-alias Asn1BMPStringTypeIr = Asn1BasicTypeIr!("BMPString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1GeneralStringTypeIr = Asn1BasicTypeIr!("GeneralString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1GraphicStringTypeIr = Asn1BasicTypeIr!("GraphicString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1IA5StringTypeIr = Asn1BasicTypeIr!("IA5String", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1ISO646StringTypeIr = Asn1BasicTypeIr!("ISO646String", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1NumericStringTypeIr = Asn1BasicTypeIr!("NumericString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1PrintableStringTypeIr = Asn1BasicTypeIr!("PrintableString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1TeletexStringTypeIr = Asn1BasicTypeIr!("TeletexString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1T61StringTypeIr = Asn1BasicTypeIr!("T61String", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1UniversalStringTypeIr = Asn1BasicTypeIr!("UniversalString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1UTF8StringTypeIr = Asn1BasicTypeIr!("UTF8String", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1VideotexStringTypeIr = Asn1BasicTypeIr!("VideotexString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
-alias Asn1VisibleStringTypeIr = Asn1BasicTypeIr!("VisibleString", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1BooleanTypeIr = Asn1BasicTypeIr!("BOOLEAN", 1, ConstraintBit.singleValue | ConstraintBit.containedSubtype);
+alias Asn1CharacterStringTypeIr = Asn1BasicTypeIr!("CHARACTER STRING", 29, ConstraintBit.singleValue | ConstraintBit.size | ConstraintBit.innerType); // @suppress(dscanner.style.long_line)
+alias Asn1BMPStringTypeIr = Asn1BasicTypeIr!("BMPString", 30, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1GeneralStringTypeIr = Asn1BasicTypeIr!("GeneralString", 27, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1GraphicStringTypeIr = Asn1BasicTypeIr!("GraphicString", 25, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1IA5StringTypeIr = Asn1BasicTypeIr!("IA5String", 22, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1ISO646StringTypeIr = Asn1BasicTypeIr!("ISO646String", 0, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1NumericStringTypeIr = Asn1BasicTypeIr!("NumericString", 18, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1PrintableStringTypeIr = Asn1BasicTypeIr!("PrintableString", 19, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1TeletexStringTypeIr = Asn1BasicTypeIr!("TeletexString", 20, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1T61StringTypeIr = Asn1BasicTypeIr!("T61String", 20, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1UniversalStringTypeIr = Asn1BasicTypeIr!("UniversalString", 28, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1UTF8StringTypeIr = Asn1BasicTypeIr!("UTF8String", 12, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1VideotexStringTypeIr = Asn1BasicTypeIr!("VideotexString", 21, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+alias Asn1VisibleStringTypeIr = Asn1BasicTypeIr!("VisibleString", 26, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
 
 final class Asn1ChoiceTypeIr : Asn1TypeIr
 {
@@ -1209,7 +1222,7 @@ final class Asn1ChoiceTypeIr : Asn1TypeIr
     }
 }
 
-alias Asn1EmbeddedPdvTypeIr = Asn1BasicTypeIr!("EMBEDDED PDV", ConstraintBit.singleValue | ConstraintBit.innerType);
+alias Asn1EmbeddedPdvTypeIr = Asn1BasicTypeIr!("EMBEDDED PDV", 11, ConstraintBit.singleValue | ConstraintBit.innerType);
 
 final class Asn1EnumeratedTypeIr : Asn1TypeIr
 {
@@ -1238,7 +1251,8 @@ final class Asn1EnumeratedTypeIr : Asn1TypeIr
         {
             super(roughLocation,
                 singleValue
-                | containedSubtype
+                | containedSubtype,
+                10
             );
         }
     }
@@ -1392,7 +1406,7 @@ final class Asn1EnumeratedTypeIr : Asn1TypeIr
     }
 }
 
-alias Asn1ExternalTypeIr = Asn1BasicTypeIr!("EXTERNAL", ConstraintBit.singleValue | ConstraintBit.innerType);
+alias Asn1ExternalTypeIr = Asn1BasicTypeIr!("EXTERNAL", 8, ConstraintBit.singleValue | ConstraintBit.innerType);
 
 final class Asn1IntegerTypeIr : Asn1TypeIr
 {
@@ -1413,7 +1427,8 @@ final class Asn1IntegerTypeIr : Asn1TypeIr
             super(roughLocation,
                 singleValue 
                 | containedSubtype
-                | valueRange
+                | valueRange,
+                2
             );
         }
     }
@@ -1530,13 +1545,13 @@ final class Asn1IntegerTypeIr : Asn1TypeIr
     }
 }
 
-alias Asn1NullTypeIr = Asn1BasicTypeIr!("NULL", ConstraintBit.singleValue | ConstraintBit.containedSubtype);
-alias Asn1ObjectIdentifierTypeIr = Asn1BasicTypeIr!("OBJECT IDENTIFIER", ConstraintBit.singleValue | ConstraintBit.containedSubtype); // @suppress(dscanner.style.long_line)
-alias Asn1OctetStringTypeIr = Asn1BasicTypeIr!("OCTET STRING", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size); // @suppress(dscanner.style.long_line)
-alias Asn1RealTypeIr = Asn1BasicTypeIr!("REAL", ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.innerType); // @suppress(dscanner.style.long_line)
-alias Asn1RelativeOidTypeIr = Asn1BasicTypeIr!("RELATIVE-OID", ConstraintBit.singleValue | ConstraintBit.containedSubtype); // @suppress(dscanner.style.long_line)
+alias Asn1NullTypeIr = Asn1BasicTypeIr!("NULL", 5, ConstraintBit.singleValue | ConstraintBit.containedSubtype);
+alias Asn1ObjectIdentifierTypeIr = Asn1BasicTypeIr!("OBJECT IDENTIFIER", 6, ConstraintBit.singleValue | ConstraintBit.containedSubtype); // @suppress(dscanner.style.long_line)
+alias Asn1OctetStringTypeIr = Asn1BasicTypeIr!("OCTET STRING", 4, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size); // @suppress(dscanner.style.long_line)
+alias Asn1RealTypeIr = Asn1BasicTypeIr!("REAL", 9, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.innerType); // @suppress(dscanner.style.long_line)
+alias Asn1RelativeOidTypeIr = Asn1BasicTypeIr!("RELATIVE-OID", 13, ConstraintBit.singleValue | ConstraintBit.containedSubtype); // @suppress(dscanner.style.long_line)
 
-private final class Asn1SequenceTypeBase(string Kind) : Asn1TypeIr
+private final class Asn1SequenceTypeBase(string Kind, ubyte UniversalTag) : Asn1TypeIr
 {
     mixin IrBoilerplate;
 
@@ -1577,7 +1592,8 @@ private final class Asn1SequenceTypeBase(string Kind) : Asn1TypeIr
             super(roughLocation,
                 singleValue 
                 | containedSubtype
-                | innerType
+                | innerType,
+                UniversalTag
             );
         }
     }
@@ -1734,10 +1750,10 @@ private final class Asn1SequenceTypeBase(string Kind) : Asn1TypeIr
         return Result.noError;
     }
 }
-alias Asn1SequenceTypeIr = Asn1SequenceTypeBase!("SEQUENCE");
-alias Asn1SetTypeIr = Asn1SequenceTypeBase!("SET");
+alias Asn1SequenceTypeIr = Asn1SequenceTypeBase!("SEQUENCE", 16);
+alias Asn1SetTypeIr = Asn1SequenceTypeBase!("SET", 17);
 
-private final class Asn1SequenceOfTypeBase(string Kind) : Asn1TypeIr
+private final class Asn1SequenceOfTypeBase(string Kind, ubyte UniversalTag) : Asn1TypeIr
 {
     mixin IrBoilerplate;
 
@@ -1756,7 +1772,8 @@ private final class Asn1SequenceOfTypeBase(string Kind) : Asn1TypeIr
             super(roughLocation,
                 singleValue 
                 | containedSubtype
-                | innerType
+                | innerType,
+                UniversalTag
             );
         }
     }
@@ -1801,8 +1818,8 @@ private final class Asn1SequenceOfTypeBase(string Kind) : Asn1TypeIr
         return Result.noError;
     }
 }
-alias Asn1SequenceOfTypeIr = Asn1SequenceOfTypeBase!("SEQUENCE");
-alias Asn1SetOfTypeIr = Asn1SequenceOfTypeBase!("SET");
+alias Asn1SequenceOfTypeIr = Asn1SequenceOfTypeBase!("SEQUENCE", 16);
+alias Asn1SetOfTypeIr = Asn1SequenceOfTypeBase!("SET", 17);
 
 final class Asn1TaggedTypeIr : Asn1TypeIr
 {
@@ -2077,8 +2094,8 @@ final class Asn1TypeReferenceIr : Asn1TypeIr
     }
 }
 
-alias Asn1GeneralizedTimeTypeIr = Asn1BasicTypeIr!("GeneralizedTime", ConstraintBit.singleValue | ConstraintBit.containedSubtype); // @suppress(dscanner.style.long_line)
-alias Asn1UtcTimeTypeIr = Asn1BasicTypeIr!("UTCTime", ConstraintBit.singleValue | ConstraintBit.containedSubtype); // @suppress(dscanner.style.long_line)
+alias Asn1GeneralizedTimeTypeIr = Asn1BasicTypeIr!("GeneralizedTime", 24, ConstraintBit.singleValue | ConstraintBit.containedSubtype); // @suppress(dscanner.style.long_line)
+alias Asn1UtcTimeTypeIr = Asn1BasicTypeIr!("UTCTime", 23, ConstraintBit.singleValue | ConstraintBit.containedSubtype); // @suppress(dscanner.style.long_line)
 
 /++++ Values ++++/
 
