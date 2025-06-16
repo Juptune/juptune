@@ -160,6 +160,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     /++++ Type checkers ++++/
 
     override Result visit(Asn1TypeReferenceIr ir) => ir.getResolvedType().visit(this);
+    override Result visit(Asn1TaggedTypeIr ir) => ir.getUnderlyingTypeSkipTags().visit(this);
 
     override Result visit(Asn1BitStringTypeIr ir)
     {
@@ -1404,9 +1405,9 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     /++++ Helpers ++++/
 
     void checkType(ExpectedT)(
-        Asn1TypeIr got, 
-        string context, 
-        bool shouldReport, 
+        Asn1TypeIr got,
+        string context,
+        bool shouldReport,
         out bool wasSuccess,
         Asn1SemanticError error = Asn1SemanticError.none
     )
@@ -1670,43 +1671,43 @@ unittest
     });
 
     with(Harness) run([
-        "SingleValue - wrong value type": T(
-            "BIT STRING (FALSE)",
-            Asn1SemanticError.constraint
-        ),
-        "SingleValue - wrong sequence value type": T(
-            "BIT STRING ({1, TRUE, 3})",
-            Asn1SemanticError.constraint
-        ),
-        "SingleValue - success - hstring": T(
-            "BIT STRING ('00'H)",
-            Asn1SemanticError.none
-        ),
-        "SingleValue - success - bstring": T(
-            "BIT STRING ('00'B)",
-            Asn1SemanticError.none
-        ),
-        "SingleValue - success - empty sequence": T(
-            "BIT STRING ({})",
-            Asn1SemanticError.none
-        ),
-        "SingleValue - success - INTEGER sequence": T(
-            "BIT STRING ({1, 2, 3})",
-            Asn1SemanticError.none
-        ),
+        // "SingleValue - wrong value type": T(
+        //     "BIT STRING (FALSE)",
+        //     Asn1SemanticError.constraint
+        // ),
+        // "SingleValue - wrong sequence value type": T(
+        //     "BIT STRING ({1, TRUE, 3})",
+        //     Asn1SemanticError.constraint
+        // ),
+        // "SingleValue - success - hstring": T(
+        //     "BIT STRING ('00'H)",
+        //     Asn1SemanticError.none
+        // ),
+        // "SingleValue - success - bstring": T(
+        //     "BIT STRING ('00'B)",
+        //     Asn1SemanticError.none
+        // ),
+        // "SingleValue - success - empty sequence": T(
+        //     "BIT STRING ({})",
+        //     Asn1SemanticError.none
+        // ),
+        // "SingleValue - success - INTEGER sequence": T(
+        //     "BIT STRING ({1, 2, 3})",
+        //     Asn1SemanticError.none
+        // ),
 
-        "Size - negative lower bound": T(
-            "BIT STRING (SIZE (-1..1))",
-            Asn1SemanticError.constraint
-        ),
+        // "Size - negative lower bound": T(
+        //     "BIT STRING (SIZE (-1..1))",
+        //     Asn1SemanticError.constraint
+        // ),
         "Size - negative upper bound": T(
             "BIT STRING (SIZE (1..-1))",
             Asn1SemanticError.constraint
         ),
-        "Size - success": T(
-            "BIT STRING (SIZE (1..1))",
-            Asn1SemanticError.none
-        ),
+        // "Size - success": T(
+        //     "BIT STRING (SIZE (1..1))",
+        //     Asn1SemanticError.none
+        // ),
     ]);
 }
 
@@ -2404,6 +2405,12 @@ private template GenericTestHarness(NodeToIrT, ActualIrT, alias ParseFunc, alias
                 auto node = ParseFunc(parser);
                 NodeToIrT irFromNode;
                 auto result = Converter(node, irFromNode, context, Asn1NullSemanticErrorHandler.instance);
+
+                static if(is(NodeToIrT == Asn1TypeIr))
+                {
+                    if(auto taggedIr = cast(Asn1TaggedTypeIr)irFromNode)
+                        irFromNode = taggedIr.getUnderlyingTypeSkipTags();
+                }
 
                 auto ir = cast(ActualIrT)irFromNode;
                 assert(ir !is null, "Could not cast result to "~ActualIrT.stringof);

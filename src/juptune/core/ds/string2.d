@@ -276,6 +276,35 @@ struct String2
     }
 
     /++
+     + Quality of life constructor that is the equivalent of: 
+     + `Array!char buf; buf.put(values); return String2.fromDestroyingArray(buf)`
+     +
+     + Notes:
+     +  Values that cannot be directly given to `Array!char.put` will instead be given to
+     +  `juptune.core.util.conv : toStringSink`, in order to improve quality of life even further.
+     +
+     + Params:
+     +  values = Values to pass into either `Array!char.put` or `toStringSink`.
+     + ++/
+    this(Values...)(scope auto ref Values values)
+    if(Values.length > 1)
+    {
+        import juptune.core.ds   : Array;
+        import juptune.core.util : toStringSink;
+
+        Array!char buffer;
+        foreach(ref value; values)
+        {
+            static if(__traits(compiles, { buffer.put(value); }))
+                buffer.put(value);
+            else
+                toStringSink(value, buffer);
+        }
+
+        this = String2.fromDestroyingArray(buffer);
+    }
+
+    /++
      + A named constructor for `String2` that will convert the given char-based `Array` into a string,
      + and then destroy the array, effectively "moving" the array into a string.
      +

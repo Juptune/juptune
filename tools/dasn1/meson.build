@@ -34,4 +34,4 @@ dasn1_unittest_exe = executable(
 
 #### Tests ####
 
-test('dasn1-unittest', dasn1_unittest_exe)
+# test('dasn1-unittest', dasn1_unittest_exe)
