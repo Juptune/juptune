@@ -4,6 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
+
+/// Contains the parser, i.e. syntax analysis.
 module juptune.data.asn1.lang.parser;
 
 import std.typecons : Nullable;

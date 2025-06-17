@@ -4,6 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
+
+/// Contains misc types that are common throughout the entire package without having a distinct place to exist in.
 module juptune.data.asn1.lang.common;
 
 import std.experimental.allocator.mallocator                        : Mallocator;

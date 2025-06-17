@@ -4,6 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
+
+/// Contains a visitor that can transform IR nodes into their ASN.1 notation equivalent.
 module juptune.data.asn1.lang.printer;
 
 import juptune.core.util : Result, resultAssert;
@@ -766,6 +768,7 @@ unittest
     import std.file : write;
     
     import juptune.data.asn1.lang.common  : Asn1ParserContext;
+    import juptune.data.asn1.lang.ir      : Asn1ModuleRegistry;
     import juptune.data.asn1.lang.tooling : Asn1AlwaysCrashErrorHandler, asn1ParseWithSemantics;
 
     const code = `
@@ -859,7 +862,8 @@ unittest
     
     Asn1ModuleIr modIr;
     Asn1ParserContext context;
-    asn1ParseWithSemantics(context, modIr, code, new Asn1AlwaysCrashErrorHandler()).resultAssert;
+    scope registry = new Asn1ModuleRegistry();
+    asn1ParseWithSemantics(context, modIr, code, registry, new Asn1AlwaysCrashErrorHandler()).resultAssert;
 
     scope handler = new Asn1StringPrinterHandler();
     scope visitor = new Asn1PrinterVisitor(handler);

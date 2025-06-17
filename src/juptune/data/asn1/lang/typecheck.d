@@ -4,10 +4,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
+
+/// Contains a visitor that performs the bulk of non-mutating semantics analysis.
 module juptune.data.asn1.lang.typecheck;
 
 import juptune.core.util : Result, resultAssert;
 import juptune.data.asn1.lang.common : Asn1Location;
+import juptune.data.asn1.lang.operations : asn1GetExactUnderlyingType;
 import juptune.data.asn1.lang.ir; // Intentionally everything
 
 class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows users to build on top of the built-in checks.
@@ -100,7 +103,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         if(result.isError)
             return result;
 
-        auto exactTypeIr = this.getExactUnderlyingType(typeIr);
+        auto exactTypeIr = asn1GetExactUnderlyingType(typeIr);
         if(auto type = cast(Asn1TaggedTypeIr)typeIr)
             typeIr = type.getUnderlyingTypeSkipTags();
 
@@ -156,6 +159,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     override Result visit(Asn1IntegerValueIr ir) => Result.noError;
     override Result visit(Asn1NullValueIr ir) => Result.noError;
     override Result visit(Asn1ValueReferenceIr ir) => Result.noError;
+    override Result visit(Asn1ObjectIdSequenceValueIr ir) => Result.noError;
 
     /++++ Type checkers ++++/
 
@@ -998,7 +1002,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
     Result checkChoiceAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
-        auto choiceType = cast(Asn1ChoiceTypeIr)this.getExactUnderlyingType(type);
+        auto choiceType = cast(Asn1ChoiceTypeIr)asn1GetExactUnderlyingType(type);
         assert(choiceType !is null, "bug: checkChoiceAss was called for a non-CHOICE type?");
 
         auto choiceValue = cast(Asn1ChoiceValueIr)value;
@@ -1053,7 +1057,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
     Result checkEnumeratedAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
-        auto enumTypeIr = cast(Asn1EnumeratedTypeIr)this.getExactUnderlyingType(type);
+        auto enumTypeIr = cast(Asn1EnumeratedTypeIr)asn1GetExactUnderlyingType(type);
         assert(enumTypeIr !is null, "bug: checkEnumeratedAss was called with a non-ENUMERATED type?");
 
         auto intValue = cast(Asn1IntegerValueIr)value;
@@ -1412,7 +1416,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         Asn1SemanticError error = Asn1SemanticError.none
     )
     {
-        got = this.getExactUnderlyingType(got);
+        got = asn1GetExactUnderlyingType(got);
         wasSuccess = (cast(ExpectedT)got) !is null;
         if(!wasSuccess && shouldReport)
         {
@@ -1613,8 +1617,8 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         }
         else if(auto ir = cast(Asn1ContainedSubtypeConstraintIr)constraint)
         {
-            auto subtypeExact = this.getExactUnderlyingType(ir.getSubtype());
-            auto typeExact = this.getExactUnderlyingType(type);
+            auto subtypeExact = asn1GetExactUnderlyingType(ir.getSubtype());
+            auto typeExact = asn1GetExactUnderlyingType(type);
 
             if(typeid(subtypeExact) is typeid(typeExact))
                 return this.checkConstraints(symbolName, ir.getSubtype(), handleConstraint, true, wasSuccess, shouldReport); // @suppress(dscanner.style.long_line)
@@ -1634,19 +1638,6 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         }
         else
             return handleConstraint(constraint, shouldReport, wasSuccess);
-    }
-
-    Asn1TypeIr getExactUnderlyingType(Asn1TypeIr type)
-    {
-        if(auto ir = cast(Asn1TypeReferenceIr)type)
-        {
-            return this.getExactUnderlyingType(ir.getResolvedTypeRecurse(
-                Asn1TypeReferenceIr.StopForConstraints.no
-            ));
-        }
-        else if(auto ir = cast(Asn1TaggedTypeIr)type)
-            return this.getExactUnderlyingType(ir.getUnderlyingTypeSkipTags());
-        return type;
     }
 }
 

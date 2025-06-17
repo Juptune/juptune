@@ -4,6 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
+
+/// Contains the lexer.
 module juptune.data.asn1.lang.lexer;
 
 import juptune.data.asn1.lang.common : Asn1Location;

@@ -4,6 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
+
+/// Contains the AST models - these are the models that are closest to the source code, but aren't suitable for most tasks.
 module juptune.data.asn1.lang.ast;
 
 import juptune.data.asn1.lang.common : Asn1ParserContext;

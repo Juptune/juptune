@@ -4,6 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
+
+/// Provides converter functions to transform AST nodes into IR nodes, while performing light amounts of semantic checks.
 module juptune.data.asn1.lang.ast2ir;
 
 import juptune.core.util : Result, resultAssert;
@@ -436,8 +438,15 @@ Result asn1AstToIr(
         Asn1ObjectIdSequenceValueIr moduleVersion;
         auto result = modRef.getNode!Asn1AssignedIdentifierNode.match(
             (Asn1ObjectIdentifierValueNode objIdNode){
-                assert(false, "Not implemented");
-                return Result.noError;
+                return objIdNode.match(
+                    (Asn1ObjIdComponentsListNode listNode) {
+                        return asn1AstToIr(listNode, moduleVersion, context, errors);
+                    },
+                    (Asn1ObjectIdentifierValueNode.Case1 case1) {
+                        assert(false, "Not implemented");
+                        return Result.noError;
+                    }
+                );
             },
             (Asn1DefinedValueNode definedValue){
                 assert(false, "Not implemented");
@@ -2116,50 +2125,10 @@ Result asn1AstToIr(
                             return Result.noError;
                         },
                         (Asn1ObjIdComponentsListNode listNode) {
-                            auto objIdIr = context.allocNode!Asn1ObjectIdSequenceValueIr(Asn1Location()); // TODO: Location
-
-                            Result pushNumber(Asn1NumberFormNode objIdNode)
-                            {
-                                return objIdNode.match(
-                                    (Asn1NumberTokenNode numberNode){
-                                        auto numberIr = context.allocNode!Asn1IntegerValueIr(
-                                            numberNode.token, 
-                                            false
-                                        );
-                                        objIdIr.addObjectId(numberIr);
-                                        return Result.noError;
-                                    },
-                                    (Asn1DefinedValueNode definedValue) {
-                                        Asn1ValueReferenceIr definedIr;
-                                        if(auto r = asn1AstToIr(definedValue, definedIr, context, errors))
-                                            return r;
-                                        objIdIr.addObjectId(definedIr);
-                                        return Result.noError;
-                                    }
-                                );
-                            }
-
-                            foreach(item; listNode.items)
-                            {
-                                auto result = item.match(
-                                    (Asn1NumberFormNode objIdNode){
-                                        return pushNumber(objIdNode);
-                                    },
-                                    (Asn1NameAndNumberFormNode objIdNode){
-                                        return pushNumber(objIdNode.getNode!Asn1NumberFormNode);
-                                    },
-                                    (Asn1DefinedValueNode objIdNode){
-                                        Asn1ValueReferenceIr definedIr;
-                                        if(auto r = asn1AstToIr(objIdNode, definedIr, context, errors))
-                                            return r;
-                                        objIdIr.addObjectId(definedIr);
-                                        return Result.noError;
-                                    },
-                                );
-                                if(result.isError)
-                                    return result;
-                            }
-                            ir = objIdIr;
+                            Asn1ObjectIdSequenceValueIr valueIr;
+                            if(auto r = asn1AstToIr(listNode, valueIr, context, errors))
+                                return r;
+                            ir = valueIr;
                             return Result.noError;
                         },
                         (Asn1EmptyNode emptyNode) {
@@ -2284,6 +2253,60 @@ unittest
         "ValueReference": T("valueRef", (ir){ assert(ir.getFullString() == "valueRef"); }),
         "ExternalValueReference": T("MyMod.valueRef", (ir){ assert(ir.getFullString() == "MyMod.valueRef"); }),
     ]);
+}
+
+Result asn1AstToIr(
+    scope Asn1ObjIdComponentsListNode node,
+    scope out Asn1ObjectIdSequenceValueIr ir,
+    scope ref Asn1ParserContext context,
+    scope Asn1SemanticErrorHandler errors,
+) @nogc nothrow
+{
+    auto objIdIr = context.allocNode!Asn1ObjectIdSequenceValueIr(Asn1Location()); // TODO: Location
+
+    Result pushNumber(Asn1NumberFormNode objIdNode)
+    {
+        return objIdNode.match(
+            (Asn1NumberTokenNode numberNode){
+                auto numberIr = context.allocNode!Asn1IntegerValueIr(
+                    numberNode.token, 
+                    false
+                );
+                objIdIr.addObjectId(numberIr);
+                return Result.noError;
+            },
+            (Asn1DefinedValueNode definedValue) {
+                Asn1ValueReferenceIr definedIr;
+                if(auto r = asn1AstToIr(definedValue, definedIr, context, errors))
+                    return r;
+                objIdIr.addObjectId(definedIr);
+                return Result.noError;
+            }
+        );
+    }
+
+    foreach(item; node.items)
+    {
+        auto result = item.match(
+            (Asn1NumberFormNode objIdNode){
+                return pushNumber(objIdNode);
+            },
+            (Asn1NameAndNumberFormNode objIdNode){
+                return pushNumber(objIdNode.getNode!Asn1NumberFormNode);
+            },
+            (Asn1DefinedValueNode objIdNode){
+                Asn1ValueReferenceIr definedIr;
+                if(auto r = asn1AstToIr(objIdNode, definedIr, context, errors))
+                    return r;
+                objIdIr.addObjectId(definedIr);
+                return Result.noError;
+            },
+        );
+        if(result.isError)
+            return result;
+    }
+    ir = objIdIr;
+    return Result.noError;
 }
 
 version(unittest)
