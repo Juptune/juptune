@@ -205,7 +205,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
         // Check all the constraint values are valid for BIT STRING
         bool _;
-        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 wasSuccess = true;
@@ -248,10 +248,10 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     override Result visit(Asn1BooleanTypeIr ir)
     {
         bool _;
-        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
             {
-                this.checkType!Asn1BooleanTypeIr(
+                this.checkType!Asn1BooleanValueIr(
                     constraintIr.getValue(), 
                     "single value constraint's value", 
                     shouldReport, 
@@ -267,7 +267,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     override Result visit(Asn1ChoiceTypeIr ir)
     {
         bool _;
-        auto result = this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+        auto result = this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 assert(false, "TODO: There's like 3 ways I can think of how this works, and of course the spec doesn't mention/hides this case."); // @suppress(dscanner.style.long_line)
@@ -323,10 +323,10 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
         // Check all the constraint values are INTEGERS, and exist within the named number list
         bool _;
-        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
             {
-                this.checkType!Asn1IntegerTypeIr(
+                auto constraintValueIr = this.checkType!Asn1IntegerValueIr(
                     constraintIr.getValue(), 
                     "single value constraint's value", 
                     shouldReport, 
@@ -334,8 +334,6 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 );
                 if(!wasSuccess)
                     return Result.noError;
-
-                auto constraintValueIr = cast(Asn1IntegerValueIr)constraintIr.getValue();
                 assert(constraintValueIr !is null, "bug: how is this null?");
 
                 bool foundValidValue;
@@ -375,7 +373,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     override Result visit(Asn1NullTypeIr ir)
     {
         bool _;
-        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 this.checkType!Asn1NullValueIr(
@@ -430,10 +428,10 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
         // Check all the constraint values are INTEGERS
         bool _;
-        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
             {
-                this.checkType!Asn1IntegerTypeIr(
+                this.checkType!Asn1IntegerValueIr(
                     constraintIr.getValue(), 
                     "single value constraint's value", 
                     shouldReport, 
@@ -454,7 +452,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     override Result visit(Asn1ObjectIdentifierTypeIr ir)
     {
         bool _;
-        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 assert(false, "TODO: I'm so sick of looking at this code");
@@ -468,7 +466,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     override Result visit(Asn1OctetStringTypeIr ir)
     {
         bool _;
-        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 wasSuccess = true;
@@ -504,7 +502,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     override Result visit(Asn1RelativeOidTypeIr ir)
     {
         bool _;
-        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 assert(false, "TODO: I'm so sick of looking at this code");
@@ -520,7 +518,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         override Result visit(RestrictedCharacterT ir)
         {
             bool _;
-            return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+            return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
                 // Restricted character type support is kinda complex, so TODO: implement a bit later
                 assert(false, "bug: Missing constraint case for TODO (type check variant)?");
                 return Result.noError;
@@ -531,7 +529,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     override Result visit(Asn1SequenceTypeIr ir)
     {
         bool _;
-        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Missing constraint case for SEQUENCE (type check variant)?");
             return Result.noError;
         }, false, _);
@@ -540,7 +538,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     override Result visit(Asn1SequenceOfTypeIr ir)
     {
         bool _;
-        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Missing constraint case for SEQUENCE OF (type check variant)?");
             return Result.noError;
         }, false, _);
@@ -549,7 +547,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     override Result visit(Asn1SetTypeIr ir)
     {
         bool _;
-        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Missing constraint case for SET (type check variant)?");
             return Result.noError;
         }, false, _);
@@ -558,7 +556,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     override Result visit(Asn1SetOfTypeIr ir)
     {
         bool _;
-        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Missing constraint case for SET OF (type check variant)?");
             return Result.noError;
         }, false, _);
@@ -567,7 +565,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     override Result visit(Asn1CharacterStringTypeIr ir)
     {
         bool _;
-        return this.checkConstraints("TODO", ir, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Missing constraint case for CHARACTER STRING (type check variant)?");
             return Result.noError;
         }, false, _);
@@ -702,7 +700,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     {
         if(constraintIr.getLower().valueIr !is null)
         {
-            this.checkType!Asn1IntegerTypeIr(
+            this.checkType!Asn1IntegerValueIr(
                 constraintIr.getLower().valueIr,
                 "value range constraint's lower bound",
                 shouldReport,
@@ -712,7 +710,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         if(constraintIr.getUpper().valueIr !is null)
         {
             bool success;
-            this.checkType!Asn1IntegerTypeIr(
+            this.checkType!Asn1IntegerValueIr(
                 constraintIr.getUpper().valueIr,
                 "value range constraint's upper bound",
                 shouldReport,
@@ -904,6 +902,8 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 if(wasSuccess)
                 {
                     auto result = valueIr.foreachSequenceValue((sequenceValueIr){
+                        if(auto valueRefIr = cast(Asn1ValueReferenceIr)sequenceValueIr)
+                            sequenceValueIr = valueRefIr.getResolvedValueRecurse();
                         auto intIr = cast(Asn1IntegerValueIr)sequenceValueIr;
                         assert(intIr !is null, "bug: value isn't an intger value, despite us just checking for it?");
                         assert(false, "TODO: Find where/if the spec defines how to deal raw numbers, because I can't find it to save my life");
@@ -932,7 +932,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             return result;
         
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 Array!bool constraintBits;
@@ -986,7 +986,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         }
 
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             if(auto ir = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 return this.checkSingleValue!Asn1BooleanValueIr(ir, boolValue, 
@@ -1045,7 +1045,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         }
 
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             if(auto ir = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 assert(false, "TODO: Figure out how SingleValue and CHOICE are supposed to work...");
@@ -1096,7 +1096,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             return result;
 
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             if(auto ir = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 return this.checkSingleValue!Asn1IntegerValueIr(ir, intValue, 
@@ -1125,7 +1125,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         }
 
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             if(auto ir = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 return this.checkSingleValue!Asn1NullValueIr(ir, nullValue, 
@@ -1154,7 +1154,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         }
 
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             if(auto ir = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 return this.checkSingleValue!Asn1IntegerValueIr(ir, intValue, 
@@ -1200,7 +1200,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     Result checkObjectIdentifierAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             if(auto ir = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 assert(false, "TODO: I need to implement sequence equality");
@@ -1274,7 +1274,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             return result;
         
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             if(auto constraintIr = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 Array!byte constraintBytes;
@@ -1316,7 +1316,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     Result checkRelativeOidAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             if(auto ir = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 assert(false, "TODO: I need to implement sequence equality");
@@ -1331,7 +1331,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         // TODO: Ensure all characters match the type's alphabet.
 
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             if(auto ir = cast(Asn1SingleValueConstraintIr)constraint)
             {
                 assert(false, "TODO: implement");
@@ -1364,7 +1364,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     Result checkSequenceAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Unhandled constraint case for SEQUENCE?");
             return Result.noError;
         }, false, _);
@@ -1373,7 +1373,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     Result checkSequenceOfAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Unhandled constraint case for SEQUENCE OF?");
             return Result.noError;
         }, false, _);
@@ -1382,7 +1382,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     Result checkSetAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Unhandled constraint case for SET?");
             return Result.noError;
         }, false, _);
@@ -1391,7 +1391,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     Result checkSetOfAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Unhandled constraint case for SET OF?");
             return Result.noError;
         }, false, _);
@@ -1400,7 +1400,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     Result checkCharacterStringAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
         bool _;
-        return this.checkConstraints(symbolName, type, (constraint, shouldReport, out wasSuccess){
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Unhandled constraint case for CHARACTER STRING?");
             return Result.noError;
         }, false, _);
@@ -1425,12 +1425,12 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 error,
                 "expected ", context, 
                 " to be of type ", ExpectedT.stringof,
-                " instead of type ", got.getKindName()
+                " instead of type ", typeid(got).name
             );
         }
     }
 
-    void checkType(ExpectedT)(
+    ExpectedT checkType(ExpectedT : Asn1ValueIr)(
         Asn1ValueIr got, 
         string context, 
         bool shouldReport, 
@@ -1438,20 +1438,11 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         Asn1SemanticError error = Asn1SemanticError.none
     )
     {
-        static if(is(ExpectedT == Asn1IntegerTypeIr))
-        {
-            wasSuccess = (cast(Asn1IntegerValueIr)got) !is null;
-        }
-        else static if(is(ExpectedT == Asn1BooleanTypeIr))
-        {
-            wasSuccess = (cast(Asn1BooleanValueIr)got) !is null;
-        }
-        else static if(is(ExpectedT : Asn1ValueIr))
-        {
-            wasSuccess = (cast(ExpectedT)got) !is null;
-        }
-        else static assert(false, "bug: Missing case for "~ExpectedT.stringof);
-
+        if(auto valueRefIr = cast(Asn1ValueReferenceIr)got)
+            got = valueRefIr.getResolvedValueRecurse();
+        
+        auto casted = cast(ExpectedT)got;
+        wasSuccess = casted !is null;
         if(!wasSuccess && shouldReport)
         {
             this.reportError(
@@ -1459,9 +1450,11 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 error,
                 "expected ", context, 
                 " to be of type ", ExpectedT.stringof,
-                " instead of type ", got.getValueKind(),
+                " instead of type ", typeid(got).name,
             );
         }
+
+        return casted;
     }
 
     void checkAllSameType(ExpectedT)(
@@ -1482,7 +1475,6 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     }
 
     Result checkConstraints(
-        const(char)[] symbolName,
         Asn1TypeIr type,
         scope Result delegate(Asn1ConstraintIr, bool, out bool) @nogc nothrow handleConstraint,
         bool isSubType,
@@ -1494,7 +1486,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         {
             if(!isSubType)
             {
-                auto result = this.checkConstraints(symbolName, type, constraint, handleConstraint, false, wasSuccess);
+                auto result = this.checkConstraints(type, constraint, handleConstraint, false, wasSuccess);
                 if(result.isError)
                     return result;
 
@@ -1508,10 +1500,10 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 );
                 this._errors.indent();
                 scope(exit) this._errors.dedent();
-                return this.checkConstraints(symbolName, type, constraint, handleConstraint, true, wasSuccess);
+                return this.checkConstraints(type, constraint, handleConstraint, true, wasSuccess);
             }
 
-            return this.checkConstraints(symbolName, type, constraint, handleConstraint, shouldReport, wasSuccess);
+            return this.checkConstraints(type, constraint, handleConstraint, shouldReport, wasSuccess);
         }
 
         wasSuccessOverall = true;
@@ -1554,7 +1546,6 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     }
 
     Result checkConstraints(
-        const(char)[] symbolName,
         Asn1TypeIr type,
         Asn1ConstraintIr constraint,
         scope Result delegate(Asn1ConstraintIr, bool, out bool) @nogc nothrow handleConstraint,
@@ -1586,7 +1577,6 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             return ir.foreachUnionConstraint((childConstraint){
                 bool success;
                 auto result = this.checkConstraints(
-                    symbolName,
                     type,
                     childConstraint, 
                     handleConstraint, 
@@ -1603,7 +1593,6 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             return ir.foreachIntersectionConstraint((childConstraint){
                 bool success;
                 auto result = this.checkConstraints(
-                    symbolName,
                     type,
                     childConstraint,
                     handleConstraint,
@@ -1621,7 +1610,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             auto typeExact = asn1GetExactUnderlyingType(type);
 
             if(typeid(subtypeExact) is typeid(typeExact))
-                return this.checkConstraints(symbolName, ir.getSubtype(), handleConstraint, true, wasSuccess, shouldReport); // @suppress(dscanner.style.long_line)
+                return this.checkConstraints(ir.getSubtype(), handleConstraint, true, wasSuccess, shouldReport); // @suppress(dscanner.style.long_line)
 
             wasSuccess = false;
             if(shouldReport)
@@ -1662,43 +1651,43 @@ unittest
     });
 
     with(Harness) run([
-        // "SingleValue - wrong value type": T(
-        //     "BIT STRING (FALSE)",
-        //     Asn1SemanticError.constraint
-        // ),
-        // "SingleValue - wrong sequence value type": T(
-        //     "BIT STRING ({1, TRUE, 3})",
-        //     Asn1SemanticError.constraint
-        // ),
-        // "SingleValue - success - hstring": T(
-        //     "BIT STRING ('00'H)",
-        //     Asn1SemanticError.none
-        // ),
-        // "SingleValue - success - bstring": T(
-        //     "BIT STRING ('00'B)",
-        //     Asn1SemanticError.none
-        // ),
-        // "SingleValue - success - empty sequence": T(
-        //     "BIT STRING ({})",
-        //     Asn1SemanticError.none
-        // ),
-        // "SingleValue - success - INTEGER sequence": T(
-        //     "BIT STRING ({1, 2, 3})",
-        //     Asn1SemanticError.none
-        // ),
+        "SingleValue - wrong value type": T(
+            "BIT STRING (FALSE)",
+            Asn1SemanticError.constraint
+        ),
+        "SingleValue - wrong sequence value type": T(
+            "BIT STRING ({1, TRUE, 3})",
+            Asn1SemanticError.constraint
+        ),
+        "SingleValue - success - hstring": T(
+            "BIT STRING ('00'H)",
+            Asn1SemanticError.none
+        ),
+        "SingleValue - success - bstring": T(
+            "BIT STRING ('00'B)",
+            Asn1SemanticError.none
+        ),
+        "SingleValue - success - empty sequence": T(
+            "BIT STRING ({})",
+            Asn1SemanticError.none
+        ),
+        "SingleValue - success - INTEGER sequence": T(
+            "BIT STRING ({1, 2, 3})",
+            Asn1SemanticError.none
+        ),
 
-        // "Size - negative lower bound": T(
-        //     "BIT STRING (SIZE (-1..1))",
-        //     Asn1SemanticError.constraint
-        // ),
+        "Size - negative lower bound": T(
+            "BIT STRING (SIZE (-1..1))",
+            Asn1SemanticError.constraint
+        ),
         "Size - negative upper bound": T(
             "BIT STRING (SIZE (1..-1))",
             Asn1SemanticError.constraint
         ),
-        // "Size - success": T(
-        //     "BIT STRING (SIZE (1..1))",
-        //     Asn1SemanticError.none
-        // ),
+        "Size - success": T(
+            "BIT STRING (SIZE (1..1))",
+            Asn1SemanticError.none
+        ),
     ]);
 }
 
@@ -2384,7 +2373,8 @@ private template GenericTestHarness(NodeToIrT, ActualIrT, alias ParseFunc, alias
 
     void run(T[string] cases)
     {
-        import std.conv : to;
+        import std.conv   : to;
+        import std.traits : EnumMembers;
         foreach(name, test; cases)
         {
             try
@@ -2411,13 +2401,8 @@ private template GenericTestHarness(NodeToIrT, ActualIrT, alias ParseFunc, alias
                 parser.consume(token).resultAssert;
                 assert(token.type == Asn1Token.Type.eof, "Expected no more tokens, but got: "~token.to!string);
 
-                foreach(stage; [
-                    Asn1ModuleIr.SemanticStageBit.resolveReferences,
-                    Asn1ModuleIr.SemanticStageBit.implicitMutations,
-                ])
-                {
+                foreach(stage; EnumMembers!(Asn1ModuleIr.SemanticStageBit))
                     ir.doSemanticStage(stage, (_) => Asn1ModuleIr.LookupItemT.init, context, Asn1ModuleIr.SemanticInfo()).resultAssert; // @suppress(dscanner.style.long_line)
-                }
 
                 scope errors = new ErrorCollector();
                 scope typeChecker = new Asn1TypeCheckVisitor(errors);

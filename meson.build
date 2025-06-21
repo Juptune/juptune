@@ -70,6 +70,7 @@ data_srcs = files(
     './src/juptune/data/asn1/lang/ir.d',
     './src/juptune/data/asn1/lang/lexer.d',
     './src/juptune/data/asn1/lang/operations.d',
+    './src/juptune/data/asn1/lang/package.d',
     './src/juptune/data/asn1/lang/parser.d',
     './src/juptune/data/asn1/lang/printer.d',
     './src/juptune/data/asn1/lang/tooling.d',
