@@ -167,6 +167,9 @@ abstract class Asn1BaseIr
     //
     // This is because I believe in keeping as little semantic logic as required in the actual IR classes, so it's
     // solely isolated to steps that need to modify internal state in a way that the public API doesn't allow for.
+    //
+    // NOTE: User code should only work with singular enum values - the fact that this is a bit flag is more
+    //       of an internal implementation detail now.
     enum SemanticStageBit
     {
         none = 0,
@@ -2944,11 +2947,31 @@ final class Asn1NamedValueSequenceIr : Asn1ValueIr
         super(roughLocation);
     }
 
-    void addSequenceNamedValue(const(char)[] name, Asn1ValueIr value)
+    Result addSequenceNamedValue(
+        const(char)[] name, 
+        Asn1ValueIr value,
+        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+    )
     in(name.length > 0, "name is empty?")
     in(value !is null, "value is null")
     {
+        import std.algorithm : any;
+
+        // Future: use a hashmap instead if needed - ASN.1 named sequences are very rarely even double digits in length.
+        if(this._values.slice.any!(kvp => kvp.name == name))
+        {
+            return Result.make(
+                Asn1SemanticError.duplicateKey,
+                "named sequence value has duplicate key names",
+                errors.errorAndString(
+                    value.getRoughLocation(),
+                    "named sequence field with key of '", name, "' has already been defined"
+                ),
+            );
+        }
+
         this._values.put(Item(name, value));
+        return Result.noError;
     }
 
     Result foreachSequenceNamedValue(
@@ -3780,6 +3803,7 @@ abstract class Asn1IrVisitorGC
 unittest
 {
     import std.conv : to;
+    import std.traits : EnumMembers;
     import juptune.core.util : resultAssert, resultAssertSameCode;
     import juptune.data.asn1.lang.ast2ir;
     import juptune.data.asn1.lang.lexer;
@@ -3831,6 +3855,14 @@ unittest
                 ;
             END
         `, null, Asn1SemanticError.duplicateSymbol),
+        "error - duplicate fields": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                a SEQUENCE{} ::= {
+                    a 0,
+                    a 1
+                }
+            END
+        `, null, Asn1SemanticError.duplicateKey),
     ];
 
     foreach(name, test; cases)
@@ -3854,10 +3886,7 @@ unittest
                 parser.consume(token).resultAssert;
                 assert(token.type == Asn1Token.Type.eof, "Expected no more tokens, but got: "~token.to!string);
 
-                foreach(stage; [
-                    Asn1ModuleIr.SemanticStageBit.resolveReferences,
-                    Asn1ModuleIr.SemanticStageBit.implicitMutations,
-                ])
+                foreach(stage; EnumMembers!(Asn1ModuleIr.SemanticStageBit))
                 {
                     result = modIr.doSemanticStage(
                         stage,

@@ -113,7 +113,7 @@ Result asn1AstToIr(
                 extensibilityImplied,
                 context.allocNode!Asn1ExportsIr(Asn1Location()),
             );
-            return ir.setImports(context.allocNode!Asn1ImportsIr(Asn1Location()));
+            return ir.setImports(context.allocNode!Asn1ImportsIr(Asn1Location()), errors);
         },
     ).resultAssert;
     if(modBodyNode is null)
@@ -139,7 +139,7 @@ Result asn1AstToIr(
         extensibilityImplied,
         exportsIr,
     );
-    auto setImportsResult = ir.setImports(importsIr);
+    auto setImportsResult = ir.setImports(importsIr, errors);
     if(setImportsResult.isError)
         return setImportsResult;
 
@@ -2117,10 +2117,13 @@ Result asn1AstToIr(
                                 Asn1ValueIr namedIr;
                                 if(auto r = asn1AstToIr(item.getNode!Asn1ValueNode, namedIr, context, errors))
                                     return r;
-                                namedListIr.addSequenceNamedValue(
+                                auto result = namedListIr.addSequenceNamedValue(
                                     item.getNode!Asn1IdentifierTokenNode.token.text, 
-                                    namedIr
+                                    namedIr,
+                                    errors
                                 );
+                                if(result.isError)
+                                    return result;
                             }
                             ir = namedListIr;
                             return Result.noError;
