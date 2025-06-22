@@ -210,13 +210,17 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             {
                 wasSuccess = true;
 
-                if(auto _ = cast(Asn1BstringValueIr)constraintIr.getValue())
+                auto constraintValueIr = constraintIr.getValue();
+                if(auto valueRefIr = cast(Asn1ValueReferenceIr)constraintValueIr)
+                    constraintValueIr = valueRefIr.getResolvedValueRecurse();
+
+                if(auto _ = cast(Asn1BstringValueIr)constraintValueIr)
                     return Result.noError;
-                else if(auto _ = cast(Asn1HstringValueIr)constraintIr.getValue())
+                else if(auto _ = cast(Asn1HstringValueIr)constraintValueIr)
                     return Result.noError;
-                else if(auto _ = cast(Asn1EmptySequenceValueIr)constraintIr.getValue())
+                else if(auto _ = cast(Asn1EmptySequenceValueIr)constraintValueIr)
                     return Result.noError;
-                else if(auto valueIr = cast(Asn1ValueSequenceIr)constraintIr.getValue())
+                else if(auto valueIr = cast(Asn1ValueSequenceIr)constraintValueIr)
                 {
                     this.checkAllSameType!Asn1IntegerValueIr(valueIr, shouldReport, wasSuccess);
                     return Result.noError;
@@ -584,21 +588,25 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         bool shouldReport,
     )
     {
-        auto valueIr = cast(ValueIrT)ir.getValue();
-        if(valueIr is null)
+        auto valueIr = ir.getValue();
+        if(auto valueRefIr = cast(Asn1ValueReferenceIr)valueIr)
+            valueIr = valueRefIr.getResolvedValueRecurse();
+
+        auto castedIr = cast(ValueIrT)valueIr;
+        if(castedIr is null)
         {
             wasSuccess = false;
             // Don't need an error message here - it'll be caught in the other type check.
         }
         else
         {
-            wasSuccess = validate(valueIr, got);
+            wasSuccess = validate(castedIr, got);
             if(!wasSuccess && shouldReport)
             {
                 this.reportError(
-                    valueIr.getRoughLocation(),
+                    castedIr.getRoughLocation(),
                     Asn1SemanticError.none,
-                    "expected ", getReportValue(valueIr), " but got ", getReportValue(got)
+                    "expected ", getReportValue(castedIr), " but got ", getReportValue(got)
                 );
             }
         }
@@ -619,10 +627,14 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         {
             result = default_;
 
+            auto valueIr = endpoint.valueIr;
+            if(auto valueRefIr = cast(Asn1ValueReferenceIr)valueIr)
+                valueIr = valueRefIr.getResolvedValueRecurse();
+
             if(!endpoint.isUnbounded)
             {
-                assert(endpoint.valueIr !is null, "bug: endpoint is bounded but valueIr is null?");
-                auto intIr = cast(Asn1IntegerValueIr)endpoint.valueIr;
+                assert(valueIr !is null, "bug: endpoint is bounded but valueIr is null?");
+                auto intIr = cast(Asn1IntegerValueIr)valueIr;
                 if(intIr is null)
                 {
                     // Don't need an error message here - it'll be caught in Asn1IntegerTypeIr's checks.
@@ -635,7 +647,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                     if(shouldReport)
                     {
                         this.reportError(
-                            endpoint.valueIr.getRoughLocation(),
+                            valueIr.getRoughLocation(),
                             Asn1SemanticError.none,
                             "failed to convert value range endpoint into a native integer: ",
                             intResult.error,
@@ -755,16 +767,20 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                     if(endpoint.valueIr is null)
                         return;
 
-                    auto valueIr = cast(Asn1IntegerValueIr)endpoint.valueIr;
-                    assert(valueIr !is null, "bug: Why wasn't the (!wasSuccess) branch taken?");
+                    auto valueIr = endpoint.valueIr;
+                    if(auto valueRefIr = cast(Asn1ValueReferenceIr)valueIr)
+                        valueIr = valueRefIr.getResolvedValueRecurse();
 
-                    if(valueIr.isNegative)
+                    auto intValueIr = cast(Asn1IntegerValueIr)valueIr;
+                    assert(intValueIr !is null, "bug: Why wasn't the (!wasSuccess) branch taken?");
+
+                    if(intValueIr.isNegative)
                     {
                         wasSuccess = false;
                         if(shouldReport)
                         {
                             this.reportError(
-                                valueIr.getRoughLocation(),
+                                intValueIr.getRoughLocation(),
                                 Asn1SemanticError.none,
                                 context, " endpoint for ValueRange constraint must always be positive",
                                 " when used as a subconstraint within a SIZE constraint"
@@ -810,7 +826,11 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
             if(auto sizeIr = cast(Asn1SingleValueConstraintIr)sizeConstraintIr)
             {
-                auto intIr = cast(Asn1IntegerValueIr)sizeIr.getValue();
+                auto valueIr = sizeIr.getValue();
+                if(auto valueRefIr = cast(Asn1ValueReferenceIr)valueIr)
+                    valueIr = valueRefIr.getResolvedValueRecurse();
+
+                auto intIr = cast(Asn1IntegerValueIr)valueIr;
                 if(intIr is null)
                 {
                     wasSuccess = false; // No error needed - will get caught in the type-only checks.
@@ -874,6 +894,9 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         // Not efficient, but simplifies this function a lot.
         Result toBitArray(Asn1ValueIr value, scope ref Array!bool bits)
         {
+            if(auto valueRefIr = cast(Asn1ValueReferenceIr)value)
+                value = valueRefIr.getResolvedValueRecurse();
+
             if(auto bstringIr = cast(Asn1BstringValueIr)value)
             {
                 bits.put(bstringIr.asBstringRange);
@@ -2324,6 +2347,73 @@ unittest
             Unittest DEFINITIONS ::= BEGIN
                 B ::= OCTET STRING (SIZE (0..1))
                 b B ::= '1010'B
+            END
+        `, Asn1SemanticError.none),
+    ]);
+}
+
+@("Constraints - ensuring value references are handled")
+unittest
+{
+    alias Harness = GenericTestHarness!(Asn1ModuleIr, Asn1ModuleIr, (ref parser){
+        Asn1ModuleDefinitionNode node;
+        parser.ModuleDefinition(node).resultAssert;
+        return node;
+    });
+
+    with(Harness) run([
+        "BIT STRING - SingleValue": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                v BIT STRING ::= '01'H
+                B ::= BIT STRING (v)
+                b B ::= '01'H
+            END
+        `, Asn1SemanticError.none),
+        "BIT STRING - Size - SingleValue": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                a INTEGER ::= 4
+                B ::= BIT STRING (SIZE (a))
+                b B ::= '0'H
+            END
+        `, Asn1SemanticError.none),
+        "BIT STRING - Size - ValueRange": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                a INTEGER ::= 0
+                b INTEGER ::= 4
+                B ::= BIT STRING (SIZE (a..b))
+                c B ::= '0'H
+            END
+        `, Asn1SemanticError.none),
+
+        "BOOLEAN - SingleValue": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                a BOOLEAN ::= TRUE
+                B ::= BOOLEAN (a)
+                b B ::= TRUE
+            END
+        `, Asn1SemanticError.none),
+
+        "ENUMERATED - SingleValue": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                a INTEGER ::= 0
+                B ::= ENUMERATED { a(0) } (a)
+                b B ::= 0
+            END
+        `, Asn1SemanticError.none),
+
+        "INTEGER - SingleValue": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                a INTEGER ::= 0
+                B ::= INTEGER (a)
+                b B ::= 0
+            END
+        `, Asn1SemanticError.none),
+        "INTEGER - ValueRange": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                a INTEGER ::= 0
+                c INTEGER ::= 1
+                B ::= INTEGER (a..b)
+                b B ::= 0
             END
         `, Asn1SemanticError.none),
     ]);

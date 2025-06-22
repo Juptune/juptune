@@ -25,6 +25,7 @@ enum Asn1SemanticError
     // Generated during parsing.
     constraintIsNotAllowed,
     duplicateKey,
+    duplicateSymbol,
     numberMustBeUnsigned,
     numberIsTooLarge,
     numberCannotBeNegativeZero,
@@ -536,6 +537,10 @@ final class Asn1ModuleIr : Asn1BaseIr
         Asn1ImportsIr _imports;
         Array!Asn1AssignmentIr _assignments;
         Asn1ModuleRegistry _registry; // Can be null. Is set externally by `Asn1ModuleRegistry.register`.
+        
+        // This is used for faster lookups - there are no unique values stored in here,
+        // but instead it gets populated from _assignments and _imports.
+        HashMap!(const(char)[], Asn1BaseIr) _symbolsByName;
     }
 
     this(
@@ -544,12 +549,10 @@ final class Asn1ModuleIr : Asn1BaseIr
         TagDefault tagDefault,
         bool extensibilityImplied,
         Asn1ExportsIr exports,
-        Asn1ImportsIr imports,
     ) @nogc nothrow
     in(name.length > 0)
     in(moduleVersion !is null)
     in(exports !is null)
-    in(imports !is null)
     {
         super(Asn1Location.init);
         this._name = name;
@@ -557,7 +560,13 @@ final class Asn1ModuleIr : Asn1BaseIr
         this._tagDefault = tagDefault;
         this._extensibilityImplied = extensibilityImplied;
         this._exports = exports;
-        this._imports = imports;
+    }
+
+    override void dispose() @nogc nothrow
+    {
+        super.dispose();
+        this._assignments.__xdtor();
+        this._symbolsByName.__xdtor();
     }
 
     alias foreachAssignment = foreachAssignmentImpl!(Result delegate(Asn1AssignmentIr ass) @nogc nothrow);
@@ -584,8 +593,58 @@ final class Asn1ModuleIr : Asn1BaseIr
         scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
     )
     {
-        // TODO: Ensure name is unique.
+        if(this._symbolsByName.getPtr(ass.getSymbolName()) !is null)
+        {
+            return Result.make(
+                Asn1SemanticError.duplicateSymbol,
+                "attempted to register assignment for name that is already in use",
+                errors.errorAndString(ass.getRoughLocation(),
+                    "duplicate assignment for symbol ", ass.getSymbolName(),
+                )
+            );
+        }
+
         this._assignments.put(ass);
+        this._symbolsByName.put(ass.getSymbolName(), ass);
+        return Result.noError;
+    }
+
+    Result setImports(
+        Asn1ImportsIr imports,
+        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+    )
+    in(imports !is null, "imports is null")
+    {
+        this._imports = imports;
+
+        // TODO: I think Asn1 does technically allow for multiple imports with the same, just from
+        //       different modules... I wish the spec was more clear, but for now let's disallow it.
+        foreach(import_; this._imports._imports)
+        {
+            foreach(refIr; import_.imports)
+            {
+                const(char)[] name;
+                if(auto valueRefIr = cast(Asn1ValueReferenceIr)refIr)
+                    name = valueRefIr.valueRef;
+                else if(auto typeRefIr = cast(Asn1TypeReferenceIr)refIr)
+                    name = typeRefIr.typeRef;
+                else assert(false, "bug: unhandled reference IR?");
+
+                if(this._symbolsByName.getPtr(name) !is null)
+                {
+                    return Result.make(
+                        Asn1SemanticError.duplicateSymbol,
+                        "attempted to register import for name that is already in use",
+                        errors.errorAndString(refIr.getRoughLocation(),
+                            "duplicate import for symbol ", name,
+                        )
+                    );
+                }
+
+                this._symbolsByName.put(name, refIr);
+            }
+        }
+
         return Result.noError;
     }
 
@@ -622,26 +681,15 @@ final class Asn1ModuleIr : Asn1BaseIr
             if(typeRef.moduleRef.length > 0 && typeRef.moduleRef != this._name)
                 return LookupItemT.init;
 
-            foreach(ass; this._assignments)
-            {
-                auto typeAss = cast(Asn1TypeAssignmentIr)ass;
-                if(typeAss is null || typeAss.getSymbolName() != typeRef.typeRef)
-                    continue;
-                return LookupItemT(LookupOneOf(typeAss));
-            }
+            bool wasFound;
+            auto symbolIr = this._symbolsByName.tryGet(typeRef.typeRef, wasFound);
+            if(!wasFound)
+                return LookupItemT.init;
 
-            // TODO: make this not be absolutely horrific - just have a hashmap for imported symbols
-            // It's still O(n) where `n` is the amount of imports, but still, I hate looking at this lol.
-            foreach(import_; this._imports._imports)
-            {
-                foreach(refIr; import_.imports)
-                {
-                    auto modTypeRef = cast(Asn1TypeReferenceIr)refIr;
-                    if(modTypeRef is null || modTypeRef.typeRef != typeRef.typeRef)
-                        continue;
-                    return LookupItemT(LookupOneOf(modTypeRef.getResolvedType()));
-                }
-            }
+            if(auto typeAss = cast(Asn1TypeAssignmentIr)symbolIr)
+                return LookupItemT(LookupOneOf(typeAss));
+            else if(auto typeRefIr = cast(Asn1TypeReferenceIr)symbolIr)
+                return LookupItemT(LookupOneOf(typeRefIr.getResolvedType()));
 
             return LookupItemT.init;
         }
@@ -650,26 +698,15 @@ final class Asn1ModuleIr : Asn1BaseIr
             if(valueRef.moduleRef.length > 0 && valueRef.moduleRef != this._name)
                 return LookupItemT.init;
 
-            foreach(ass; this._assignments)
-            {
-                auto valueAss = cast(Asn1ValueAssignmentIr)ass;
-                if(valueAss is null || valueAss.getSymbolName() != valueRef.valueRef)
-                    continue;
-                return LookupItemT(LookupOneOf(valueAss));
-            }
+            bool wasFound;
+            auto symbolIr = this._symbolsByName.tryGet(valueRef.valueRef, wasFound);
+            if(!wasFound)
+                return LookupItemT.init;
 
-            // TODO: make this not be absolutely horrific - just have a hashmap for imported symbols
-            // It's still O(n) where `n` is the amount of imports, but still, I hate looking at this lol.
-            foreach(import_; this._imports._imports)
-            {
-                foreach(refIr; import_.imports)
-                {
-                    auto modValueRef = cast(Asn1ValueReferenceIr)refIr;
-                    if(modValueRef is null || modValueRef.valueRef != valueRef.valueRef)
-                        continue;
-                    return LookupItemT(LookupOneOf(modValueRef.getResolvedValue()));
-                }
-            }
+            if(auto valueAss = cast(Asn1ValueAssignmentIr)symbolIr)
+                return LookupItemT(LookupOneOf(valueAss));
+            else if(auto valueRefIr = cast(Asn1ValueReferenceIr)symbolIr)
+                return LookupItemT(LookupOneOf(valueRefIr.getResolvedValue()));
 
             return LookupItemT.init;
         }
@@ -739,41 +776,40 @@ final class Asn1ModuleIr : Asn1BaseIr
      + ++/
     Result getAssignmentByName(AssT : Asn1AssignmentIr = Asn1AssignmentIr)(const(char)[] name, out AssT assignment)
     {
-        foreach(ass; this._assignments)
+        bool wasFound;
+        auto assIr = this._symbolsByName.tryGet(name, wasFound);
+        if(!wasFound)
         {
-            if(ass.getSymbolName() == name)
-            {
-                static if(!is(AssT == Asn1AssignmentIr))
-                {
-                    if(auto casted = cast(AssT)ass)
-                    {
-                        assignment = casted;
-                    }
-                    else
-                    {
-                        return Result.make(
-                            Asn1SemanticError.toolWrongType,
-                            "assignment type mismatch",
-                            String2(
-                                "assignment for '", name, 
-                                "' exists, but is of type ", typeid(ass).name,
-                                " instead of type ", AssT.stringof
-                            )
-                        );
-                    }
-                }
-                else
-                    assignment = ass;
-
-                return Result.noError;
-            }
+            return Result.make(
+                Asn1SemanticError.toolNotFound, 
+                "assignment not found",
+                String2("no assignment for '", name, "' was found")
+            );
         }
 
-        return Result.make(
-            Asn1SemanticError.toolNotFound, 
-            "assignment not found",
-            String2("no assignment for '", name, "' was found")
-        );
+        static if(!is(AssT == Asn1AssignmentIr))
+        {
+            if(auto casted = cast(AssT)assIr)
+            {
+                assignment = casted;
+            }
+            else
+            {
+                return Result.make(
+                    Asn1SemanticError.toolWrongType,
+                    "assignment type mismatch",
+                    String2(
+                        "assignment for '", name, 
+                        "' exists, but is of type ", typeid(assIr).name,
+                        " instead of type ", AssT.stringof
+                    )
+                );
+            }
+        }
+        else
+            assignment = assIr;
+
+        return Result.noError;
     }
 }
 
@@ -3779,7 +3815,22 @@ unittest
             dValue.asUnsigned(number).resultAssert;
             assert(number == 3);
             // https://www.youtube.com/watch?v=SlSylJRwtCk&pp=ygUMaXQncyB3b3JraW5n
-        })
+        }),
+
+        "error - duplicate symbols (assignments)": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                a INTEGER ::= 1
+                a INTEGER ::= 2
+            END
+        `, null, Asn1SemanticError.duplicateSymbol),
+        "error - duplicate symbols (imports)": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                IMPORTS
+                    foo FROM Bar { yada(0) }
+                    foo FROM Baz { yada(0) }
+                ;
+            END
+        `, null, Asn1SemanticError.duplicateSymbol),
     ];
 
     foreach(name, test; cases)

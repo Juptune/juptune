@@ -112,9 +112,8 @@ Result asn1AstToIr(
                 tagDefault,
                 extensibilityImplied,
                 context.allocNode!Asn1ExportsIr(Asn1Location()),
-                context.allocNode!Asn1ImportsIr(Asn1Location()),
             );
-            return Result.noError;
+            return ir.setImports(context.allocNode!Asn1ImportsIr(Asn1Location()));
         },
     ).resultAssert;
     if(modBodyNode is null)
@@ -139,8 +138,10 @@ Result asn1AstToIr(
         tagDefault,
         extensibilityImplied,
         exportsIr,
-        importsIr
     );
+    auto setImportsResult = ir.setImports(importsIr);
+    if(setImportsResult.isError)
+        return setImportsResult;
 
     foreach(assNode; modBodyNode.getNode!Asn1AssignmentListNode.items)
     {

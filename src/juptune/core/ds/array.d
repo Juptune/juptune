@@ -120,14 +120,6 @@ struct ArrayBase(
             this.put(value);
     }
 
-    void move(string member, T)(size_t index, auto ref T value)
-    {
-        static if(!hasElaborateMove!T)
-            mixin("this[index]."~member~" = value;");
-        else
-            mixin(".move(value, this[index]."~member~");");
-    }
-
     ValueT remove(size_t index)
     {
         assert(index < this._length, "Index out of bounds.");

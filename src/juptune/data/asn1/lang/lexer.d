@@ -402,45 +402,6 @@ struct Asn1Token
     {
         return Asn1HstringRange(this.asSubString.slice);
     }
-
-    static string suggestionForType(Type type) @safe @nogc nothrow
-    {
-        final switch(type) with(Type)
-        {
-            case FAILSAFE: assert(false, "bug: attempted to use FAILSAFE");
-            case eof: return "EOF";
-
-            case identifier: return "my-identifier";
-            case typeReference: return "My-Type-Reference";
-            case number: return "12345";
-            case realNumber: return "3.14";
-            case whiteSpace: return "\\t";
-            case oneLineComment: return "-- comment";
-            case multiLineComment: return "/* comment */";
-            case quotationMark: return "\"";
-            case apostrophe: return "'";
-            case bstring: return "'1010'B";
-            case hstring: return "'F00'H";
-            case cstring: return "'Foo'";
-
-            static foreach(name, value; RESERVED_WORDS)
-            {
-                case value: return name;
-            }
-
-            static foreach(name, value; SINGULAR_OPS)
-            {
-                case value.type:
-                    enum Str = ""~value.ch;
-                    return Str;
-            }
-
-            static foreach(name, value; COMPOUND_OPS)
-            {
-                case value.type: return value.chars;
-            }
-        }
-    }
 }
 
 enum Asn1LexerError
