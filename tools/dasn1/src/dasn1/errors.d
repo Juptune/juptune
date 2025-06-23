@@ -23,6 +23,7 @@ final class DefaultErrorHandler : Asn1SemanticErrorHandler
         string _debugName;
         Line[] _lines;
         uint   _indent;
+        bool   _wasCalled;
     }
 
     this(string debugName, string sourceCode)
@@ -46,8 +47,12 @@ final class DefaultErrorHandler : Asn1SemanticErrorHandler
 
     @nogc nothrow:
 
+    bool wasCalled() => this._wasCalled;
+
     override void startLine(Asn1Location location)
     {
+        this._wasCalled = true;
+
         size_t lineIndex;
         foreach(i, line; this._lines)
         {

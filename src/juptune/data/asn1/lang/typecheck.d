@@ -719,6 +719,9 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 wasSuccess
             );
         }
+        else if(constraintIr.getLower().isUnbounded)
+            wasSuccess = true;
+
         if(constraintIr.getUpper().valueIr !is null)
         {
             bool success;
@@ -730,6 +733,8 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             );
             wasSuccess = wasSuccess && success;
         }
+        else if(constraintIr.getUpper().isUnbounded)
+            wasSuccess = wasSuccess && true;
     }
 
     void checkSizeConstraintTypeOnly(Asn1SizeConstraintIr constraintIr, bool shouldReport, out bool wasSuccess)

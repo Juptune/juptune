@@ -517,6 +517,10 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
 
     private Result visitTypeConstraints(Asn1TypeIr ir)
     {
+        bool hasConstraints = ir.getMainConstraintOrNull() !is null || ir.getAdditionalConstraintOrNull() !is null;
+        if(hasConstraints)
+            this._handler.putInLine(" (");
+
         if(auto constraint = ir.getMainConstraintOrNull())
         {
             auto result = constraint.visit(this);
@@ -525,10 +529,15 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
         }
         if(auto constraint = ir.getAdditionalConstraintOrNull())
         {
+            this._handler.putInLine(", ..., ");
+
             auto result = constraint.visit(this);
             if(result.isError)
                 return result;
         }
+
+        if(hasConstraints)
+            this._handler.putInLine(")");
 
         return Result.noError;
     }
@@ -760,6 +769,116 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
 
         return Result.noError;
     }
+
+    /++++ Constraints ++++/
+
+    override Result visit(Asn1SingleValueConstraintIr ir)
+    {
+        return ir.getValue().visit(this);
+    }
+
+    override Result visit(Asn1ContainedSubtypeConstraintIr ir)
+    {
+        return ir.getSubtype().visit(this);
+    }
+
+    override Result visit(Asn1ValueRangeConstraintIr ir)
+    {
+        with(this._handler)
+        {
+            auto lower = ir.getLower();
+            if(!lower.isUnbounded)
+            {
+                auto result = lower.valueIr.visit(this);
+                if(result.isError)
+                    return result;
+            }
+            else
+                putInLine("MIN");
+            if(lower.isOpen)
+                putInLine("<");
+
+            putInLine("..");
+
+            auto upper = ir.getUpper();
+            if(upper.isOpen)
+                putInLine("<");
+            if(!upper.isUnbounded)
+            {
+                auto result = upper.valueIr.visit(this);
+                if(result.isError)
+                    return result;
+            }
+            else
+                putInLine("MAX");
+        }
+
+        return Result.noError;
+    }
+
+    override Result visit(Asn1PermittedAlphabetConstraintIr ir)
+    {
+        with(this._handler)
+        {
+            putInLine("FROM (");
+            auto result = ir.getMainConstraint().visit(this);
+            if(result.isError)
+                return result;
+            putInLine(")");
+        }
+
+        return Result.noError;
+    }
+
+    override Result visit(Asn1SizeConstraintIr ir)
+    {
+        with(this._handler)
+        {
+            putInLine("SIZE (");
+            auto result = ir.getMainConstraint().visit(this);
+            if(result.isError)
+                return result;
+            putInLine(")");
+        }
+
+        return Result.noError;
+    }
+
+    override Result visit(Asn1UnionConstraintIr ir)
+    {
+        with(this._handler)
+        {
+            bool isFirst = true;
+            auto result = ir.foreachUnionConstraint((constraint){
+                if(!isFirst)
+                    putInLine(" | ");
+                isFirst = false;
+                return constraint.visit(this);
+            });
+            if(result.isError)
+                return result;
+        }
+
+        return Result.noError;
+    }
+
+    override Result visit(Asn1IntersectionConstraintIr ir)
+    {
+        with(this._handler)
+        {
+            bool isFirst = true;
+            auto result = ir.foreachIntersectionConstraint((constraint){
+                if(!isFirst)
+                    putInLine(" ^ ");
+                isFirst = false;
+                return constraint.visit(this);
+            });
+            if(result.isError)
+                return result;
+        }
+
+        return Result.noError;
+    }
 }
 
 @("Asn1PrinterVisitor - everything")
@@ -769,7 +888,7 @@ unittest
     
     import juptune.data.asn1.lang.common  : Asn1ParserContext;
     import juptune.data.asn1.lang.ir      : Asn1ModuleRegistry;
-    import juptune.data.asn1.lang.tooling : Asn1AlwaysCrashErrorHandler, asn1ParseWithSemantics;
+    import juptune.data.asn1.lang.tooling : Asn1AlwaysCrashErrorHandler, Asn1PrintfErrorHandler, asn1ParseWithSemantics;
 
     const code = `
         MyMod DEFINITIONS IMPLICIT TAGS ::= BEGIN
@@ -857,13 +976,51 @@ unittest
 
             -- Tagged types
             Tagged ::= [1] [UNIVERSAL 1] [APPLICATION 1] EXPLICIT [PRIVATE 1] IMPLICIT INTEGER
+
+            -- Constraint - SingleValue
+            SingleValue ::= BOOLEAN (TRUE)
+
+            -- Constraint - ContainedSubtype
+            SubType ::= BOOLEAN
+            ContainedSubType ::= BOOLEAN (SubType)
+
+            -- Constraint - ValueRange
+            vra INTEGER ::= 1
+            ValueRange1 ::= INTEGER (0..1)
+            ValueRange2 ::= INTEGER (vra..1)
+            ValueRange3 ::= INTEGER (0..vra)
+            ValueRange4 ::= INTEGER (MIN..1)
+            ValueRange5 ::= INTEGER (0..MAX)
+            ValueRange6 ::= INTEGER (0<..MAX)
+            ValueRange7 ::= INTEGER (0<..<MAX)
+
+            -- Constriant - Permitted alphabet
+            -- TODO: PermittedAlphabet ::= IA5String (FROM ("yada"))
+
+            -- Constraint - Size
+            Size ::= BIT STRING (SIZE (1))
+            Size2 ::= BIT STRING (SIZE (1..MAX))
+
+            -- Constraint - Pattern
+            -- TODO: Pattern ::= IA5String(PATTERN "abc123")
+
+            -- Constraint - Union & Intersection
+            Union ::= BIT STRING (SIZE (5) | SIZE (0..8))
+            Intersection ::= BIT STRING (SIZE (5) ^ SIZE (0..8))
+            BothUnIn ::= BIT STRING (SIZE (5) | SIZE(7) ^ SIZE (0..8))
         END
     `;
     
     Asn1ModuleIr modIr;
     Asn1ParserContext context;
     scope registry = new Asn1ModuleRegistry();
-    asn1ParseWithSemantics(context, modIr, code, registry, new Asn1AlwaysCrashErrorHandler()).resultAssert;
+
+    // Use this if you want a stack trace (which for some reason isn't accurate sometimes)
+    // asn1ParseWithSemantics(context, modIr, code, registry, new Asn1AlwaysCrashErrorHandler()).resultAssert;
+
+    scope printHandler = new Asn1PrintfErrorHandler();
+    asn1ParseWithSemantics(context, modIr, code, registry, printHandler).resultAssert;
+    assert(!printHandler.wasCalled, "a semantic error occurred");
 
     scope handler = new Asn1StringPrinterHandler();
     scope visitor = new Asn1PrinterVisitor(handler);

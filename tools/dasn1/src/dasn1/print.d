@@ -32,6 +32,7 @@ int printCommand(string[] args)
         return 0;
     }
 
+    bool wereErrors;
     try
     {
         auto context = new CompilerContext();
@@ -48,6 +49,7 @@ int printCommand(string[] args)
             handler.putInLine(source.debugName);
             handler.endLine();
             source.moduleIr.visit(visitor).resultEnforce;
+            wereErrors = wereErrors || source.errors.wasCalled;
         }
 
         writeln(handler.buffer.slice);
@@ -65,5 +67,5 @@ int printCommand(string[] args)
         return 1;
     }
 
-    return 0;
+    return wereErrors ? 1 : 0;
 }
