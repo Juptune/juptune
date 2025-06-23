@@ -246,7 +246,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             }
 
             assert(false, "bug: Missing constraint case for BIT STRING (type check variant)?");
-        }, false, _);
+        }, false, _, ir.getRoughLocation());
     }
     
     override Result visit(Asn1BooleanTypeIr ir)
@@ -265,7 +265,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             }
 
             assert(false, "bug: Missing constraint case for BOOLEAN (type check variant)?");
-        }, false, _);
+        }, false, _, ir.getRoughLocation());
     }
 
     override Result visit(Asn1ChoiceTypeIr ir)
@@ -279,7 +279,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             }
 
             assert(false, "bug: Missing constraint case for CHOICE (type check variant)?");
-        }, false, _);
+        }, false, _, ir.getRoughLocation());
         if(result.isError)
             return result;
 
@@ -371,7 +371,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             }
 
             assert(false, "bug: Missing constraint case for INTEGER (type check variant)?");
-        }, false, _);
+        }, false, _, ir.getRoughLocation());
     }
 
     override Result visit(Asn1NullTypeIr ir)
@@ -390,7 +390,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             }
 
             assert(false, "bug: Missing constraint case for INTEGER (type check variant)?");
-        }, false, _);
+        }, false, _, ir.getRoughLocation());
     }
 
     override Result visit(Asn1IntegerTypeIr ir)
@@ -450,7 +450,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             }
 
             assert(false, "bug: Missing constraint case for INTEGER (type check variant)?");
-        }, false, _);
+        }, false, _, ir.getRoughLocation());
     }
 
     override Result visit(Asn1ObjectIdentifierTypeIr ir)
@@ -464,7 +464,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             }
 
             assert(false, "bug: Missing constraint case for OBJECT IDENTIFIER (type check variant)?");
-        }, false, _);
+        }, false, _, ir.getRoughLocation());
     }
 
     override Result visit(Asn1OctetStringTypeIr ir)
@@ -500,7 +500,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             }
 
             assert(false, "bug: Missing constraint case for OCTET STRING (type check variant)?");
-        }, false, _);
+        }, false, _, ir.getRoughLocation());
     }
 
     override Result visit(Asn1RelativeOidTypeIr ir)
@@ -514,7 +514,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             }
 
             assert(false, "bug: Missing constraint case for RELATIVE-OID (type check variant)?");
-        }, false, _);
+        }, false, _, ir.getRoughLocation());
     }
 
     static foreach(RestrictedCharacterT; RestrictedCharacterTypes)
@@ -526,7 +526,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 // Restricted character type support is kinda complex, so TODO: implement a bit later
                 assert(false, "bug: Missing constraint case for TODO (type check variant)?");
                 return Result.noError;
-            }, false, _);
+            }, false, _, ir.getRoughLocation());
         }
     }
 
@@ -536,7 +536,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Missing constraint case for SEQUENCE (type check variant)?");
             return Result.noError;
-        }, false, _);
+        }, false, _, ir.getRoughLocation());
     }
 
     override Result visit(Asn1SequenceOfTypeIr ir)
@@ -545,7 +545,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Missing constraint case for SEQUENCE OF (type check variant)?");
             return Result.noError;
-        }, false, _);
+        }, false, _, ir.getRoughLocation());
     }
 
     override Result visit(Asn1SetTypeIr ir)
@@ -554,7 +554,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Missing constraint case for SET (type check variant)?");
             return Result.noError;
-        }, false, _);
+        }, false, _, ir.getRoughLocation());
     }
 
     override Result visit(Asn1SetOfTypeIr ir)
@@ -563,7 +563,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Missing constraint case for SET OF (type check variant)?");
             return Result.noError;
-        }, false, _);
+        }, false, _, ir.getRoughLocation());
     }
 
     override Result visit(Asn1CharacterStringTypeIr ir)
@@ -572,7 +572,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Missing constraint case for CHARACTER STRING (type check variant)?");
             return Result.noError;
-        }, false, _);
+        }, false, _, ir.getRoughLocation());
     }
 
     /++++ Ass(ignment) checkers ++++/
@@ -996,7 +996,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 );
             }
             assert(false, "bug: Unhandled constraint case for BIT STRING?");
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     Result checkBooleanAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
@@ -1025,7 +1025,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 );
             }
             assert(false, "bug: Unhandled constraint case for BOOLEAN?");
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     Result checkChoiceAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
@@ -1080,7 +1080,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             }
             assert(false, "bug: Unhandled constraint case for BOOLEAN?");
             return Result.noError;
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     Result checkEnumeratedAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
@@ -1135,7 +1135,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 );
             }
             assert(false, "bug: Unhandled constraint case for ENUMERATED?");
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     Result checkNullAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
@@ -1164,7 +1164,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 );
             }
             assert(false, "bug: Unhandled constraint case for NULL?");
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     Result checkIntegerAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
@@ -1222,7 +1222,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 );
             }
             assert(false, "bug: Unhandled constraint case for INTEGER?");
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     Result checkObjectIdentifierAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
@@ -1235,7 +1235,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 return Result.noError;
             }
             assert(false, "bug: Unhandled constraint case for OBJECT IDENTIFIER?");
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     Result checkOctetStringAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
@@ -1338,7 +1338,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 );
             }
             assert(false, "bug: Unhandled constraint case for OCTET STRING?");
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     Result checkRelativeOidAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
@@ -1351,7 +1351,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 return Result.noError;
             }
             assert(false, "bug: Unhandled constraint case for RELATIVE-OID?");
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     Result checkRestrictedStringAss(GenericStringT)(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
@@ -1386,7 +1386,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 return Result.noError;
             }
             assert(false, "bug: Unhandled constraint case for restricted character string?");
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     Result checkSequenceAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
@@ -1395,7 +1395,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Unhandled constraint case for SEQUENCE?");
             return Result.noError;
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     Result checkSequenceOfAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
@@ -1404,7 +1404,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Unhandled constraint case for SEQUENCE OF?");
             return Result.noError;
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     Result checkSetAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
@@ -1413,7 +1413,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Unhandled constraint case for SET?");
             return Result.noError;
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     Result checkSetOfAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
@@ -1422,7 +1422,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Unhandled constraint case for SET OF?");
             return Result.noError;
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     Result checkCharacterStringAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
@@ -1431,7 +1431,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Unhandled constraint case for CHARACTER STRING?");
             return Result.noError;
-        }, false, _);
+        }, false, _, value.getRoughLocation());
     }
 
     /++++ Helpers ++++/
@@ -1507,6 +1507,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         scope Result delegate(Asn1ConstraintIr, bool, out bool) @nogc nothrow handleConstraint,
         bool isSubType,
         out bool wasSuccessOverall,
+        Asn1Location initialLocation,
         bool shouldReport = false,
     )
     {
@@ -1522,9 +1523,9 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                     return Result.noError;
                 
                 this.reportError(
-                    constraint.getRoughLocation(), 
+                    initialLocation, 
                     Asn1SemanticError.constraint,
-                    "top-level constraint failed, specifically:"
+                    "constraint failed, specifically:"
                 );
                 this._errors.indent();
                 scope(exit) this._errors.dedent();
@@ -1638,7 +1639,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             auto typeExact = asn1GetExactUnderlyingType(type);
 
             if(typeid(subtypeExact) is typeid(typeExact))
-                return this.checkConstraints(ir.getSubtype(), handleConstraint, true, wasSuccess, shouldReport); // @suppress(dscanner.style.long_line)
+                return this.checkConstraints(ir.getSubtype(), handleConstraint, true, wasSuccess, ir.getRoughLocation(), shouldReport); // @suppress(dscanner.style.long_line)
 
             wasSuccess = false;
             if(shouldReport)

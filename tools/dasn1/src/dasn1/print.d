@@ -49,6 +49,7 @@ int printCommand(string[] args)
             handler.putInLine(source.debugName);
             handler.endLine();
             source.moduleIr.visit(visitor).resultEnforce;
+            handler.endLine();
             wereErrors = wereErrors || source.errors.wasCalled;
         }
 
