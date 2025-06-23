@@ -39,6 +39,7 @@ struct Asn1ParserContext
     NodeAllocator allocator;
     Array!Asn1BaseNode nodesToDtor;
     Array!Asn1BaseIr irToDtor;
+    Array!String2 strings;
 
     @nogc nothrow:
 
@@ -52,6 +53,42 @@ struct Asn1ParserContext
         this.allocator.__xdtor();
         this.nodesToDtor.__xdtor();
         this.irToDtor.__xdtor();
+        this.strings.__xdtor();
+    }
+
+    /++
+     + Creates a copy of the given string, and ties its lifetime with this context instance.
+     +
+     + This is helpful for @nogc use cases, since you can: Load in a string; call this function
+     + to ensure it has the correct lifetime; free the previously loaded string, and finally
+     + use the copied version of the string for any actual parsing.
+     +
+     + The alternative is that @nogc user code would have to guarentee that source code strings
+     + do not get freed before a context instance.
+     +
+     + Notes:
+     +  The returned value should never outlive this context instance's lifetime.
+     +
+     + Params:
+     +  slice = The slice to make a copy of.
+     +
+     + Returns:
+     +  The copied slice, in the form of a `String2`.
+     + ++/
+    String2 preserveString(scope const(char)[] slice)
+    {
+        this.strings.put(String2(slice));
+        return this.strings[$-1];
+    }
+
+    /++
+     + An overload of `preserveString` that doesn't create a copy, but instead
+     + preserves a living instance of `str`, so that its ref count doesn't reach 0 until
+     + sometime after this context instance is destroyed.
+     + ++/
+    void preserveString(ref String2 str)
+    {
+        this.strings.put(str);
     }
 
     NodeT allocNode(NodeT : Asn1BaseNode, CtorArgs...)(auto ref CtorArgs args)
