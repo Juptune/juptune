@@ -69,7 +69,7 @@ struct Asn1Parser
         ulong              _level;
 
         Asn1Location _lastErrorLocation;
-        String2 _lastError;
+        String2      _lastError; // TODO: If I swapped this into an Array!char that I cleared out each time, it'd probably be better...
     }
 
     @nogc nothrow:

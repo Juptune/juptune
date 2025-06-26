@@ -370,6 +370,7 @@ enum Asn1NodeType // For faster/easier to write type checks, instead of using ca
 
 /**** Mixins ****/
 
+// TODO: Refactor this to just use a single objects + casts to improve memory usage - the current design is an old relic.
 private mixin template OneOf(Asn1NodeType MyType, NodeTypes...)
 {
     import juptune.core.util : Result;

@@ -113,13 +113,107 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
             endLine();
             indent();
 
-            auto result = ir.foreachAssignment(ass => ass.visit(this));
+            auto result = ir.getImports.visit(this);
+            if(result.isError)
+                return result;
+
+            result = ir.getExports.visit(this);
+            if(result.isError)
+                return result;
+
+            result = ir.foreachAssignment(ass => ass.visit(this));
             if(result.isError)
                 return result;
 
             endLine();
             dedent();
             putInLine("END");
+        }
+
+        return Result.noError;
+    }
+
+    override Result visit(Asn1ImportsIr ir)
+    {
+        with(this._handler)
+        {
+            putInLine("IMPORTS");
+            endLine();
+            indent();
+
+            auto result = ir.foreachImportByModule((moduleRef, moduleVersion, itemRange){
+                foreach(i, item; itemRange)
+                {
+                    if(i != 0)
+                        putInLine(", ");
+
+                    if(auto valueRefIr = cast(Asn1ValueReferenceIr)item)
+                        putInLine(valueRefIr.valueRef);
+                    else if(auto typeRefIr = cast(Asn1TypeReferenceIr)item)
+                        putInLine(typeRefIr.typeRef);
+                    else assert(false, "bug: unhandled import item type?");
+                }
+                endLine();
+                putInLine("FROM ");
+                putInLine(moduleRef);
+                if(moduleVersion !is null)
+                {
+                    putInLine(" ");
+                    return moduleVersion.visit(this);
+                }
+                return Result.noError;
+            });
+            if(result.isError)
+                return result;
+
+            endLine();
+            dedent();
+            putInLine(";");
+            endLine();
+        }
+
+        return Result.noError;
+    }
+
+    override Result visit(Asn1ExportsIr ir)
+    {
+        with(this._handler)
+        {
+            if(!ir.doesExportsAll)
+            {
+                putInLine("EXPORTS");
+                indent();
+                endLine();
+
+                bool isFirst = true;
+                auto result = ir.foreachExport((valueOrTypeRefIr){
+                    if(!isFirst)
+                    {
+                        putInLine(",");
+                        endLine();
+                    }
+                    isFirst = false;
+
+                    if(auto valueRefIr = cast(Asn1ValueReferenceIr)valueOrTypeRefIr)
+                        putInLine(valueRefIr.valueRef);
+                    else if(auto typeRefIr = cast(Asn1TypeReferenceIr)valueOrTypeRefIr)
+                        putInLine(typeRefIr.typeRef);
+                    else assert(false, "bug: unhandled export item type?");
+                    return Result.noError;
+                });
+                if(result.isError)
+                    return result;
+
+                endLine();
+                dedent();
+                putInLine(";");
+                endLine();
+            }
+            else
+            {
+                putInLine("EXPORTS ALL;");
+                endLine();
+            }
         }
 
         return Result.noError;
@@ -757,6 +851,33 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
                     putInLine(", ");
                 isFirst = false;
                 
+                auto result = value.visit(this);
+                if(result.isError)
+                    return result;
+                return Result.noError;
+            }, Asn1NullErrorHandler.instance);
+            if(result.isError)
+                return result;
+            putInLine(" }");
+        }
+
+        return Result.noError;
+    }
+
+    override Result visit(Asn1NamedValueSequenceIr ir)
+    {
+        with(this._handler)
+        {
+            putInLine("{ ");
+            bool isFirst = true;
+            auto result = ir.foreachSequenceNamedValue((name, value){
+                if(!isFirst)
+                    putInLine(", ");
+                isFirst = false;
+                
+                putInLine(name);
+                putInLine(" ");
+
                 auto result = value.visit(this);
                 if(result.isError)
                     return result;

@@ -419,7 +419,7 @@ Result asn1AstToIr(
             return Result.noError;
         },
         (Asn1EmptyNode emptyNode){
-            ir = context.allocNode!(typeof(ir))(emptyNode.token.location);
+            ir = context.allocNode!(typeof(ir))(emptyNode.token.location, true);
             return Result.noError;
         },
     );

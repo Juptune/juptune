@@ -19,9 +19,11 @@ import dasn1.context : CompilerContext;
 int printCommand(string[] args)
 {
     bool noSemantics;
+    bool showMemoryUsage;
 
     auto helpInfo = args.getopt(
         "no-semantics", "Disable (most) semantics analysis. Only performs syntax parsing.", &noSemantics,
+        "show-memory-usage", "Prints the amount of bytes allocated by the parser for AST and IR nodes.", &showMemoryUsage // @suppress(dscanner.style.long_line)
     );
 
     if(helpInfo.helpWanted)
@@ -37,6 +39,9 @@ int printCommand(string[] args)
     try
     {
         auto context = new CompilerContext();
+        scope(exit) if(showMemoryUsage)
+            writeln("Parser bytes allocated: ", context.parserBytesAllocated);
+
         context.addFromInputArgs(args[1..$]);
         context.doSyntaxAnalysis();
         if(!noSemantics)
@@ -52,8 +57,8 @@ int printCommand(string[] args)
             source.moduleIr.visit(visitor).resultEnforce;
             handler.endLine();
         }
-
         writeln(handler.buffer.slice);
+
         wereErrors = context.wereErrors;
     }
     catch(FileException exec)

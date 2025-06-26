@@ -89,9 +89,6 @@ final class CompilerContext
     }
 
     bool wereErrors() => this._errors.wasCalled;
-
-    Source[] sources()
-    {
-        return this._sources;
-    }
+    size_t parserBytesAllocated() => this._context.bytesAllocated;
+    Source[] sources() => this._sources;
 }

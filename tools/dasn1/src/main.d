@@ -7,7 +7,7 @@
 
 const MAIN_HELP = 
 `Commands:
-    print       - Parses ASN.1 notation files, and prints out how to compiler interpreted each file.
+    print       - Parses ASN.1 notation files, and prints out how dasn1 interpreted each file.
 `;
 
 int main(string[] args)

@@ -758,7 +758,6 @@ final class Asn1ExportsIr : Asn1BaseIr
 {
     mixin IrBoilerplate;
     
-    @nogc nothrow:
 
     private
     {
@@ -767,6 +766,25 @@ final class Asn1ExportsIr : Asn1BaseIr
         bool _exportsAll;
         Array!ItemT _items;
     }
+
+    alias foreachExport = foreachExportImpl!(Result delegate(Asn1BaseIr valueOrTypeRefIr) @nogc nothrow);
+    alias foreachExportGC = foreachExportImpl!(Result delegate(Asn1BaseIr valueOrTypeRefIr));
+
+    private Result foreachExportImpl(DelegateT)(
+        scope DelegateT handler
+    )
+    {
+        foreach(item; this._items)
+        {
+            auto result = handler(item);
+            if(result.isError)
+                return result;
+        }
+
+        return Result.noError;
+    }
+
+    @nogc nothrow:
 
     this(Asn1Location roughLocation)
     {
@@ -927,6 +945,29 @@ final class Asn1ImportsIr : Asn1BaseIr
         return populateImports(&addImport);
     }
 
+    Result foreachImportByModule(
+        scope Result delegate(
+            const(char)[] moduleRef,
+            Asn1ObjectIdSequenceValueIr moduleVersion, // May be null
+            ItemT[] itemRange
+        ) @nogc nothrow handler,
+    )
+    {
+        foreach(ref importsFromMod; this._imports)
+        {
+            auto result = handler(
+                importsFromMod.moduleRef,
+                importsFromMod.moduleVersion, 
+                importsFromMod.imports.slice
+            );
+            if(result.isError)
+                return result;
+        }
+
+        return Result.noError;
+    }
+
+    // TODO: this is kind of useless, probably best to remove it
     Result foreachImport(
         scope Result delegate(
             const(char)[] moduleRef, 
