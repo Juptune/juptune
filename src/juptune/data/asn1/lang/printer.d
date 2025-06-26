@@ -454,6 +454,26 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
     {
         this.visitTypeCommon(ir);
         this._handler.putInLine("INTEGER");
+        
+        if(!ir.byNamedNumberKvp.empty) with(this._handler)
+        {
+            import std.range : enumerate;
+
+            putInLine(" { ");
+            foreach(i, kvp; ir.byNamedNumberKvp.enumerate)
+            {
+                if(i != 0)
+                    putInLine(", ");
+                putInLine(kvp.key);
+                putInLine("(");
+                auto result = kvp.value.visit(this);
+                if(result.isError)
+                    return result;
+                putInLine(")");
+            }
+            putInLine(" }");
+        }
+
         return this.visitTypeConstraints(ir);
     }
 
@@ -753,24 +773,7 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
             if(ir.hasDoneSemanticStage(Asn1BaseIr.SemanticStageBit.resolveReferences))
             {
                 putInLine(" -- resolves to ");
-                if(auto refIr = cast(Asn1ValueReferenceIr)ir.getResolvedValue())
-                {
-                    // If we're referencing another reference, don't call .visit()
-                    // as it'll end up printing out the entire reference chain, which
-                    // I don't like - so only print out the first hop in the chain instead.
-                    if(refIr.moduleRef.length > 0)
-                    {
-                        putInLine(refIr.moduleRef);
-                        putInLine(".");
-                    }
-                    putInLine(refIr.valueRef);
-                }
-                else
-                {
-                    auto result = ir.getResolvedValue().visit(this);
-                    if(result.isError)
-                        return result;
-                }
+                putInLine(ir.getValueKind());
                 putInLine(" --");
             }
             else

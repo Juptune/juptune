@@ -1,5 +1,10 @@
 name: "Setup Meson for D"
 description: "Setup Meson for D"
+inputs:
+  meson-setup-args:
+    required: false
+    default: ""
+    description: String to pass directly into `meson setup` 
 runs:
   using: composite
   steps:
@@ -18,4 +23,4 @@ runs:
 
     - name: Configure Meson
       shell: sh
-      run: meson setup build --prefix $(pwd)/install
+      run: meson setup build --prefix $(pwd)/install ${{ inputs.meson-setup-args }}
