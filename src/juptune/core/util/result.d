@@ -253,6 +253,9 @@ in(got.isError && expected.isError, "Both results must be errors")
 final class JuptuneResultException : Exception
 {
     import std.exception : basicExceptionCtors;
+
+    Result result = Result.noError;
+
     mixin basicExceptionCtors;
 }
 
@@ -266,5 +269,8 @@ void resultEnforce(Result result)
 
     Appender!(char[]) buffer;
     result.toString(buffer);
-    throw new JuptuneResultException(buffer.data.assumeUnique);
+    
+    auto exception = new JuptuneResultException(buffer.data.assumeUnique);
+    exception.result = result;
+    throw exception;
 }

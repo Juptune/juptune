@@ -76,7 +76,7 @@ Result asn1Parse(
     scope ref Asn1ParserContext context,
     out Asn1ModuleIr modIr,
     scope const(char)[] rawSourceCode,
-    scope Asn1SemanticErrorHandler errorHandler = Asn1NullSemanticErrorHandler.instance,
+    scope Asn1SemanticErrorHandler errorHandler,
 ) @nogc nothrow
 {
     import juptune.data.asn1.lang.ast       : Asn1ModuleDefinitionNode;
@@ -103,7 +103,7 @@ Result asn1Parse(
 Result asn1Semantics(
     scope ref Asn1ParserContext context,
     scope Asn1ModuleIr modIr,
-    scope Asn1SemanticErrorHandler errorHandler = Asn1NullSemanticErrorHandler.instance,
+    scope Asn1SemanticErrorHandler errorHandler,
 ) @nogc nothrow
 {
     import std.traits : EnumMembers;
@@ -117,7 +117,8 @@ Result asn1Semantics(
             semanticStage,
             (_) => Asn1ModuleIr.LookupItemT.init,
             context,
-            Asn1BaseIr.SemanticInfo()
+            Asn1BaseIr.SemanticInfo(),
+            errorHandler
         );
         if(result.isError)
             return result;
@@ -132,7 +133,7 @@ Result asn1ParseWithSemantics(
     out Asn1ModuleIr modIr,
     scope const(char)[] rawSourceCode,
     scope Asn1ModuleRegistry registry,
-    scope Asn1SemanticErrorHandler errorHandler = Asn1NullSemanticErrorHandler.instance,
+    scope Asn1SemanticErrorHandler errorHandler,
 ) @nogc nothrow
 {
     auto result = asn1Parse(context, modIr, rawSourceCode, errorHandler);

@@ -641,7 +641,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                     return false;
                 }
 
-                auto intResult = intIr.asSigned(result);
+                auto intResult = intIr.asSigned(result, this._errors);
                 if(intResult.isError)
                 {
                     if(shouldReport)
@@ -936,7 +936,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                         assert(intIr !is null, "bug: value isn't an intger value, despite us just checking for it?");
                         assert(false, "TODO: Find where/if the spec defines how to deal raw numbers, because I can't find it to save my life");
                         return Result.noError;
-                    });
+                    }, this._errors);
                     if(result.isError)
                         return result;
                 }
@@ -1195,7 +1195,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             else if(auto ir = cast(Asn1ValueRangeConstraintIr)constraint)
             {
                 long assValue;
-                auto result = intValue.asSigned(assValue);
+                auto result = intValue.asSigned(assValue, this._errors);
                 if(result.isError)
                 {
                     if(shouldReport)
@@ -1400,6 +1400,32 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
     Result checkSequenceOfAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
+        auto sequenceOfTypeIr = cast(Asn1SequenceOfTypeIr)asn1GetExactUnderlyingType(type);
+        assert(sequenceOfTypeIr !is null, "bug: how was this function called with an invalid IR type?");
+
+        if(auto sequenceValueIr = cast(Asn1ValueSequenceIr)value)
+        {
+            auto result = sequenceValueIr.foreachSequenceValue((valueIr){
+                return this.visitValueAssignment(sequenceOfTypeIr.getTypeOfItems(), valueIr, symbolName);
+            }, this._errors);
+            if(result.isError)
+                return result;
+        }
+        else if(auto emptyValueIr = cast(Asn1EmptySequenceValueIr)value)
+        {
+            // do nothing
+        }
+        else
+        {
+            this.reportError(
+                value.getRoughLocation(), 
+                Asn1SemanticError.typeMismatch,
+                "symbol '", symbolName, "' of type SEQUENCE OF ", sequenceOfTypeIr.getTypeOfItems().getKindName(),
+                " cannot be assigned value of type ", value.getValueKind(),
+            );
+            return Result.noError;
+        }
+
         bool _;
         return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Unhandled constraint case for SEQUENCE OF?");
@@ -1418,6 +1444,32 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
     Result checkSetOfAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
+        auto sequenceOfTypeIr = cast(Asn1SetOfTypeIr)asn1GetExactUnderlyingType(type);
+        assert(sequenceOfTypeIr !is null, "bug: how was this function called with an invalid IR type?");
+
+        if(auto sequenceValueIr = cast(Asn1ValueSequenceIr)value)
+        {
+            auto result = sequenceValueIr.foreachSequenceValue((valueIr){
+                return this.visitValueAssignment(sequenceOfTypeIr.getTypeOfItems(), valueIr, symbolName);
+            }, this._errors);
+            if(result.isError)
+                return result;
+        }
+        else if(auto emptyValueIr = cast(Asn1EmptySequenceValueIr)value)
+        {
+            // do nothing
+        }
+        else
+        {
+            this.reportError(
+                value.getRoughLocation(), 
+                Asn1SemanticError.typeMismatch,
+                "symbol '", symbolName, "' of type SET OF ", sequenceOfTypeIr.getTypeOfItems().getKindName(),
+                " cannot be assigned value of type ", value.getValueKind(),
+            );
+            return Result.noError;
+        }
+
         bool _;
         return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Unhandled constraint case for SET OF?");
@@ -1631,7 +1683,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                 if(!success)
                     wasSuccess = false;
                 return result;
-            });
+            }, this._errors);
         }
         else if(auto ir = cast(Asn1ContainedSubtypeConstraintIr)constraint)
         {
@@ -2358,6 +2410,80 @@ unittest
     ]);
 }
 
+@("ValueAssignment - SEQUENCE OF")
+unittest
+{
+    alias Harness = GenericTestHarness!(Asn1ModuleIr, Asn1ModuleIr, (ref parser){
+        Asn1ModuleDefinitionNode node;
+        parser.ModuleDefinition(node).resultAssert;
+        return node;
+    });
+
+    with(Harness) run([
+        "No constraint - success - values": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                S ::= SEQUENCE OF INTEGER
+                s S ::= { 1, 2, 3 }
+            END
+        `, Asn1SemanticError.none),
+        "No constraint - success - empty": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                S ::= SEQUENCE OF INTEGER
+                s S ::= {}
+            END
+        `, Asn1SemanticError.none),
+        "No constraint - wrong type": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                S ::= SEQUENCE OF INTEGER
+                s S ::= "abc123"
+            END
+        `, Asn1SemanticError.typeMismatch),
+        "No constraint - wrong item type": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                S ::= SEQUENCE OF INTEGER
+                s S ::= { 1, TRUE, 3 }
+            END
+        `, Asn1SemanticError.typeMismatch),
+    ]);
+}
+
+@("ValueAssignment - SET OF")
+unittest
+{
+    alias Harness = GenericTestHarness!(Asn1ModuleIr, Asn1ModuleIr, (ref parser){
+        Asn1ModuleDefinitionNode node;
+        parser.ModuleDefinition(node).resultAssert;
+        return node;
+    });
+
+    with(Harness) run([
+        "No constraint - success - values": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                S ::= SET OF INTEGER
+                s S ::= { 1, 2, 3 }
+            END
+        `, Asn1SemanticError.none),
+        "No constraint - success - empty": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                S ::= SET OF INTEGER
+                s S ::= {}
+            END
+        `, Asn1SemanticError.none),
+        "No constraint - wrong type": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                S ::= SET OF INTEGER
+                s S ::= "abc123"
+            END
+        `, Asn1SemanticError.typeMismatch),
+        "No constraint - wrong item type": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                S ::= SET OF INTEGER
+                s S ::= { 1, TRUE, 3 }
+            END
+        `, Asn1SemanticError.typeMismatch),
+    ]);
+}
+
 @("Constraints - ensuring value references are handled")
 unittest
 {
@@ -2420,6 +2546,27 @@ unittest
                 c INTEGER ::= 1
                 B ::= INTEGER (a..b)
                 b B ::= 0
+            END
+        `, Asn1SemanticError.none),
+    ]);
+}
+
+@("Asn1Ir - one off edge cases")
+unittest
+{
+    alias Harness = GenericTestHarness!(Asn1ModuleIr, Asn1ModuleIr, (ref parser){
+        Asn1ModuleDefinitionNode node;
+        parser.ModuleDefinition(node).resultAssert;
+        return node;
+    });
+
+    with(Harness) run([
+        "ensure that default values can lookup type-scoped references": T(`
+            Unittest DEFINITIONS ::= BEGIN
+                I ::= INTEGER { v1(0) }
+                S ::= SEQUENCE {
+                    i I DEFAULT v1
+                }
             END
         `, Asn1SemanticError.none),
     ]);
@@ -2498,7 +2645,7 @@ private template GenericTestHarness(NodeToIrT, ActualIrT, alias ParseFunc, alias
                 assert(token.type == Asn1Token.Type.eof, "Expected no more tokens, but got: "~token.to!string);
 
                 foreach(stage; EnumMembers!(Asn1ModuleIr.SemanticStageBit))
-                    ir.doSemanticStage(stage, (_) => Asn1ModuleIr.LookupItemT.init, context, Asn1ModuleIr.SemanticInfo()).resultAssert; // @suppress(dscanner.style.long_line)
+                    ir.doSemanticStage(stage, (_) => Asn1ModuleIr.LookupItemT.init, context, Asn1ModuleIr.SemanticInfo(), Asn1NullSemanticErrorHandler.instance).resultAssert; // @suppress(dscanner.style.long_line)
 
                 scope errors = new ErrorCollector();
                 scope typeChecker = new Asn1TypeCheckVisitor(errors);

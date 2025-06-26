@@ -737,7 +737,7 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
                     return result;
                 putInLine(" ");
                 return Result.noError;
-            });
+            }, Asn1NullSemanticErrorHandler.instance);
             if(result.isError)
                 return result;
             putInLine("}");
@@ -761,7 +761,7 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
                 if(result.isError)
                     return result;
                 return Result.noError;
-            });
+            }, Asn1NullSemanticErrorHandler.instance);
             if(result.isError)
                 return result;
             putInLine(" }");
@@ -872,7 +872,7 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
                     putInLine(" ^ ");
                 isFirst = false;
                 return constraint.visit(this);
-            });
+            }, Asn1NullSemanticErrorHandler.instance);
             if(result.isError)
                 return result;
         }

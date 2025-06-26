@@ -11,7 +11,7 @@ import std.stdio : writeln;
 import std.getopt;
 
 import juptune.core.util : resultEnforce, JuptuneResultException;
-import juptune.data.asn1.lang : Asn1PrinterVisitor, Asn1StringPrinterHandler;
+import juptune.data.asn1.lang : Asn1PrinterVisitor, Asn1StringPrinterHandler, Asn1SemanticError, Asn1ParserError;
 
 import dasn1.context : CompilerContext;
 
@@ -62,9 +62,20 @@ int printCommand(string[] args)
     }
     catch(JuptuneResultException exec)
     {
-        // TODO: Handle results directly instead of using resultEnforce, otherwise it's really hard
-        //       to create consistent looking error messages.
-        writeln(exec.msg);
+        if(exec.result.isErrorType!Asn1SemanticError)
+        {
+            // do nothing - the error handler should've been called.
+        }
+        else if(exec.result.isErrorType!Asn1ParserError)
+        {
+            writeln(
+                "[", exec.result.errorType, "] ",
+                exec.result.error, ": ", exec.result.context.slice
+            );
+        }
+        else
+            writeln(exec.msg);
+
         return 1;
     }
 

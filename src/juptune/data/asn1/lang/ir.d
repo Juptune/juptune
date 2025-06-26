@@ -233,7 +233,7 @@ abstract class Asn1BaseIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         if(this._stageBits & stageBit)
@@ -248,7 +248,7 @@ abstract class Asn1BaseIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow;
 }
 
@@ -593,7 +593,7 @@ final class Asn1ModuleIr : Asn1BaseIr
 
     Result addAssignment(
         Asn1AssignmentIr ass,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     {
         if(this._symbolsByName.getPtr(ass.getSymbolName()) !is null)
@@ -614,7 +614,7 @@ final class Asn1ModuleIr : Asn1BaseIr
 
     Result setImports(
         Asn1ImportsIr imports,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     in(imports !is null, "imports is null")
     {
@@ -724,32 +724,31 @@ final class Asn1ModuleIr : Asn1BaseIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         info.tagDefault = this._tagDefault;
 
-        auto fallbackLookup = lookup;
-        lookup = (refNode) {
+        scope LookupFunc newLookup = (refNode) {
             auto resultIr = this.lookup(refNode);
-            return resultIr.isNull ? fallbackLookup(refNode) : resultIr;
+            return resultIr.isNull ? lookup(refNode) : resultIr;
         };
 
-        auto result = this._moduleVersion.doSemanticStage(stageBit, lookup, context, info, errors);
+        auto result = this._moduleVersion.doSemanticStage(stageBit, newLookup, context, info, errors);
         if(result.isError)
             return result;
         
-        result = this._exports.doSemanticStage(stageBit, lookup, context, info, errors);
+        result = this._exports.doSemanticStage(stageBit, newLookup, context, info, errors);
         if(result.isError)
             return result;
         
-        result = this._imports.doSemanticStage(stageBit, lookup, context, info, errors);
+        result = this._imports.doSemanticStage(stageBit, newLookup, context, info, errors);
         if(result.isError)
             return result;
 
         foreach(ass; this._assignments)
         {
-            result = ass.doSemanticStage(stageBit, lookup, context, info, errors);
+            result = ass.doSemanticStage(stageBit, newLookup, context, info, errors);
             if(result.isError)
                 return result;
         }
@@ -844,7 +843,7 @@ final class Asn1ExportsIr : Asn1BaseIr
 
     Result addExport(
         Asn1ValueReferenceIr valueRefIr,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     in(!this._exportsAll, "addExport cannot be used when EXPORTS ALL is in use")
     in(valueRefIr !is null, "valueRefIr is null")
@@ -873,7 +872,7 @@ final class Asn1ExportsIr : Asn1BaseIr
 
     Result addExport(
         Asn1TypeReferenceIr typeRefIr,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     in(!this._exportsAll, "addExport cannot be used when EXPORTS ALL is in use")
     in(typeRefIr !is null, "typeRefIr is null")
@@ -912,7 +911,7 @@ final class Asn1ExportsIr : Asn1BaseIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         // NOTE: We intentionally don't destructively replace references in this type,
@@ -970,7 +969,7 @@ final class Asn1ImportsIr : Asn1BaseIr
         scope Result delegate(
             scope Result delegate(Asn1BaseIr ir) @nogc nothrow addImport,
         ) @nogc nothrow populateImports,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     in(!this._importsLock, "cannot have multiple active calls of this function at once, due to a small risk of memory corruption") // @suppress(dscanner.style.long_line)
     {
@@ -1036,7 +1035,7 @@ final class Asn1ImportsIr : Asn1BaseIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         foreach(ref item; this._imports)
@@ -1191,20 +1190,19 @@ final class Asn1ValueAssignmentIr : Asn1AssignmentIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = this._type.doSemanticStage(stageBit, lookup, context, info, errors);
         if(result.isError)
             return result;
 
-        scope fallbackLookup = lookup;
-        lookup = (ir) {
+        scope LookupFunc newLookup = (ir) {
             auto resolved = this._type.lookup(ir);
-            return resolved.isNull ? fallbackLookup(ir) : resolved;
+            return resolved.isNull ? lookup(ir) : resolved;
         };
 
-        result = this._value.doSemanticStage(stageBit, lookup, context, info, errors);
+        result = this._value.doSemanticStage(stageBit, newLookup, context, info, errors);
         if(result.isError)
             return result;
 
@@ -1241,7 +1239,7 @@ final class Asn1TypeAssignmentIr : Asn1AssignmentIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = this._type.doSemanticStage(stageBit, lookup, context, info, errors);
@@ -1292,7 +1290,7 @@ abstract class Asn1TypeIr : Asn1BaseIr
     private Result setConstraint(
         Asn1ConstraintIr constraint, 
         scope out Asn1ConstraintIr target,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     in(constraint !is null, "constraint is null")
     {
@@ -1327,7 +1325,7 @@ abstract class Asn1TypeIr : Asn1BaseIr
 
     Result setMainConstraint(
         Asn1ConstraintIr constraint,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     ) 
     in(this._mainConstraint is null, "Main constraint has already been set")
         => setConstraint(
@@ -1338,7 +1336,7 @@ abstract class Asn1TypeIr : Asn1BaseIr
 
     Result setAdditionalConstraint(
         Asn1ConstraintIr constraint,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     in(this._mainConstraint !is null, "Attempted to set additional constraint befor setting main constraint")
     in(this._additionalConstraint is null, "Additional constraint has already been set")
@@ -1368,26 +1366,25 @@ abstract class Asn1TypeIr : Asn1BaseIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         // Allow constraints to reference type-specific values
-        auto fallbackLookup = lookup;
-        lookup = (refNode) {
+        scope LookupFunc newLookup = (refNode) {
             auto resultIr = this.lookup(refNode);
-            return resultIr.isNull ? fallbackLookup(refNode) : resultIr;
+            return resultIr.isNull ? lookup(refNode) : resultIr;
         };
 
         if(this._mainConstraint !is null)
         {
-            auto result = this._mainConstraint.doSemanticStage(stageBit, lookup, context, info, errors);
+            auto result = this._mainConstraint.doSemanticStage(stageBit, newLookup, context, info, errors);
             if(result.isError)
                 return result;
         }
 
         if(this._additionalConstraint !is null)
         {
-            auto result = this._additionalConstraint.doSemanticStage(stageBit, lookup, context, info, errors);
+            auto result = this._additionalConstraint.doSemanticStage(stageBit, newLookup, context, info, errors);
             if(result.isError)
                 return result;
         }
@@ -1415,7 +1412,7 @@ private final class Asn1BasicTypeIr(string Kind, ubyte UniversalTag, ConstraintB
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = super.doSemanticStageImpl(stageBit, lookup, context, info, errors);
@@ -1454,7 +1451,7 @@ final class Asn1BitStringTypeIr : Asn1TypeIr
     Result addNamedBit(NodeT)(
         const(char)[] name,
         NodeT node, 
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     if(is(NodeT == Asn1IntegerValueIr) || is(NodeT == Asn1ValueReferenceIr))
     in(node !is null, "named bit value is null")
@@ -1524,7 +1521,7 @@ final class Asn1BitStringTypeIr : Asn1TypeIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = super.doSemanticStageImpl(stageBit, lookup, context, info, errors);
@@ -1591,7 +1588,7 @@ final class Asn1ChoiceTypeIr : Asn1TypeIr
     Result addChoice(
         const(char)[] name,
         Asn1TypeIr type,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     {
         import std.algorithm : any;
@@ -1647,7 +1644,7 @@ final class Asn1ChoiceTypeIr : Asn1TypeIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = super.doSemanticStageImpl(stageBit, lookup, context, info, errors);
@@ -1703,7 +1700,7 @@ final class Asn1EnumeratedTypeIr : Asn1TypeIr
     Result addEnumerationImplicit(
         const(char)[] name,
         Asn1IntegerValueIr emptyValue, // Value doesn't matter, we just need an allocated object to overwrite the data of later.
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     in(emptyValue !is null, "emptyValue is null")
     {
@@ -1725,7 +1722,7 @@ final class Asn1EnumeratedTypeIr : Asn1TypeIr
     Result addEnumerationExplicit(IrT)(
         const(char)[] name,
         IrT enumeration,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     if(is(IrT == Asn1ValueIr) || is(IrT == Asn1ValueReferenceIr) || is(IrT == Asn1IntegerValueIr))
     in(enumeration !is null, "enumeration is null")
@@ -1812,7 +1809,7 @@ final class Asn1EnumeratedTypeIr : Asn1TypeIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = super.doSemanticStageImpl(stageBit, lookup, context, info, errors);
@@ -1881,7 +1878,7 @@ final class Asn1IntegerTypeIr : Asn1TypeIr
     Result addNamedNumber(NodeT)(
         const(char)[] name,
         NodeT node, 
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     if(is(NodeT == Asn1IntegerValueIr) || is(NodeT == Asn1ValueReferenceIr))
     in(node !is null, "named number value is null")
@@ -1951,7 +1948,7 @@ final class Asn1IntegerTypeIr : Asn1TypeIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = super.doSemanticStageImpl(stageBit, lookup, context, info, errors);
@@ -2066,7 +2063,7 @@ private final class Asn1SequenceTypeBase(string Kind, ubyte UniversalTag) : Asn1
         const(char)[] name,
         Asn1TypeIr node,
         bool isOptional,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     in(node !is null, "component is null")
     {
@@ -2097,7 +2094,7 @@ private final class Asn1SequenceTypeBase(string Kind, ubyte UniversalTag) : Asn1
         const(char)[] name,
         Asn1TypeIr node,
         Asn1ValueIr value,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     in(node !is null, "component is null")
     {
@@ -2171,7 +2168,7 @@ private final class Asn1SequenceTypeBase(string Kind, ubyte UniversalTag) : Asn1
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = super.doSemanticStageImpl(stageBit, lookup, context, info, errors);
@@ -2183,10 +2180,15 @@ private final class Asn1SequenceTypeBase(string Kind, ubyte UniversalTag) : Asn1
             result = item.type.doSemanticStage(stageBit, lookup, context, info, errors);
             if(result.isError)
                 return result;
+
+            scope LookupFunc newLookup = (refNode) {
+                auto resultIr = item.type.lookup(refNode);
+                return resultIr.isNull ? lookup(refNode) : resultIr;
+            };
             
             if(item.defaultValue !is null)
             {
-                result = item.defaultValue.doSemanticStage(stageBit, lookup, context, info, errors);
+                result = item.defaultValue.doSemanticStage(stageBit, newLookup, context, info, errors);
                 if(result.isError)
                     return result;
             }
@@ -2249,7 +2251,7 @@ private final class Asn1SequenceOfTypeBase(string Kind, ubyte UniversalTag) : As
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = super.doSemanticStageImpl(stageBit, lookup, context, info, errors);
@@ -2347,7 +2349,7 @@ final class Asn1TaggedTypeIr : Asn1TypeIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = super.doSemanticStageImpl(stageBit, lookup, context, info, errors);
@@ -2496,7 +2498,7 @@ final class Asn1TypeReferenceIr : Asn1TypeIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = super.doSemanticStageImpl(stageBit, lookup, context, info, errors);
@@ -2597,7 +2599,7 @@ final class Asn1BooleanValueIr : Asn1ValueIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
         => Result.noError;
 }
@@ -2632,7 +2634,7 @@ final class Asn1ChoiceValueIr : Asn1ValueIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = this._value.doSemanticStage(stageBit, lookup, context, info, errors);
@@ -2672,7 +2674,7 @@ final class Asn1IntegerValueIr : Asn1ValueIr
     Asn1Token.Number getNumber() => this._token.asNumber;
     override string getValueKind() => "INTEGER";
     
-    Result asUnsigned(out ulong value, scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance)
+    Result asUnsigned(out ulong value, scope Asn1SemanticErrorHandler errors)
     {
         if(this._isNegative)
         {
@@ -2704,7 +2706,7 @@ final class Asn1IntegerValueIr : Asn1ValueIr
         return Result.noError;
     }
     
-    Result asSigned(out long value, scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance)
+    Result asSigned(out long value, scope Asn1SemanticErrorHandler errors)
     {
         if(
             !this._token.asNumber.canFitNatively 
@@ -2735,7 +2737,7 @@ final class Asn1IntegerValueIr : Asn1ValueIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
         => Result.noError;
 }
@@ -2758,7 +2760,7 @@ final class Asn1NullValueIr : Asn1ValueIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
         => Result.noError;
 }
@@ -2788,7 +2790,7 @@ final class Asn1CstringValueIr : Asn1ValueIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
         => Result.noError;
 }
@@ -2821,7 +2823,7 @@ final class Asn1HstringValueIr : Asn1ValueIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
         => Result.noError;
 }
@@ -2854,7 +2856,7 @@ final class Asn1BstringValueIr : Asn1ValueIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
         => Result.noError;
 }
@@ -2883,7 +2885,7 @@ final class Asn1ValueSequenceIr : Asn1ValueIr
 
     Result foreachSequenceValue(
         scope Result delegate(Asn1ValueIr) @nogc nothrow handler,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     {
         foreach(value; this._values)
@@ -2911,7 +2913,7 @@ final class Asn1ValueSequenceIr : Asn1ValueIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         foreach(ref value; this._values)
@@ -2950,7 +2952,7 @@ final class Asn1NamedValueSequenceIr : Asn1ValueIr
     Result addSequenceNamedValue(
         const(char)[] name, 
         Asn1ValueIr value,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     in(name.length > 0, "name is empty?")
     in(value !is null, "value is null")
@@ -2976,7 +2978,7 @@ final class Asn1NamedValueSequenceIr : Asn1ValueIr
 
     Result foreachSequenceNamedValue(
         scope Result delegate(const(char)[], Asn1ValueIr) @nogc nothrow handler,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     {
         foreach(value; this._values)
@@ -3002,7 +3004,7 @@ final class Asn1NamedValueSequenceIr : Asn1ValueIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         foreach(ref value; this._values)
@@ -3040,7 +3042,7 @@ final class Asn1ObjectIdSequenceValueIr : Asn1ValueIr
 
     Result foreachObjectId(
         scope Result delegate(Asn1ValueIr) @nogc nothrow handler,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     {
         foreach(value; this._values)
@@ -3068,7 +3070,7 @@ final class Asn1ObjectIdSequenceValueIr : Asn1ValueIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         foreach(ref value; this._values)
@@ -3104,7 +3106,7 @@ final class Asn1EmptySequenceValueIr : Asn1ValueIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
         => Result.noError;
 }
@@ -3181,7 +3183,7 @@ final class Asn1ValueReferenceIr : Asn1ValueIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         if(stageBit == SemanticStageBit.resolveReferences)
@@ -3296,7 +3298,7 @@ final class Asn1UnionConstraintIr : Asn1ConstraintIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         foreach(constraint; this._constraints)
@@ -3336,7 +3338,7 @@ final class Asn1IntersectionConstraintIr : Asn1ConstraintIr
 
     Result foreachIntersectionConstraint(
         scope Result delegate(Asn1ConstraintIr) @nogc nothrow handler,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance
+        scope Asn1SemanticErrorHandler errors
     )
     {
         foreach(item; this._constraints)
@@ -3362,7 +3364,7 @@ final class Asn1IntersectionConstraintIr : Asn1ConstraintIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         foreach(constraint; this._constraints)
@@ -3406,7 +3408,7 @@ final class Asn1ConstraintWithExclusionsIr : Asn1ConstraintIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = this._constraint.doSemanticStage(stageBit, lookup, context, info, errors);
@@ -3449,7 +3451,7 @@ final class Asn1SingleValueConstraintIr : Asn1ConstraintIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = this._value.doSemanticStage(stageBit, lookup, context, info, errors);
@@ -3488,7 +3490,7 @@ final class Asn1ContainedSubtypeConstraintIr : Asn1ConstraintIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = this._type.doSemanticStage(stageBit, lookup, context, info, errors);
@@ -3536,7 +3538,7 @@ final class Asn1ValueRangeConstraintIr : Asn1ConstraintIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         if(this._lower.valueIr !is null)
@@ -3592,7 +3594,7 @@ final class Asn1PermittedAlphabetConstraintIr : Asn1ConstraintIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = this._constraint.doSemanticStage(stageBit, lookup, context, info, errors);
@@ -3645,7 +3647,7 @@ final class Asn1SizeConstraintIr : Asn1ConstraintIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = this._constraint.doSemanticStage(stageBit, lookup, context, info, errors);
@@ -3691,7 +3693,7 @@ final class Asn1PatternConstraintIr : Asn1ConstraintIr
         scope LookupFunc lookup,
         scope ref Asn1ParserContext context,
         SemanticInfo info,
-        scope Asn1SemanticErrorHandler errors = Asn1NullSemanticErrorHandler.instance,
+        scope Asn1SemanticErrorHandler errors,
     ) @nogc nothrow
     {
         auto result = this._value.doSemanticStage(stageBit, lookup, context, info, errors);
@@ -3832,11 +3834,11 @@ unittest
 
             ulong number;
             assert(cValue !is null);
-            cValue.asUnsigned(number).resultAssert;
+            cValue.asUnsigned(number, Asn1NullSemanticErrorHandler.instance).resultAssert;
             assert(number == 1);
 
             assert(dValue !is null);
-            dValue.asUnsigned(number).resultAssert;
+            dValue.asUnsigned(number, Asn1NullSemanticErrorHandler.instance).resultAssert;
             assert(number == 3);
             // https://www.youtube.com/watch?v=SlSylJRwtCk&pp=ygUMaXQncyB3b3JraW5n
         }),
@@ -3892,7 +3894,8 @@ unittest
                         stage,
                         (_) => Asn1ModuleIr.LookupItemT.init,
                         context,
-                        Asn1ModuleIr.SemanticInfo()
+                        Asn1ModuleIr.SemanticInfo(),
+                        Asn1NullSemanticErrorHandler.instance
                     );
                     if(result.isError)
                         resultAssertSameCode!Asn1SemanticError(result, Result.make(test.expectedError));

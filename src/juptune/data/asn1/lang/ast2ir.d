@@ -335,6 +335,7 @@ unittest
                 (_) => Asn1BaseIr.LookupItemT.init,
                 context,
                 Asn1BaseIr.SemanticInfo(),
+                Asn1NullSemanticErrorHandler.instance,
             ).resultAssert;
 
             auto i = cast(Asn1ValueAssignmentIr)ir.lookupSymbolOrNull("i");
@@ -344,7 +345,7 @@ unittest
             assert(intIr !is null);
 
             long number;
-            intIr.asSigned(number).resultAssert;
+            intIr.asSigned(number, Asn1NullSemanticErrorHandler.instance).resultAssert;
             assert(number == 400);
         })
     ]);
@@ -734,7 +735,7 @@ Result asn1AstToIr(
 
                     if(constraintIr !is null)
                     {
-                        if(auto r = ir.setMainConstraint(constraintIr))
+                        if(auto r = ir.setMainConstraint(constraintIr, Asn1NullSemanticErrorHandler.instance))
                             return r;
 
                         if(isExtensible)
@@ -742,7 +743,7 @@ Result asn1AstToIr(
 
                         if(additionalConstraintIr !is null)
                         {
-                            if(auto r = ir.setAdditionalConstraint(additionalConstraintIr))
+                            if(auto r = ir.setAdditionalConstraint(additionalConstraintIr, Asn1NullSemanticErrorHandler.instance)) // @suppress(dscanner.style.long_line)
                                 return r;
                         }
                     }
@@ -821,7 +822,7 @@ unittest
         "Plain": T("BIT STRING", (ir){ assert(ir !is null); }),
         "NamedBitList": T("BIT STRING { a (12), b (valueRef), c (MyMod.valueRef) }", (ir){
             ulong value;
-            ir.getByName!Asn1IntegerValueIr("a").asUnsigned(value).resultAssert;
+            ir.getByName!Asn1IntegerValueIr("a").asUnsigned(value, Asn1NullSemanticErrorHandler.instance).resultAssert;
             assert(value == 12);
             assert(ir.getByName!Asn1ValueReferenceIr("b").getFullString() == "valueRef");
             assert(ir.getByName!Asn1ValueReferenceIr("c").getFullString() == "MyMod.valueRef");
@@ -1152,7 +1153,7 @@ unittest
                     length++;
 
                     long value;
-                    (cast(Asn1IntegerValueIr)number).asSigned(value).resultAssert;
+                    (cast(Asn1IntegerValueIr)number).asSigned(value, Asn1NullSemanticErrorHandler.instance).resultAssert; // @suppress(dscanner.style.long_line)
                     assert(value == 1);
                 }
                 else if(name == "c")
@@ -1260,7 +1261,7 @@ unittest
         "Plain": T("INTEGER", (ir){ assert(ir !is null); }),
         "NamedNumberList": T("INTEGER { a (-12), b (valueRef), c (MyMod.valueRef) }", (ir){
             long value;
-            ir.getByName!Asn1IntegerValueIr("a").asSigned(value).resultAssert;
+            ir.getByName!Asn1IntegerValueIr("a").asSigned(value, Asn1NullSemanticErrorHandler.instance).resultAssert;
             assert(value == -12);
             assert(ir.getByName!Asn1ValueReferenceIr("b").getFullString() == "valueRef");
             assert(ir.getByName!Asn1ValueReferenceIr("c").getFullString() == "MyMod.valueRef");
@@ -1680,7 +1681,7 @@ unittest
                 assert(cast(Asn1SingleValueConstraintIr)ir);
                 length++;
                 return Result.noError;
-            }).resultAssert;
+            }, Asn1NullSemanticErrorHandler.instance).resultAssert;
             assert(length == 2);
         }),
         "ValueRange - values": T("(1..2)", (main, isExtensible, add){
@@ -2205,12 +2206,12 @@ unittest
     with(Harness) run([
         "Unsigned": T("200", (ir){
             ulong value;
-            ir.asUnsigned(value).resultAssert;
+            ir.asUnsigned(value, Asn1NullSemanticErrorHandler.instance).resultAssert;
             assert(value == 200);
         }),
         "Signed": T("-200", (ir){
             long value;
-            ir.asSigned(value).resultAssert;
+            ir.asSigned(value, Asn1NullSemanticErrorHandler.instance).resultAssert;
             assert(value == -200);
         }),
         "Error - Negative zero": T("-0", Asn1SemanticError.numberCannotBeNegativeZero),

@@ -105,7 +105,7 @@ in(errors !is null, "errors is null")
                     }
 
                     ulong number;
-                    auto result = intIr.asUnsigned(number);
+                    auto result = intIr.asUnsigned(number, errors);
                     if(result.isError)
                         return result;
                     put(number);
@@ -123,7 +123,7 @@ in(errors !is null, "errors is null")
                     );
                 }
                 return Result.noError;
-            });
+            }, errors);
             if(result.isError)
                 return result;
         }
@@ -150,7 +150,7 @@ in(errors !is null, "errors is null")
                     }
 
                     ulong number;
-                    auto result = intIr.asUnsigned(number);
+                    auto result = intIr.asUnsigned(number, errors);
                     if(result.isError)
                         return result;
                     put(number);
@@ -168,7 +168,7 @@ in(errors !is null, "errors is null")
                     );
                 }
                 return Result.noError;
-            });
+            }, errors);
             if(result.isError)
                 return result;
         }
