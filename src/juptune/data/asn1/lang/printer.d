@@ -9,7 +9,7 @@
 module juptune.data.asn1.lang.printer;
 
 import juptune.core.util : Result, resultAssert;
-import juptune.data.asn1.lang.common : Asn1Location;
+import juptune.data.asn1.lang.common : Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
 import juptune.data.asn1.lang.ir; // Intentionally everything
 
 /++
@@ -19,7 +19,7 @@ import juptune.data.asn1.lang.ir; // Intentionally everything
  + Usage:
  +  Pass an instance of this class into `Asn1PrinterVisitor`, and then use the result from `.buffer` as needed.
  + ++/
-final class Asn1StringPrinterHandler : Asn1SemanticErrorHandler
+final class Asn1StringPrinterHandler : Asn1ErrorHandler
 {
     import juptune.core.ds : Array;
 
@@ -71,7 +71,7 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
 {
     private
     {
-        Asn1SemanticErrorHandler _handler;
+        Asn1ErrorHandler _handler;
         Asn1ModuleIr.TagDefault _tagDefault;
     }
 
@@ -80,7 +80,7 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
     // TODO: NOTE that the handler isn't actually for errors... but for constructing the final string.
     //       I'm reusing the interface since it's already exactly what I'd want.
     this(
-        Asn1SemanticErrorHandler handler,
+        Asn1ErrorHandler handler,
         Asn1ModuleIr.TagDefault tagDefault = Asn1ModuleIr.TagDefault.explicit,
     )
     in(handler !is null, "handler is null")
@@ -737,7 +737,7 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
                     return result;
                 putInLine(" ");
                 return Result.noError;
-            }, Asn1NullSemanticErrorHandler.instance);
+            }, Asn1NullErrorHandler.instance);
             if(result.isError)
                 return result;
             putInLine("}");
@@ -761,7 +761,7 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
                 if(result.isError)
                     return result;
                 return Result.noError;
-            }, Asn1NullSemanticErrorHandler.instance);
+            }, Asn1NullErrorHandler.instance);
             if(result.isError)
                 return result;
             putInLine(" }");
@@ -872,7 +872,7 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
                     putInLine(" ^ ");
                 isFirst = false;
                 return constraint.visit(this);
-            }, Asn1NullSemanticErrorHandler.instance);
+            }, Asn1NullErrorHandler.instance);
             if(result.isError)
                 return result;
         }

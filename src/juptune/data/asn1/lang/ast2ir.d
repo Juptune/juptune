@@ -11,7 +11,7 @@ module juptune.data.asn1.lang.ast2ir;
 import juptune.core.util : Result, resultAssert;
 import juptune.data.asn1.lang.ast; // Intentionally everything
 import juptune.data.asn1.lang.ir;  // Intentionally everything
-import juptune.data.asn1.lang.common : Asn1ParserContext, Asn1Location;
+import juptune.data.asn1.lang.common : Asn1ParserContext, Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
 import juptune.data.asn1.lang.parser : Asn1Parser, Asn1ParserError;
 
 /++++ Special ++++/
@@ -20,7 +20,7 @@ Result asn1AstToIr(
     scope Asn1ModuleDefinitionNode node,
     scope out Asn1ModuleIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     auto modIdNode = node.getNode!Asn1ModuleIdentifierNode;
@@ -335,7 +335,7 @@ unittest
                 (_) => Asn1BaseIr.LookupItemT.init,
                 context,
                 Asn1BaseIr.SemanticInfo(),
-                Asn1NullSemanticErrorHandler.instance,
+                Asn1NullErrorHandler.instance,
             ).resultAssert;
 
             auto i = cast(Asn1ValueAssignmentIr)ir.lookupSymbolOrNull("i");
@@ -345,7 +345,7 @@ unittest
             assert(intIr !is null);
 
             long number;
-            intIr.asSigned(number, Asn1NullSemanticErrorHandler.instance).resultAssert;
+            intIr.asSigned(number, Asn1NullErrorHandler.instance).resultAssert;
             assert(number == 400);
         })
     ]);
@@ -355,7 +355,7 @@ Result asn1AstToIr(
     scope Asn1ExportsNode node,
     scope out Asn1ExportsIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     return node.match(
@@ -430,7 +430,7 @@ Result asn1AstToIr(
     scope Asn1ImportsNode node,
     scope out Asn1ImportsIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     Result handleSymbolMod(Asn1SymbolsFromModuleNode symbolModNode)
@@ -544,7 +544,7 @@ Result asn1AstToIr(
     scope Asn1TypeNode node,
     scope out Asn1TypeIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     return node.match(
@@ -735,7 +735,7 @@ Result asn1AstToIr(
 
                     if(constraintIr !is null)
                     {
-                        if(auto r = ir.setMainConstraint(constraintIr, Asn1NullSemanticErrorHandler.instance))
+                        if(auto r = ir.setMainConstraint(constraintIr, Asn1NullErrorHandler.instance))
                             return r;
 
                         if(isExtensible)
@@ -743,7 +743,7 @@ Result asn1AstToIr(
 
                         if(additionalConstraintIr !is null)
                         {
-                            if(auto r = ir.setAdditionalConstraint(additionalConstraintIr, Asn1NullSemanticErrorHandler.instance)) // @suppress(dscanner.style.long_line)
+                            if(auto r = ir.setAdditionalConstraint(additionalConstraintIr, Asn1NullErrorHandler.instance)) // @suppress(dscanner.style.long_line)
                                 return r;
                         }
                     }
@@ -762,7 +762,7 @@ Result asn1AstToIr(
     scope Asn1BitStringTypeNode node,
     scope out Asn1BitStringTypeIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     return node.match(
@@ -822,7 +822,7 @@ unittest
         "Plain": T("BIT STRING", (ir){ assert(ir !is null); }),
         "NamedBitList": T("BIT STRING { a (12), b (valueRef), c (MyMod.valueRef) }", (ir){
             ulong value;
-            ir.getByName!Asn1IntegerValueIr("a").asUnsigned(value, Asn1NullSemanticErrorHandler.instance).resultAssert;
+            ir.getByName!Asn1IntegerValueIr("a").asUnsigned(value, Asn1NullErrorHandler.instance).resultAssert;
             assert(value == 12);
             assert(ir.getByName!Asn1ValueReferenceIr("b").getFullString() == "valueRef");
             assert(ir.getByName!Asn1ValueReferenceIr("c").getFullString() == "MyMod.valueRef");
@@ -835,7 +835,7 @@ Result asn1AstToIr(
     scope Asn1CharacterStringTypeNode node,
     scope out Asn1TypeIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     return node.match(
@@ -932,7 +932,7 @@ Result asn1AstToIr(
     scope Asn1ChoiceTypeNode node,
     scope out Asn1ChoiceTypeIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     Result append(Asn1NamedTypeNode item)
@@ -1060,7 +1060,7 @@ Result asn1AstToIr(
     scope Asn1EnumeratedTypeNode node,
     scope out Asn1EnumeratedTypeIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     Result appendAll(Asn1EnumerationNode enumerations)
@@ -1153,7 +1153,7 @@ unittest
                     length++;
 
                     long value;
-                    (cast(Asn1IntegerValueIr)number).asSigned(value, Asn1NullSemanticErrorHandler.instance).resultAssert; // @suppress(dscanner.style.long_line)
+                    (cast(Asn1IntegerValueIr)number).asSigned(value, Asn1NullErrorHandler.instance).resultAssert; // @suppress(dscanner.style.long_line)
                     assert(value == 1);
                 }
                 else if(name == "c")
@@ -1198,7 +1198,7 @@ Result asn1AstToIr(
     scope Asn1IntegerTypeNode node,
     scope out Asn1IntegerTypeIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     return node.match(
@@ -1261,7 +1261,7 @@ unittest
         "Plain": T("INTEGER", (ir){ assert(ir !is null); }),
         "NamedNumberList": T("INTEGER { a (-12), b (valueRef), c (MyMod.valueRef) }", (ir){
             long value;
-            ir.getByName!Asn1IntegerValueIr("a").asSigned(value, Asn1NullSemanticErrorHandler.instance).resultAssert;
+            ir.getByName!Asn1IntegerValueIr("a").asSigned(value, Asn1NullErrorHandler.instance).resultAssert;
             assert(value == -12);
             assert(ir.getByName!Asn1ValueReferenceIr("b").getFullString() == "valueRef");
             assert(ir.getByName!Asn1ValueReferenceIr("c").getFullString() == "MyMod.valueRef");
@@ -1274,7 +1274,7 @@ Result asn1AstToIrForSequence(AstT, IrT)(
     scope AstT node,
     scope out IrT ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     Result append(Asn1NamedTypeNode item, bool isOptional)
@@ -1473,7 +1473,7 @@ Result asn1AstToIrForSequenceOf(AstT, IrT)(
     scope AstT node,
     scope out IrT ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     return node.match(
@@ -1518,7 +1518,7 @@ Result asn1AstToIr(
     scope Asn1TaggedTypeNode node,
     scope out Asn1TaggedTypeIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     Result set(IrT)(IrT node, Asn1TaggedTypeIr.Encoding encoding)
@@ -1619,7 +1619,7 @@ Result asn1AstToIrForConstraint(
     scope out bool isExtensible,
     scope out Asn1ConstraintIr additionalConstraintIr, // May be null
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     return node.getNode!Asn1ConstraintSpecNode.match(
@@ -1681,7 +1681,7 @@ unittest
                 assert(cast(Asn1SingleValueConstraintIr)ir);
                 length++;
                 return Result.noError;
-            }, Asn1NullSemanticErrorHandler.instance).resultAssert;
+            }, Asn1NullErrorHandler.instance).resultAssert;
             assert(length == 2);
         }),
         "ValueRange - values": T("(1..2)", (main, isExtensible, add){
@@ -1756,7 +1756,7 @@ unittest
                 isExtensible,
                 add,
                 context, 
-                Asn1NullSemanticErrorHandler.instance
+                Asn1NullErrorHandler.instance
             );
 
             if(test.validate !is null)
@@ -1778,7 +1778,7 @@ Result asn1AstToIr(
     scope Asn1ElementSetSpecNode node,
     scope out Asn1ConstraintIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     return node.match(
@@ -1812,7 +1812,7 @@ Result asn1AstToIr(
     scope Asn1IntersectionsNode node,
     scope out Asn1ConstraintIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     assert(node.items.length > 0, "bug: IntersectionsNode has 0 items?");
@@ -1875,7 +1875,7 @@ Result asn1AstToIr(
     scope Asn1ElementsNode node,
     scope out Asn1ConstraintIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     return node.match(
@@ -1950,7 +1950,7 @@ Result asn1AstToIr(
     scope Asn1ValueRangeNode node,
     scope out Asn1ValueRangeConstraintIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     Asn1ValueRangeConstraintIr.Endpoint lowerEndpoint, upperEndpoint;
@@ -2013,7 +2013,7 @@ Result asn1AstToIr(
     scope Asn1ValueNode node,
     scope out Asn1ValueIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     return node.match(
@@ -2170,7 +2170,7 @@ Result asn1AstToIr(
     scope Asn1SignedNumberNode node,
     scope out Asn1IntegerValueIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     return node.match(
@@ -2206,12 +2206,12 @@ unittest
     with(Harness) run([
         "Unsigned": T("200", (ir){
             ulong value;
-            ir.asUnsigned(value, Asn1NullSemanticErrorHandler.instance).resultAssert;
+            ir.asUnsigned(value, Asn1NullErrorHandler.instance).resultAssert;
             assert(value == 200);
         }),
         "Signed": T("-200", (ir){
             long value;
-            ir.asSigned(value, Asn1NullSemanticErrorHandler.instance).resultAssert;
+            ir.asSigned(value, Asn1NullErrorHandler.instance).resultAssert;
             assert(value == -200);
         }),
         "Error - Negative zero": T("-0", Asn1SemanticError.numberCannotBeNegativeZero),
@@ -2222,7 +2222,7 @@ Result asn1AstToIr(
     scope Asn1DefinedValueNode node,
     scope out Asn1ValueReferenceIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     return node.match(
@@ -2264,7 +2264,7 @@ Result asn1AstToIr(
     scope Asn1ObjIdComponentsListNode node,
     scope out Asn1ObjectIdSequenceValueIr ir,
     scope ref Asn1ParserContext context,
-    scope Asn1SemanticErrorHandler errors,
+    scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
     auto objIdIr = context.allocNode!Asn1ObjectIdSequenceValueIr(Asn1Location()); // TODO: Location
@@ -2353,7 +2353,7 @@ version(unittest)
 
                     auto node = ParseFunc(parser);
                     IrT ir;
-                    auto result = Converter(node, ir, context, Asn1NullSemanticErrorHandler.instance);
+                    auto result = Converter(node, ir, context, Asn1NullErrorHandler.instance);
 
                     if(test.validate !is null)
                     {

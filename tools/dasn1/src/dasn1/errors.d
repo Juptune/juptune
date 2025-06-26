@@ -6,9 +6,9 @@
  */
 module dasn1.errors;
 
-import juptune.data.asn1.lang : Asn1SemanticErrorHandler, Asn1Location;
+import juptune.data.asn1.lang : Asn1ErrorHandler, Asn1Location;
 
-final class DefaultErrorHandler : Asn1SemanticErrorHandler
+final class DefaultErrorHandler : Asn1ErrorHandler
 {
     import core.stdc.stdio : printf;
 

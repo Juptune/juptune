@@ -113,3 +113,67 @@ struct Asn1ParserContext
     // Just for monitoring memory (mis)usage
     size_t bytesAllocated() => this.allocator.bytesAllocated;
 }
+
+
+/++++ Error Handling ++++/
+
+abstract class Asn1ErrorHandler
+{
+    import juptune.core.ds : Array, String2;
+
+    @nogc nothrow:
+
+    abstract void startLine(Asn1Location location);
+    abstract void putInLine(scope const(char)[] slice);
+    abstract void endLine();
+    abstract void indent();
+    abstract void dedent();
+
+    String2 errorAndString(Args...)(Asn1Location location, scope auto ref Args args)
+    {
+        import juptune.core.util : toStringSink;
+
+        Array!char buffer;
+
+        static struct Putter
+        {
+            Asn1ErrorHandler handler;
+            Array!char* buffer;
+            void put(scope const(char)[] slice) @nogc nothrow
+            {
+                this.handler.putInLine(slice);
+                buffer.put(slice);
+            }
+        }
+        scope putter = Putter(this, &buffer);
+
+        this.startLine(location);
+        scope(exit) this.endLine();
+
+        foreach(ref arg; args)
+        {
+            static if(!__traits(compiles, putInLine(arg)))
+                toStringSink(arg, putter);
+            else
+            {
+                this.putInLine(arg);
+                buffer.put(arg);
+            }
+        }
+
+        return String2.fromDestroyingArray(buffer);
+    }
+}
+
+final class Asn1NullErrorHandler : Asn1ErrorHandler
+{
+    __gshared instance = new Asn1NullErrorHandler();
+    
+    @nogc nothrow:
+
+    override void startLine(Asn1Location location) {}
+    override void putInLine(scope const(char)[] slice) {}
+    override void endLine() {}
+    override void indent() {}
+    override void dedent() {}
+}

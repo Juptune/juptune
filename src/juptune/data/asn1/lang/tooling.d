@@ -11,15 +11,15 @@ module juptune.data.asn1.lang.tooling;
 
 import juptune.core.ds                  : String2;
 import juptune.core.util                : Result;
-import juptune.data.asn1.lang.common    : Asn1ParserContext, Asn1Location;
-import juptune.data.asn1.lang.ir        : Asn1ModuleIr, Asn1SemanticErrorHandler, Asn1NullSemanticErrorHandler, Asn1BaseIr, Asn1ModuleRegistry; // @suppress(dscanner.style.long_line)
+import juptune.data.asn1.lang.common    : Asn1ParserContext, Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
+import juptune.data.asn1.lang.ir        : Asn1ModuleIr, Asn1BaseIr, Asn1ModuleRegistry;
 
 /++
  + A simple semantic error handler that will always fail an assert if any function is called.
  +
  + This is mainly intended to be used for always-success cases, such as certain types of unittests.
  + ++/
-final class Asn1AlwaysCrashErrorHandler : Asn1SemanticErrorHandler
+final class Asn1AlwaysCrashErrorHandler : Asn1ErrorHandler
 {
     override void startLine(Asn1Location location) { assert(false, "Something tried to generate an error"); }
     override void putInLine(scope const(char)[] slice) { assert(false, "Something tried to generate an error"); }
@@ -33,7 +33,7 @@ final class Asn1AlwaysCrashErrorHandler : Asn1SemanticErrorHandler
  +
  + This is useful for @nogc tools, or other applications where only one thread can write to stdout.
  + ++/
-final class Asn1PrintfErrorHandler : Asn1SemanticErrorHandler
+final class Asn1PrintfErrorHandler : Asn1ErrorHandler
 {
     import core.stdc.stdio : printf;
 
@@ -76,7 +76,7 @@ Result asn1Parse(
     scope ref Asn1ParserContext context,
     out Asn1ModuleIr modIr,
     scope const(char)[] rawSourceCode,
-    scope Asn1SemanticErrorHandler errorHandler,
+    scope Asn1ErrorHandler errorHandler,
 ) @nogc nothrow
 {
     import juptune.data.asn1.lang.ast       : Asn1ModuleDefinitionNode;
@@ -103,7 +103,7 @@ Result asn1Parse(
 Result asn1Semantics(
     scope ref Asn1ParserContext context,
     scope Asn1ModuleIr modIr,
-    scope Asn1SemanticErrorHandler errorHandler,
+    scope Asn1ErrorHandler errorHandler,
 ) @nogc nothrow
 {
     import std.traits : EnumMembers;
@@ -133,7 +133,7 @@ Result asn1ParseWithSemantics(
     out Asn1ModuleIr modIr,
     scope const(char)[] rawSourceCode,
     scope Asn1ModuleRegistry registry,
-    scope Asn1SemanticErrorHandler errorHandler,
+    scope Asn1ErrorHandler errorHandler,
 ) @nogc nothrow
 {
     auto result = asn1Parse(context, modIr, rawSourceCode, errorHandler);

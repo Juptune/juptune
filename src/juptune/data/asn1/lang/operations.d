@@ -10,8 +10,9 @@
 /// but the functions aren't tailored towards user code usage, so may be awkward to use.
 module juptune.data.asn1.lang.operations;
 
-import juptune.core.util         : Result;
-import juptune.data.asn1.lang.ir : Asn1TypeIr, Asn1ValueIr, Asn1SemanticErrorHandler;
+import juptune.core.util                : Result;
+import juptune.data.asn1.lang.common    : Asn1ErrorHandler;
+import juptune.data.asn1.lang.ir        : Asn1TypeIr, Asn1ValueIr;
 
 /++
  + Determines if the two IR nodes are valid OBJECT IDENTIFIER values, and are
@@ -54,7 +55,7 @@ Result asn1AreObjectIdentifiersEqual(IdIrA, IdIrB)(
     scope IdIrA objIdA,
     scope IdIrB objIdB,
     out scope bool areEqual,
-    Asn1SemanticErrorHandler errors,
+    Asn1ErrorHandler errors,
 ) @nogc nothrow
 in(objIdA !is null, "objIdA is null")
 in(objIdB !is null, "objIdB is null")

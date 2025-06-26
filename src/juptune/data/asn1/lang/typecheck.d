@@ -22,7 +22,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     {
         import std.meta : AliasSeq;
 
-        Asn1SemanticErrorHandler _errors;
+        Asn1ErrorHandler _errors;
 
         alias RestrictedCharacterTypes = AliasSeq!(
             Asn1BMPStringTypeIr,
@@ -43,7 +43,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
     @nogc nothrow:
 
-    this(Asn1SemanticErrorHandler errors)
+    this(Asn1ErrorHandler errors)
     in(errors !is null, "errors is null")
     {
         this._errors = errors;
@@ -2572,7 +2572,7 @@ unittest
     ]);
 }
 
-private final class ErrorCollector : Asn1SemanticErrorHandler
+private final class ErrorCollector : Asn1ErrorHandler
 {
     import juptune.core.util.conv : toStringSink;
     import juptune.core.ds : String2, Array;
@@ -2628,7 +2628,7 @@ private template GenericTestHarness(NodeToIrT, ActualIrT, alias ParseFunc, alias
 
                 auto node = ParseFunc(parser);
                 NodeToIrT irFromNode;
-                auto result = Converter(node, irFromNode, context, Asn1NullSemanticErrorHandler.instance);
+                auto result = Converter(node, irFromNode, context, Asn1NullErrorHandler.instance);
 
                 static if(is(NodeToIrT == Asn1TypeIr))
                 {
@@ -2645,7 +2645,7 @@ private template GenericTestHarness(NodeToIrT, ActualIrT, alias ParseFunc, alias
                 assert(token.type == Asn1Token.Type.eof, "Expected no more tokens, but got: "~token.to!string);
 
                 foreach(stage; EnumMembers!(Asn1ModuleIr.SemanticStageBit))
-                    ir.doSemanticStage(stage, (_) => Asn1ModuleIr.LookupItemT.init, context, Asn1ModuleIr.SemanticInfo(), Asn1NullSemanticErrorHandler.instance).resultAssert; // @suppress(dscanner.style.long_line)
+                    ir.doSemanticStage(stage, (_) => Asn1ModuleIr.LookupItemT.init, context, Asn1ModuleIr.SemanticInfo(), Asn1NullErrorHandler.instance).resultAssert; // @suppress(dscanner.style.long_line)
 
                 scope errors = new ErrorCollector();
                 scope typeChecker = new Asn1TypeCheckVisitor(errors);
