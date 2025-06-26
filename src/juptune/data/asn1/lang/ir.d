@@ -9,6 +9,7 @@
 /// discard a lot of information about the original source code.
 module juptune.data.asn1.lang.ir;
 
+import std.meta     : AliasSeq;
 import std.sumtype  : SumType, match;
 import std.typecons : Nullable, Flag;
 
@@ -1331,6 +1332,7 @@ abstract class Asn1TypeIr : Asn1BaseIr
     {
         this._isConstraintExtensible = true;
     }
+    bool isConstraintExtensible() => this._isConstraintExtensible;
 
     Asn1ConstraintIr getMainConstraintOrNull() => this._mainConstraint;
     Asn1ConstraintIr getAdditionalConstraintOrNull() => this._additionalConstraint;
@@ -1534,6 +1536,22 @@ alias Asn1UniversalStringTypeIr = Asn1BasicTypeIr!("UniversalString", 28, Constr
 alias Asn1UTF8StringTypeIr = Asn1BasicTypeIr!("UTF8String", 12, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
 alias Asn1VideotexStringTypeIr = Asn1BasicTypeIr!("VideotexString", 21, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
 alias Asn1VisibleStringTypeIr = Asn1BasicTypeIr!("VisibleString", 26, ConstraintBit.singleValue | ConstraintBit.containedSubtype | ConstraintBit.valueRange | ConstraintBit.size | ConstraintBit.permittedAlphabet | ConstraintBit.pattern); // @suppress(dscanner.style.long_line)
+
+alias Asn1RestrictedCharacterTypes = AliasSeq!(
+    Asn1BMPStringTypeIr,
+    Asn1GeneralStringTypeIr,
+    Asn1GraphicStringTypeIr,
+    Asn1IA5StringTypeIr,
+    Asn1ISO646StringTypeIr,
+    Asn1NumericStringTypeIr,
+    Asn1PrintableStringTypeIr,
+    Asn1TeletexStringTypeIr,
+    Asn1T61StringTypeIr,
+    Asn1UniversalStringTypeIr,
+    Asn1UTF8StringTypeIr,
+    Asn1VideotexStringTypeIr,
+    Asn1VisibleStringTypeIr,
+);
 
 final class Asn1ChoiceTypeIr : Asn1TypeIr
 {

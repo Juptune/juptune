@@ -485,6 +485,27 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
         return this.visitTypeConstraints(ir);
     }
 
+    override Result visit(Asn1ObjectIdentifierTypeIr ir)
+    {
+        this.visitTypeCommon(ir);
+        this._handler.putInLine("OBJECT IDENTIFIER");
+        return this.visitTypeConstraints(ir);
+    }
+
+    override Result visit(Asn1UtcTimeTypeIr ir)
+    {
+        this.visitTypeCommon(ir);
+        this._handler.putInLine("UTCTime");
+        return this.visitTypeConstraints(ir);
+    }
+
+    override Result visit(Asn1GeneralizedTimeTypeIr ir)
+    {
+        this.visitTypeCommon(ir);
+        this._handler.putInLine("GeneralizedTime");
+        return this.visitTypeConstraints(ir);
+    }
+
     override Result visit(Asn1SequenceTypeIr ir)
     {
         return this.visitSequenceType("SEQUENCE", ir);
@@ -580,6 +601,16 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
         return ir.getUnderlyingType().visit(this);
     }
 
+    static foreach(RestrictedCharacterT; Asn1RestrictedCharacterTypes)
+    {
+        override Result visit(RestrictedCharacterT ir)
+        {
+            this.visitTypeCommon(ir);
+            this._handler.putInLine(ir.getKindName());
+            return this.visitTypeConstraints(ir);
+        }
+    }
+
     private void visitTypeCommon(Asn1TypeIr ir)
     {
         with(this._handler)
@@ -621,9 +652,14 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
             if(result.isError)
                 return result;
         }
+        
+        if(ir.isConstraintExtensible())
+            this._handler.putInLine(", ...");
+        
         if(auto constraint = ir.getAdditionalConstraintOrNull())
         {
-            this._handler.putInLine(", ..., ");
+            if(ir.isConstraintExtensible() || ir.getMainConstraintOrNull() !is null)
+                this._handler.putInLine(", ");
 
             auto result = constraint.visit(this);
             if(result.isError)
@@ -738,7 +774,7 @@ class Asn1PrinterVisitor : Asn1IrVisitor // Intentionally not final
                 putInLine(" --");
             }
             else
-                putInLine(" -- <unresolved - run resolveReferences stage> --");
+                putInLine(" -- <unresolved> --");
         }
 
         return Result.noError;

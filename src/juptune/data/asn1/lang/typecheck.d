@@ -20,25 +20,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
     private
     {
-        import std.meta : AliasSeq;
-
         Asn1ErrorHandler _errors;
-
-        alias RestrictedCharacterTypes = AliasSeq!(
-            Asn1BMPStringTypeIr,
-            Asn1GeneralStringTypeIr,
-            Asn1GraphicStringTypeIr,
-            Asn1IA5StringTypeIr,
-            Asn1ISO646StringTypeIr,
-            Asn1NumericStringTypeIr,
-            Asn1PrintableStringTypeIr,
-            Asn1TeletexStringTypeIr,
-            Asn1T61StringTypeIr,
-            Asn1UniversalStringTypeIr,
-            Asn1UTF8StringTypeIr,
-            Asn1VideotexStringTypeIr,
-            Asn1VisibleStringTypeIr,
-        );
     }
 
     @nogc nothrow:
@@ -140,7 +122,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         else if(auto _ = cast(Asn1CharacterStringTypeIr)exactTypeIr)
             return checkCharacterStringAss(symbolName, typeIr, valueIr);
 
-        static foreach(GenericStringT; RestrictedCharacterTypes)
+        static foreach(GenericStringT; Asn1RestrictedCharacterTypes)
         {
             if(auto _ = cast(GenericStringT)exactTypeIr)
                 return checkRestrictedStringAss!GenericStringT(symbolName, typeIr, valueIr);
@@ -517,7 +499,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         }, false, _, ir.getRoughLocation());
     }
 
-    static foreach(RestrictedCharacterT; RestrictedCharacterTypes)
+    static foreach(RestrictedCharacterT; Asn1RestrictedCharacterTypes)
     {
         override Result visit(RestrictedCharacterT ir)
         {
@@ -1389,46 +1371,20 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         }, false, _, value.getRoughLocation());
     }
 
+    Result checkCharacterStringAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        bool _;
+        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
+            assert(false, "bug: Unhandled constraint case for CHARACTER STRING?");
+            return Result.noError;
+        }, false, _, value.getRoughLocation());
+    }
+
     Result checkSequenceAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
         bool _;
         return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Unhandled constraint case for SEQUENCE?");
-            return Result.noError;
-        }, false, _, value.getRoughLocation());
-    }
-
-    Result checkSequenceOfAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
-    {
-        auto sequenceOfTypeIr = cast(Asn1SequenceOfTypeIr)asn1GetExactUnderlyingType(type);
-        assert(sequenceOfTypeIr !is null, "bug: how was this function called with an invalid IR type?");
-
-        if(auto sequenceValueIr = cast(Asn1ValueSequenceIr)value)
-        {
-            auto result = sequenceValueIr.foreachSequenceValue((valueIr){
-                return this.visitValueAssignment(sequenceOfTypeIr.getTypeOfItems(), valueIr, symbolName);
-            }, this._errors);
-            if(result.isError)
-                return result;
-        }
-        else if(auto emptyValueIr = cast(Asn1EmptySequenceValueIr)value)
-        {
-            // do nothing
-        }
-        else
-        {
-            this.reportError(
-                value.getRoughLocation(), 
-                Asn1SemanticError.typeMismatch,
-                "symbol '", symbolName, "' of type SEQUENCE OF ", sequenceOfTypeIr.getTypeOfItems().getKindName(),
-                " cannot be assigned value of type ", value.getValueKind(),
-            );
-            return Result.noError;
-        }
-
-        bool _;
-        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
-            assert(false, "bug: Unhandled constraint case for SEQUENCE OF?");
             return Result.noError;
         }, false, _, value.getRoughLocation());
     }
@@ -1442,9 +1398,19 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
         }, false, _, value.getRoughLocation());
     }
 
+    Result checkSequenceOfAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        return this.checkSequenceOfLikeAss!(Asn1SequenceOfTypeIr, "SEQUENCE OF")(symbolName, type, value);
+    }
+
     Result checkSetOfAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
     {
-        auto sequenceOfTypeIr = cast(Asn1SetOfTypeIr)asn1GetExactUnderlyingType(type);
+        return this.checkSequenceOfLikeAss!(Asn1SetOfTypeIr, "SET OF")(symbolName, type, value);
+    }
+
+    Result checkSequenceOfLikeAss(IrT, string KindName)(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
+    {
+        auto sequenceOfTypeIr = cast(IrT)asn1GetExactUnderlyingType(type);
         assert(sequenceOfTypeIr !is null, "bug: how was this function called with an invalid IR type?");
 
         if(auto sequenceValueIr = cast(Asn1ValueSequenceIr)value)
@@ -1464,7 +1430,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             this.reportError(
                 value.getRoughLocation(), 
                 Asn1SemanticError.typeMismatch,
-                "symbol '", symbolName, "' of type SET OF ", sequenceOfTypeIr.getTypeOfItems().getKindName(),
+                "symbol '", symbolName, "' of type ", KindName, " ", sequenceOfTypeIr.getTypeOfItems().getKindName(),
                 " cannot be assigned value of type ", value.getValueKind(),
             );
             return Result.noError;
@@ -1472,16 +1438,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
         bool _;
         return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
-            assert(false, "bug: Unhandled constraint case for SET OF?");
-            return Result.noError;
-        }, false, _, value.getRoughLocation());
-    }
-
-    Result checkCharacterStringAss(const(char)[] symbolName, Asn1TypeIr type, Asn1ValueIr value)
-    {
-        bool _;
-        return this.checkConstraints(type, (constraint, shouldReport, out wasSuccess){
-            assert(false, "bug: Unhandled constraint case for CHARACTER STRING?");
+            assert(false, "bug: Unhandled constraint case for "~KindName~"?");
             return Result.noError;
         }, false, _, value.getRoughLocation());
     }
