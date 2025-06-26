@@ -9,7 +9,7 @@
 module juptune.data.asn1.lang.typecheck;
 
 import juptune.core.util : Result, resultAssert;
-import juptune.data.asn1.lang.common : Asn1Location;
+import juptune.data.asn1.lang.common : Asn1Location, Asn1ErrorHandler;
 import juptune.data.asn1.lang.operations : asn1GetExactUnderlyingType;
 import juptune.data.asn1.lang.ir; // Intentionally everything
 

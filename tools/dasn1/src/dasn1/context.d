@@ -8,9 +8,8 @@ module dasn1.context;
 
 import std.sumtype : SumType, match;
 
-import juptune.core.util : resultEnforce;
-
-import dasn1.errors : DefaultErrorHandler;
+import juptune.core.util        : resultEnforce;
+import juptune.data.asn1.lang   : Asn1PrintfErrorHandler;
 
 struct Source
 {
@@ -18,7 +17,6 @@ struct Source
 
     string debugName;
     string code;
-    DefaultErrorHandler errors;
     Asn1ModuleIr moduleIr; // May be null if parsing hasn't ran yet.
 }
 
@@ -28,14 +26,16 @@ final class CompilerContext
 
     private
     {
-        Asn1ModuleRegistry _registry;
-        Asn1ParserContext  _context;
-        Source[]           _sources;
+        Asn1ModuleRegistry      _registry;
+        Asn1ParserContext       _context;
+        Source[]                _sources;
+        Asn1PrintfErrorHandler  _errors;
     }
 
     this()
     {
         this._registry = new Asn1ModuleRegistry();
+        this._errors = new Asn1PrintfErrorHandler();
     }
 
     void addFromInputArgs(string[] args)
@@ -57,14 +57,14 @@ final class CompilerContext
 
     void addRawCode(string debugName, string code)
     {
-        this._sources ~= Source(debugName, code, new DefaultErrorHandler(debugName, code));
+        this._sources ~= Source(debugName, code);
     }
 
     void addFile(string path)
     {
         import std.file : readText;
         auto code = readText(path);
-        this._sources ~= Source(path, code, new DefaultErrorHandler(path, code));
+        this._sources ~= Source(path, code);
     }
 
     void doSyntaxAnalysis()
@@ -74,8 +74,8 @@ final class CompilerContext
 
         foreach(ref source; this._sources.filter!(s => s.moduleIr is null))
         {
-            asn1Parse(this._context, source.moduleIr, source.code, source.errors).resultEnforce;
-            this._registry.register(source.moduleIr, source.errors).resultEnforce;
+            asn1Parse(this._context, source.moduleIr, source.code, this._errors, source.debugName).resultEnforce;
+            this._registry.register(source.moduleIr, this._errors).resultEnforce;
         }
     }
 
@@ -85,8 +85,10 @@ final class CompilerContext
         import juptune.data.asn1.lang : asn1Semantics;
 
         foreach(ref source; this._sources.filter!(s => s.moduleIr !is null))
-            asn1Semantics(this._context, source.moduleIr, source.errors).resultEnforce;
+            asn1Semantics(this._context, source.moduleIr, this._errors).resultEnforce;
     }
+
+    bool wereErrors() => this._errors.wasCalled;
 
     Source[] sources()
     {

@@ -6,7 +6,6 @@ juptune_data_dep = juptune_data_dep
 
 dasn1_srcs = files(
     './src/dasn1/context.d',
-    './src/dasn1/errors.d',
     './src/dasn1/print.d',
     
     './src/main.d',

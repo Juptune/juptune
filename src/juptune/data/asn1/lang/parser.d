@@ -10,8 +10,9 @@ module juptune.data.asn1.lang.parser;
 
 import std.typecons : Nullable;
 
+import juptune.core.ds               : String2;
 import juptune.core.util             : Result, resultAssert;
-import juptune.data.asn1.lang.common : Asn1ParserContext, Asn1Location;
+import juptune.data.asn1.lang.common : Asn1ParserContext, Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
 import juptune.data.asn1.lang.lexer  : Asn1Lexer, Asn1Token;
 import juptune.data.asn1.lang.ast; // Intentionally everything
 
@@ -66,6 +67,9 @@ struct Asn1Parser
         Asn1ParserContext* _context;
         Asn1Lexer          _lexer;
         ulong              _level;
+
+        Asn1Location _lastErrorLocation;
+        String2 _lastError;
     }
 
     @nogc nothrow:
@@ -109,6 +113,27 @@ struct Asn1Parser
         return this.consume(_);
     }
 
+    Result makeError(ErrorT, Args...)(
+        ErrorT error,
+        string message,
+        const Asn1Location location, 
+        scope const Args args,
+    )
+    {
+        this._lastErrorLocation = location;
+        this._lastError = String2(message, " - ", args);
+        return Result.make(error, message, this._lastError);
+    }
+
+    void reportLastError(scope Asn1ErrorHandler errors)
+    in(errors !is null, "errors is null")
+    in(this._lastErrorLocation != Asn1Location.init, "no error to report")
+    {
+        errors.startLine(this._lastErrorLocation);
+        errors.putInLine(this._lastError.sliceMaybeFromStack);
+        errors.endLine();
+    }
+
     /++++ Parsers (can you tell I'm suicidal) ++++/
 
     Result ModuleDefinition(out Asn1ModuleDefinitionNode node)
@@ -122,7 +147,7 @@ struct Asn1Parser
         Asn1ModuleIdentifierNode identifier;
         if(auto r = ModuleIdentifier(identifier)) return r;
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.rDEFINITIONS) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.rDEFINITIONS) return makeError(
             Asn1ParserError.nonInitialTokenNotFound,
             "expected `DEFINITIONS` when parsing ModuleDefinition",
             token.location, "encountered token of type ", token.type
@@ -139,7 +164,7 @@ struct Asn1Parser
 
                 const typeToken = token;
                 if(auto r = consume(token)) return r;
-                if(token.type != rTAGS) return _lexer.makeError(
+                if(token.type != rTAGS) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected `TAGS` when parsing ModuleDefinition",
                     token.location, "encountered token of type ", token.type
@@ -166,7 +191,7 @@ struct Asn1Parser
         {
             consume().resultAssert;
             if(auto r = consume(token)) return r;
-            if(token.type != Asn1Token.Type.rIMPLIED) return _lexer.makeError(
+            if(token.type != Asn1Token.Type.rIMPLIED) return makeError(
                 Asn1ParserError.nonInitialTokenNotFound,
                 "expected `IMPLIED` to denote `EXTENSIBILITY IMPLIED` when parsing ModuleDefinition",
                 token.location, "encountered token of type ", token.type
@@ -183,13 +208,13 @@ struct Asn1Parser
         }
 
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.assignment) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.assignment) return makeError(
             Asn1ParserError.nonInitialTokenNotFound,
             "expected `::=` when parsing ModuleDefinition",
             token.location, "encountered token of type ", token.type
         );
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.rBEGIN) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.rBEGIN) return makeError(
             Asn1ParserError.nonInitialTokenNotFound,
             "expected `BEGIN` when parsing ModuleDefinition",
             token.location, "encountered token of type ", token.type
@@ -206,7 +231,7 @@ struct Asn1Parser
         else if(auto r = ModuleBody(modBod)) return r.notInitial;
 
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.rEND) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.rEND) return makeError(
             Asn1ParserError.nonInitialTokenNotFound,
             "expected `END` when parsing ModuleDefinition",
             token.location, "encountered token of type ", token.type
@@ -239,7 +264,7 @@ struct Asn1Parser
             {
                 consume().resultAssert;
                 if(auto r = consume(token)) return r;
-                if(token.type != Asn1Token.Type.semicolon) return _lexer.makeError(
+                if(token.type != Asn1Token.Type.semicolon) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected `;` to denote `EXPORT ALL ;` when parsing ModuleDefinition",
                     token.location, "encountered token of type ", token.type
@@ -256,7 +281,7 @@ struct Asn1Parser
                 {
                     if(auto r = SymbolList(symbols)) return r.notInitial;
                     if(auto r = consume(token)) return r;
-                    if(token.type != Asn1Token.Type.semicolon) return _lexer.makeError(
+                    if(token.type != Asn1Token.Type.semicolon) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected `;` to denote end of `EXPORT` when parsing ModuleDefinition",
                         token.location, "encountered token of type ", token.type
@@ -298,14 +323,14 @@ struct Asn1Parser
                     Asn1SymbolListNode symbols;
                     if(auto r = SymbolList(symbols)) return r.notInitial;
                     if(auto r = consume(token)) return r;
-                    if(token.type != Asn1Token.Type.rFROM) return _lexer.makeError(
+                    if(token.type != Asn1Token.Type.rFROM) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected `;` to denote of `IMPORT ... FROM` when parsing Imports",
                         token.location, "encountered token of type ", token.type
                     );
 
                     if(auto r = consume(token)) return r;
-                    if(token.type != Asn1Token.Type.moduleReference) return _lexer.makeError(
+                    if(token.type != Asn1Token.Type.moduleReference) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected module reference after `FROM` when parsing an import",
                         token.location, "encountered token of type ", token.type
@@ -320,7 +345,7 @@ struct Asn1Parser
                         Asn1ObjIdComponentsListNode idList;
                         if(auto r = ObjIdComponentsList(idList)) return r.notInitial;
                         if(auto r = consume(token)) return r;
-                        if(token.type != Asn1Token.Type.rightBracket) return _lexer.makeError(
+                        if(token.type != Asn1Token.Type.rightBracket) return makeError(
                             Asn1ParserError.nonInitialTokenNotFound,
                             "expected `}` after module reference for `FROM` when parsing an import",
                             token.location, "encountered token of type ", token.type
@@ -420,7 +445,7 @@ struct Asn1Parser
             {
                 consume().resultAssert;
                 if(auto r = consume(token)) return r;
-                if(token.type != Asn1Token.Type.rightBracket) return _lexer.makeError(
+                if(token.type != Asn1Token.Type.rightBracket) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected `}` to close parameter list for Symbol",
                     token.location, "encountered token of type ", token.type
@@ -462,7 +487,7 @@ struct Asn1Parser
                 _context.allocNode!Asn1ValueReferenceTokenNode(token)
             );
         }
-        else return _lexer.makeError(
+        else return makeError(
             Asn1ParserError.tokenNotFound,
             "expected module or type reference when parsing Reference",
             token.location, "encountered token of type ", token.type
@@ -479,7 +504,7 @@ struct Asn1Parser
         
         Asn1Token token;
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.moduleReference) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.moduleReference) return makeError(
             Asn1ParserError.tokenNotFound,
             "expected module reference (starts with a capital) when parsing ModuleIdentifier",
             token.location, "encountered token of type ", token.type
@@ -520,7 +545,7 @@ struct Asn1Parser
                 {
                     consume().resultAssert;
                     if(auto r = consume(token)) return r;
-                    if(token.type != Asn1Token.Type.number) return _lexer.makeError(
+                    if(token.type != Asn1Token.Type.number) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected number when parsing named module object identifier component",
                         token.location, "encountered token of type ", token.type
@@ -536,7 +561,7 @@ struct Asn1Parser
                     ));
 
                     if(auto r = consume(token)) return r;
-                    if(token.type != Asn1Token.Type.rightParenthesis) return _lexer.makeError(
+                    if(token.type != Asn1Token.Type.rightParenthesis) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected `)` to close a named module object identifier component",
                         token.location, "encountered token of type ", token.type
@@ -551,7 +576,7 @@ struct Asn1Parser
                     ));
                 }
             }
-            else return _lexer.makeError(
+            else return makeError(
                 Asn1ParserError.nonInitialTokenNotFound,
                 "expected identifier or number when parsing module object identifier component",
                 token.location, "encountered token of type ", token.type
@@ -562,7 +587,7 @@ struct Asn1Parser
         }
 
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.rightBracket) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.rightBracket) return makeError(
             Asn1ParserError.nonInitialTokenNotFound,
             "expected `}` to denote end of module object identifier component list",
             token.location, "encountered token of type ", token.type
@@ -596,7 +621,7 @@ struct Asn1Parser
                 Asn1TypeNode type;
                 if(auto r = Type(type)) return r;
                 if(auto r = consume(token)) return r;
-                if(token.type != Asn1Token.Type.assignment) return _lexer.makeError(
+                if(token.type != Asn1Token.Type.assignment) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected `::=` following type when parsing a ValueSetAssignment",
                     token.location, "encoutered token of type ", token.type
@@ -633,7 +658,7 @@ struct Asn1Parser
             if(auto r = Type(type)) return r;
 
             if(auto r = consume(token)) return r;
-            if(token.type != Asn1Token.Type.assignment) return _lexer.makeError(
+            if(token.type != Asn1Token.Type.assignment) return makeError(
                 Asn1ParserError.nonInitialTokenNotFound,
                 "expected `::=` following value name when parsing a ValueAssignment",
                 token.location, "encoutered token of type ", token.type
@@ -649,7 +674,7 @@ struct Asn1Parser
                 )
             );
         }
-        else return _lexer.makeError(
+        else return makeError(
             Asn1ParserError.tokenNotFound,
             "expected type or identifier when parsing Assignment",
             token.location, "encoutered token of type ", token.type
@@ -667,7 +692,7 @@ struct Asn1Parser
 
         Asn1Token token;
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.identifier) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.identifier) return makeError(
             Asn1ParserError.tokenNotFound,
             "expected identifier to begin a NamedType",
             token.location, "encountered token of type ", token.type
@@ -691,7 +716,7 @@ struct Asn1Parser
 
         Asn1Token token;
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.identifier) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.identifier) return makeError(
             Asn1ParserError.tokenNotFound,
             "expected identifier to begin a NamedNumber",
             token.location, "encountered token of type ", token.type
@@ -700,7 +725,7 @@ struct Asn1Parser
         const identifierToken = token;
 
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.leftParenthesis) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.leftParenthesis) return makeError(
             Asn1ParserError.nonInitialTokenNotFound,
             "expected opening parenthesis as part of a NamedNumber",
             token.location, "encountered token of type ", token.type
@@ -709,7 +734,7 @@ struct Asn1Parser
         Result checkEnd()
         {
             if(auto r = consume(token)) return r;
-            if(token.type != Asn1Token.Type.rightParenthesis) return _lexer.makeError(
+            if(token.type != Asn1Token.Type.rightParenthesis) return makeError(
                 Asn1ParserError.nonInitialTokenNotFound,
                 "expected closing parenthesis as part of a NamedNumber",
                 token.location, "encountered token of type ", token.type
@@ -759,7 +784,7 @@ struct Asn1Parser
         {
             case hyphenMinus:
                 if(auto r = consume(token)) return r;
-                if(token.type != number) return _lexer.makeError(
+                if(token.type != number) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected number following hyphen when looking for a SignedNumber",
                     token.location, "encountered token of type ", token.type
@@ -781,7 +806,7 @@ struct Asn1Parser
                 );
             return Result.noError;
 
-            default: return _lexer.makeError(
+            default: return makeError(
                 Asn1ParserError.tokenNotFound,
                 "expected hyphen or number when looking for a SignedNumber",
                 token.location, "encountered token of type ", token.type
@@ -802,14 +827,14 @@ struct Asn1Parser
         {
             const moduleToken = token;
             if(auto r = consume(token)) return r;
-            if(token.type != Asn1Token.Type.dot) return _lexer.makeError(
+            if(token.type != Asn1Token.Type.dot) return makeError(
                 Asn1ParserError.nonInitialTokenNotFound,
                 "expected `.` following module reference when parsing a DefinedValue",
                 token.location, "encountered token of type ", token.type
             );
 
             if(auto r = consume(token)) return r;
-            if(token.type != Asn1Token.Type.valueReference) return _lexer.makeError(
+            if(token.type != Asn1Token.Type.valueReference) return makeError(
                 Asn1ParserError.nonInitialTokenNotFound,
                 "expected identifier following module reference when parsing a DefinedValue",
                 token.location, "encountered token of type ", token.type
@@ -838,7 +863,7 @@ struct Asn1Parser
             return Result.noError;
         }
 
-        return _lexer.makeError(
+        return makeError(
             Asn1ParserError.tokenNotFound,
             "expected identifier or module reference when attempting to parse a DefinedValue",
             token.location, "encountered token of type ", token.type
@@ -863,7 +888,7 @@ struct Asn1Parser
         {
             consume().resultAssert;
             if(auto r = consume(token)) return r;
-            if(token.type != Asn1Token.Type.rOF) return _lexer.makeError(
+            if(token.type != Asn1Token.Type.rOF) return makeError(
                 Asn1ParserError.nonInitialTokenNotFound,
                 "expected `OF` to denote `COMPONENTS OF` for a ComponenType within a ComponentTypeList",
                 token.location, "encountered token of type ", token.type
@@ -876,7 +901,7 @@ struct Asn1Parser
             return Result.noError;
         }
 
-        if(token.type != Asn1Token.Type.identifier) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.identifier) return makeError(
             Asn1ParserError.tokenNotFound,
             "expected identifier or `COMPONENTS` when attemping to parse a ComponentTypeList",
             token.location, "encountered token of type ", token.type
@@ -941,7 +966,7 @@ struct Asn1Parser
             consume().resultAssert;
         }
 
-        if(list.items.length == 0) return _lexer.makeError(
+        if(list.items.length == 0) return makeError(
             Asn1ParserError.listMustNotBeEmpty,
             "type list is not allowed to empty",
             token.location
@@ -1131,7 +1156,7 @@ struct Asn1Parser
         Asn1ValueNode value;
         if(auto r = Type(type)) return r.notInitial;
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.colon) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.colon) return makeError(
             Asn1ParserError.nonInitialTokenNotFound,
             "expected `:` following type when parsing an ExceptionSpec",
             token.location, "encountered token of type ", token.type
@@ -1156,7 +1181,7 @@ struct Asn1Parser
 
         Asn1Token token;
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.ellipsis) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.ellipsis) return makeError(
             Asn1ParserError.tokenNotFound,
             "expected `...` when looking for ExtensionAndException - did you add an extra comma within a SEQUENCE/SET/CHOICE?",
             token.location, "encountered token of type ", token.type
@@ -1199,7 +1224,7 @@ struct Asn1Parser
 
         Asn1Token auxToken;
         if(auto r = consume(auxToken)) return r;
-        if(auxToken.type != Asn1Token.Type.colon) return _lexer.makeError(
+        if(auxToken.type != Asn1Token.Type.colon) return makeError(
             Asn1ParserError.nonInitialTokenNotFound,
             "expected `:` following number consisting a VersionNumber",
             auxToken.location, "encountered token of type ", auxToken.type
@@ -1219,14 +1244,14 @@ struct Asn1Parser
 
         Asn1Token token;
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.comma)return _lexer.makeError(
+        if(token.type != Asn1Token.Type.comma)return makeError(
             Asn1ParserError.tokenNotFound,
             "expected `, ` to denote `, ...` (an extension end marker)",
             token.location, "encountered token of type ", token.type
         );
 
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.ellipsis) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.ellipsis) return makeError(
             Asn1ParserError.nonInitialTokenNotFound,
             "expected `...` to denote `, ...` (an extension end marker)",
             token.location, "encountered token of type ", token.type
@@ -1275,7 +1300,7 @@ struct Asn1Parser
                 ));
 
                 if(auto r = consume(token)) return r;
-                if(token.type != Asn1Token.Type.rightVersionBrackets) return _lexer.makeError(
+                if(token.type != Asn1Token.Type.rightVersionBrackets) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected `]]` to mark end of an extension addition group",
                     token.location, "encountered token of type ", token.type
@@ -1411,7 +1436,7 @@ struct Asn1Parser
             case identifier:
                 const idToken = token;
                 if(auto r = consume(token)) return r;
-                if(token.type != leftArrow) return _lexer.makeError(
+                if(token.type != leftArrow) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected `<` after identifier when parsing selection type",
                     token.location, "encountered token of type ", token.type
@@ -1439,7 +1464,7 @@ struct Asn1Parser
                 {
                     consume().resultAssert;
                     if(auto r = consume(token)) return r;
-                    if(token.type != typeReference) return _lexer.makeError(
+                    if(token.type != typeReference) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected typereference after `.` when parsing external type reference",
                         token.location, "encountered token of type ", token.type
@@ -1475,7 +1500,7 @@ struct Asn1Parser
             case rBIT:
                 if(auto r = consume(token)) return r;
                 if(token.type != rSTRING)
-                    return _lexer.makeError(
+                    return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected `STRING` to denote `BIT STRING`",
                         token.location, "encountered token of type ", token.type
@@ -1501,7 +1526,7 @@ struct Asn1Parser
                         consume().resultAssert;
 
                         if(auto r = consume(auxToken)) return r;
-                        if(auxToken.type != leftParenthesis) return _lexer.makeError(
+                        if(auxToken.type != leftParenthesis) return makeError(
                             Asn1ParserError.nonInitialTokenNotFound,
                             "expected `(` following name of named bit within a `BIT STRING` component list",
                             auxToken.location, "encountered token of type ", auxToken.type
@@ -1535,7 +1560,7 @@ struct Asn1Parser
                         }
 
                         if(auto r = consume(auxToken)) return r;
-                        if(auxToken.type != rightParenthesis) return _lexer.makeError(
+                        if(auxToken.type != rightParenthesis) return makeError(
                             Asn1ParserError.nonInitialTokenNotFound,
                             "expected `)` following value of named bit within a `BIT STRING` component list",
                             auxToken.location, "encountered token of type ", auxToken.type
@@ -1546,14 +1571,14 @@ struct Asn1Parser
                         consume().resultAssert;
                     }
 
-                    if(bitList.items.length == 0) return _lexer.makeError(
+                    if(bitList.items.length == 0) return makeError(
                         Asn1ParserError.listMustNotBeEmpty,
                         "component list for `BIT STRING` is not allowed to empty - `BIT STRING { }` is forbidden",
                         token.location
                     );
 
                     if(auto r = consume(auxToken)) return r;
-                    if(auxToken.type != rightBracket) return _lexer.makeError(
+                    if(auxToken.type != rightBracket) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected closing bracket to complete `BIT STRING` component list",
                         auxToken.location, "encountered token of type ", auxToken.type
@@ -1609,7 +1634,7 @@ struct Asn1Parser
             case rCHARACTER:
                 if(auto r = consume(token)) return r;
                 if(token.type != rSTRING)
-                    return _lexer.makeError(
+                    return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected `STRING` to denote `CHARACTER STRING`",
                         token.location, "encountered token of type ", token.type
@@ -1621,7 +1646,7 @@ struct Asn1Parser
 
             case rCHOICE:
                 if(auto r = consume(token)) return r;
-                if(token.type != leftBracket) return _lexer.makeError(
+                if(token.type != leftBracket) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected opening bracket to begin `CHOICE` alternative type list",
                     token.location, "encountered token of type ", token.type
@@ -1630,7 +1655,7 @@ struct Asn1Parser
                 Result checkEnd()
                 {
                     if(auto r = consume(token)) return r;
-                    if(token.type != rightBracket) return _lexer.makeError(
+                    if(token.type != rightBracket) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected closing bracket to end `CHOICE` alternative type list",
                         token.location, "encountered token of type ", token.type
@@ -1657,7 +1682,7 @@ struct Asn1Parser
                         endingComma = true;
                     }
 
-                    if(typeList.items.length == 0) return _lexer.makeError(
+                    if(typeList.items.length == 0) return makeError(
                         Asn1ParserError.listMustNotBeEmpty,
                         "alternative type list for `CHOICE` is not allowed to empty - `CHOICE { }` is forbidden",
                         token.location
@@ -1728,14 +1753,14 @@ struct Asn1Parser
                             Asn1AlternativeTypeListNode altTypeList;
                             if(auto r = AlternativeTypeList(altTypeList, endingComma)) return r;
 
-                            if(endingComma) return _lexer.makeError(
+                            if(endingComma) return makeError(
                                 Asn1ParserError.nonInitialTokenNotFound,
                                 "expected alternative type following comma within a `CHOICE` alternative type list",
                                 token.location, "encountered token of type ", token.type
                             );
 
                             if(auto r = consume(token)) return r;
-                            if(token.type != rightVersionBrackets) return _lexer.makeError(
+                            if(token.type != rightVersionBrackets) return makeError(
                                 Asn1ParserError.nonInitialTokenNotFound,
                                 "expected `]]` to close alternative group within a `CHOICE` alternative type list",
                                 token.location, "encountered token of type ", token.type
@@ -1812,7 +1837,7 @@ struct Asn1Parser
             case rEMBEDDED:
                 if(auto r = consume(token)) return r;
                 if(token.type != rPDV)
-                    return _lexer.makeError(
+                    return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected `PDV` to denote `EMBEDDED PDV`",
                         token.location, "encountered token of type ", token.type
@@ -1822,7 +1847,7 @@ struct Asn1Parser
 
             case rENUMERATED:
                 if(auto r = consume(token)) return r;
-                if(token.type != leftBracket) return _lexer.makeError(
+                if(token.type != leftBracket) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected opening bracket to begin `ENUMERATED` enumerations",
                     token.location, "encountered token of type ", token.type
@@ -1831,7 +1856,7 @@ struct Asn1Parser
                 Result checkEnd()
                 {
                     if(auto r = consume(token)) return r;
-                    if(token.type != rightBracket) return _lexer.makeError(
+                    if(token.type != rightBracket) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected closing bracket to end `ENUMERATED` enumerations",
                         token.location, "encountered token of type ", token.type
@@ -1865,7 +1890,7 @@ struct Asn1Parser
                         consume().resultAssert;
                         endingComma = true;
                     }
-                    if(enumeration.items.length == 0) return _lexer.makeError(
+                    if(enumeration.items.length == 0) return makeError(
                         Asn1ParserError.listMustNotBeEmpty,
                         "enumerations for `ENUMERATED` is not allowed to empty - `ENUMERATED { }` is forbidden",
                         token.location
@@ -1892,7 +1917,7 @@ struct Asn1Parser
                 }
 
                 if(auto r = consume(token)) return r;
-                if(token.type != ellipsis) return _lexer.makeError(
+                if(token.type != ellipsis) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected `...` following comma within an `ENUMERATED` enumerations list",
                     token.location, "encountered token of type ", token.type
@@ -1921,7 +1946,7 @@ struct Asn1Parser
 
                 Asn1EnumerationNode addEnumeration;
                 if(auto r = Enumeration(addEnumeration, endingComma)) return r;
-                if(endingComma) return _lexer.makeError(
+                if(endingComma) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected enumeration following comma at end of an `ENUMERATED` enumerations list",
                     token.location, "encountered token of type ", token.type
@@ -1950,7 +1975,7 @@ struct Asn1Parser
             case rINSTANCE:
                 if(auto r = consume(token)) return r;
                 if(token.type != rOF)
-                    return _lexer.makeError(
+                    return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected `OF` to denote `INSTANCE OF`",
                         token.location, "encountered token of type ", token.type
@@ -1984,14 +2009,14 @@ struct Asn1Parser
                     consume().resultAssert;
                 }
 
-                if(numberList.items.length == 0) return _lexer.makeError(
+                if(numberList.items.length == 0) return makeError(
                     Asn1ParserError.listMustNotBeEmpty,
                     "named number list for `INTEGER` is not allowed to empty - `INTEGER { }` is forbidden",
                     token.location
                 );
 
                 if(auto r = consume(token)) return r;
-                if(token.type != rightBracket) return _lexer.makeError(
+                if(token.type != rightBracket) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected closing bracket to end `INTEGER` named number list",
                     token.location, "encountered token of type ", token.type
@@ -2007,7 +2032,7 @@ struct Asn1Parser
             case rOBJECT:
                 if(auto r = consume(token)) return r;
                 if(token.type != rIDENTIFIER)
-                    return _lexer.makeError(
+                    return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected `IDENTIFIER` to denote `OBJECT IDENTIFIER`",
                         token.location, "encountered token of type ", token.type
@@ -2019,7 +2044,7 @@ struct Asn1Parser
             case rOCTET:
                 if(auto r = consume(token)) return r;
                 if(token.type != rSTRING)
-                    return _lexer.makeError(
+                    return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected `STRING` to denote `OCTET STRING`",
                         token.location, "encountered token of type ", token.type
@@ -2123,13 +2148,13 @@ struct Asn1Parser
 
                         return Result.noError;
                     }
-                    else if(sizeConstraint !is null || otherConstraint !is null) return _lexer.makeError(
+                    else if(sizeConstraint !is null || otherConstraint !is null) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         Case.ConstraintMissingOfErrorMsg,
                         token.location, "encountered token of type ", token.type
                     );
 
-                    if(token.type != leftBracket) return _lexer.makeError(
+                    if(token.type != leftBracket) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         Case.BeginErrorMsg,
                         token.location, "encountered token of type ", token.type
@@ -2149,7 +2174,7 @@ struct Asn1Parser
                     if(auto r = ComponentTypeLists(typeLists)) return r.notInitial;
 
                     if(auto r = consume(token)) return r;
-                    if(token.type != rightBracket) return _lexer.makeError(
+                    if(token.type != rightBracket) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         Case.EndErrorMsg,
                         token.location, "encountered token of type ", token.type
@@ -2198,7 +2223,7 @@ struct Asn1Parser
                 }
 
                 if(auto r = consume(token)) return r;
-                if(token.type != rightSquare) return _lexer.makeError(
+                if(token.type != rightSquare) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected `]` to mark end of Tag, as part of a TaggedType",
                     token.location, "encountered token of type ", token.type
@@ -2246,7 +2271,7 @@ struct Asn1Parser
 
                 return Result.noError;
 
-            default: return _lexer.makeError(
+            default: return makeError(
                 Asn1ParserError.tokenNotFound,
                 "expected Type",
                 token.location, "encountered token of type ", token.type
@@ -2287,7 +2312,7 @@ struct Asn1Parser
         while(true)
         {
             if(auto r = consume(token)) return r;
-            if(token.type != Asn1Token.Type.identifier) return _lexer.makeError(
+            if(token.type != Asn1Token.Type.identifier) return makeError(
                 Asn1ParserError.nonInitialTokenNotFound,
                 "expected identifier when looking for a NamedValue",
                 token.location, "encountered token of type ", token.type
@@ -2322,7 +2347,7 @@ struct Asn1Parser
             if(token.type == Asn1Token.Type.identifier)
             {
                 Asn1Token lookahead;
-                const savedLexerLookahead = _lexer;
+                auto savedLexerLookahead = _lexer;
                 consume().resultAssert;
 
                 if(auto r = consume(lookahead)) return r;
@@ -2357,7 +2382,7 @@ struct Asn1Parser
                     }
 
                     if(auto r = consume(token)) return r;
-                    if(token.type != Asn1Token.Type.rightParenthesis) return _lexer.makeError(
+                    if(token.type != Asn1Token.Type.rightParenthesis) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected `)` to denote end of named object identifier part",
                         token.location, "encountered token of type ", token.type
@@ -2384,7 +2409,7 @@ struct Asn1Parser
                     )
                 ));
             }
-            else return _lexer.makeError(
+            else return makeError(
                 Asn1ParserError.nonInitialTokenNotFound,
                 "expected identifier when reading object identifier component list",
                 token.location, "encountered token of type ", token.type
@@ -2495,7 +2520,7 @@ struct Asn1Parser
                         )
                     );
                 }
-                else return _lexer.makeError(
+                else return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected number or realNumber following hyphen to denote a negative SignedNumber",
                     numberToken.location, "encountered token of type ", numberToken.type
@@ -2557,7 +2582,7 @@ struct Asn1Parser
                     static immutable ErrorMsg = "expected `}` to close "~Context;
 
                     if(auto r = consume(token)) return r;
-                    if(token.type != rightBracket) return _lexer.makeError(
+                    if(token.type != rightBracket) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         ErrorMsg,
                         token.location, "encountered token of type ", token.type
@@ -2578,7 +2603,7 @@ struct Asn1Parser
                 // Figure out which type of value list we're dealing with by
                 // performing a lookahead. Not efficient but it's so much more
                 // simpler than figuring it on-the-fly.
-                const savedLexerSeq = _lexer;
+                auto savedLexerSeq = _lexer;
 
                 // If a left parenthesis shows up directly after any identifier, then it's an OBJECT IDENTIFIER sequence,
                 // as no other sequence-looking value syntax allows for NameAndNumberForm.
@@ -2642,7 +2667,7 @@ struct Asn1Parser
                             bracketNesting++;
                         else if(tok.type == rightBracket)
                             bracketNesting--;
-                        else if(tok.type == eof) return _lexer.makeError(
+                        else if(tok.type == eof) return makeError(
                             Asn1ParserError.nonInitialTokenNotFound,
                             "hit eof when looking for `}` to close sequence when performing lookahead - unterminated sequence list",
                             token.location, "encountered token of type ", token.type
@@ -2710,7 +2735,7 @@ struct Asn1Parser
                         assert(false, "TODO: Short circuit into a parameterised value's parameter list");
                     else if(lookahead.type == rightBracket)
                         break;
-                    else if(lookahead.type == eof) return _lexer.makeError(
+                    else if(lookahead.type == eof) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "hit eof when looking for `}` to close sequence when performing lookahead - unterminated sequence list",
                         token.location, "encountered token of type ", token.type
@@ -2750,7 +2775,7 @@ struct Asn1Parser
                     makeBuiltin!Asn1UnresolvedSequenceValueNode(componentList);
                     return checkEnd!"object identifier component list sequence"();
                 }
-                else if(soloValues > 0 && definiteNamedValues > 0) return _lexer.makeError(
+                else if(soloValues > 0 && definiteNamedValues > 0) return makeError(
                     Asn1ParserError.invalidSyntax,
                     "sequence value appears to consist of both Values and NamedValues, this is never a valid construction",
                     token.location, 
@@ -2759,7 +2784,7 @@ struct Asn1Parser
                     " ambiguousNamedValues=", ambiguousNamedValues
                 );
 
-                return _lexer.makeError(
+                return makeError(
                     Asn1ParserError.bug,
                     "bug: Unable to determine what type of sequence is formed",
                     token.location,
@@ -2768,7 +2793,7 @@ struct Asn1Parser
                     " ambiguousNamedValues=", ambiguousNamedValues,
                 );
 
-            default: return _lexer.makeError(
+            default: return makeError(
                 Asn1ParserError.tokenNotFound,
                 "expected Value",
                 token.location, "encountered token of type ", token.type
@@ -2784,7 +2809,7 @@ struct Asn1Parser
 
         Asn1Token token;
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.leftParenthesis) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.leftParenthesis) return makeError(
             Asn1ParserError.tokenNotFound,
             "expected `(` to denote start of constraint",
             token.location, "encountered token of type ", token.type
@@ -2800,7 +2825,7 @@ struct Asn1Parser
         {
             consume().resultAssert;
             if(auto r = consume(token)) return r;
-            if(token.type != Asn1Token.Type.ellipsis) return _lexer.makeError(
+            if(token.type != Asn1Token.Type.ellipsis) return makeError(
                 Asn1ParserError.tokenNotFound,
                 "expected `...` to denote `, ...` as part of constraint spec",
                 token.location, "encountered token of type ", token.type
@@ -2859,7 +2884,7 @@ struct Asn1Parser
         if(auto r = ExceptionSpec(excSpec)) return r;
         
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.rightParenthesis) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.rightParenthesis) return makeError(
             Asn1ParserError.tokenNotFound,
             "expected `)` to denote end of constraint",
             token.location, "encountered token of type ", token.type
@@ -2942,7 +2967,7 @@ struct Asn1Parser
 
         Asn1Token token;
         if(auto r = consume(token)) return r;
-        if(token.type != Asn1Token.Type.rEXCEPT) return _lexer.makeError(
+        if(token.type != Asn1Token.Type.rEXCEPT) return makeError(
             Asn1ParserError.tokenNotFound,
             "expected `EXCEPT` to denote `ALL EXCEPT` when parsing Exclusions",
             token.location, "encountered token of type ", token.type
@@ -3046,14 +3071,14 @@ struct Asn1Parser
                     );
                     return Result.noError;
                 }
-                else if(token.type != rCOMPONENTS) return _lexer.makeError(
+                else if(token.type != rCOMPONENTS) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected `COMPONENTS` to denote `WITH COMPONENTS` when parsing constraint",
                     token.location, "encountered token of type ", token.type
                 );
 
                 if(auto r = consume(token)) return r;
-                if(token.type != leftBracket) return _lexer.makeError(
+                if(token.type != leftBracket) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected `{` to denote start of `WITH COMPONENTS` constraint list",
                     token.location, "encountered token of type ", token.type
@@ -3066,7 +3091,7 @@ struct Asn1Parser
                     consume().resultAssert;
                     isPartial = true;
                     if(auto r = consume(token)) return r;
-                    if(token.type != comma) return _lexer.makeError(
+                    if(token.type != comma) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected `,` following `...` within `WITH COMPONENTS` constraint list",
                         token.location, "encountered token of type ", token.type
@@ -3077,7 +3102,7 @@ struct Asn1Parser
                 while(true)
                 {
                     if(auto r = consume(token)) return r;
-                    if(token.type != identifier) return _lexer.makeError(
+                    if(token.type != identifier) return makeError(
                         Asn1ParserError.nonInitialTokenNotFound,
                         "expected identifier within `WITH COMPONENTS` constraint list to begin next NamedConstraint",
                         token.location, "encountered token of type ", token.type
@@ -3162,7 +3187,7 @@ struct Asn1Parser
                 }
 
                 if(auto r = consume(token)) return r;
-                if(token.type != rightBracket) return _lexer.makeError(
+                if(token.type != rightBracket) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected `}` to denote end of `WITH COMPONENTS` constraint list",
                     token.location, "encountered token of type ", token.type
@@ -3184,7 +3209,7 @@ struct Asn1Parser
                     return r;
 
                 if(auto r = consume(token)) return r;
-                if(token.type != rightParenthesis) return _lexer.makeError(
+                if(token.type != rightParenthesis) return makeError(
                     Asn1ParserError.nonInitialTokenNotFound,
                     "expected `)` to denote end of parenthesis-wrapped constraint",
                     token.location, "encountered token of type ", token.type
@@ -3227,7 +3252,7 @@ struct Asn1Parser
         Result ValueRange(out Asn1ValueRangeNode node, Asn1LowerEndpointNode lower)
         {
             if(auto r = consume(token)) return r;
-            if(token.type != Asn1Token.Type.rangeSeparator) return _lexer.makeError(
+            if(token.type != Asn1Token.Type.rangeSeparator) return makeError(
                 Asn1ParserError.nonInitialTokenNotFound,
                 "expected `..` following lower end of range constraint",
                 token.location, "encountered token of type ", token.type
@@ -3364,7 +3389,7 @@ struct Asn1Parser
             return Result.noError;
         }
 
-        return _lexer.makeError(
+        return makeError(
             Asn1ParserError.tokenNotFound,
             "expected constraint element",
             token.location, "encountered token of type ", token.type,

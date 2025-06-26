@@ -11,7 +11,8 @@ import std.stdio : writeln;
 import std.getopt;
 
 import juptune.core.util : resultEnforce, JuptuneResultException;
-import juptune.data.asn1.lang : Asn1PrinterVisitor, Asn1StringPrinterHandler, Asn1SemanticError, Asn1ParserError;
+import juptune.data.asn1.lang : Asn1PrinterVisitor, Asn1StringPrinterHandler, 
+                                Asn1SemanticError, Asn1ParserError, Asn1LexerError;
 
 import dasn1.context : CompilerContext;
 
@@ -50,10 +51,10 @@ int printCommand(string[] args)
             handler.endLine();
             source.moduleIr.visit(visitor).resultEnforce;
             handler.endLine();
-            wereErrors = wereErrors || source.errors.wasCalled;
         }
 
         writeln(handler.buffer.slice);
+        wereErrors = context.wereErrors;
     }
     catch(FileException exec)
     {
@@ -62,7 +63,11 @@ int printCommand(string[] args)
     }
     catch(JuptuneResultException exec)
     {
-        if(exec.result.isErrorType!Asn1SemanticError)
+        if(
+            exec.result.isErrorType!Asn1SemanticError
+            || exec.result.isErrorType!Asn1ParserError
+            || exec.result.isErrorType!Asn1LexerError
+        )
         {
             // do nothing - the error handler should've been called.
         }

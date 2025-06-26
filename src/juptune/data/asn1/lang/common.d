@@ -25,6 +25,13 @@ struct Asn1Location
 {
     size_t start;
     size_t end;
+
+    const(char)[] sourceName;
+    uint line;
+
+    // Unittests don't really give a damn about line and sourceName.
+    version(unittest) bool opEquals()(auto ref const Asn1Location loc) const
+        => loc.start == this.start && loc.end == this.end;
 }
 
 struct Asn1ParserContext

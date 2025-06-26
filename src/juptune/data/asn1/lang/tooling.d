@@ -51,7 +51,7 @@ final class Asn1PrintfErrorHandler : Asn1ErrorHandler
     override void startLine(Asn1Location location)
     {
         this._wasCalled = true;
-        printf("[%lld..%lld]: ", location.start, location.end);
+        printf("%.*s:%d: ", cast(uint)location.sourceName.length, location.sourceName.ptr, location.line);
         foreach(i; 0..this._indentLevel)
             printf("  ");
     }
@@ -75,8 +75,9 @@ final class Asn1PrintfErrorHandler : Asn1ErrorHandler
 Result asn1Parse(
     scope ref Asn1ParserContext context,
     out Asn1ModuleIr modIr,
-    scope const(char)[] rawSourceCode,
+    const(char)[] rawSourceCode,
     scope Asn1ErrorHandler errorHandler,
+    const(char)[] debugName = "",
 ) @nogc nothrow
 {
     import juptune.data.asn1.lang.ast       : Asn1ModuleDefinitionNode;
@@ -84,13 +85,16 @@ Result asn1Parse(
     import juptune.data.asn1.lang.lexer     : Asn1Lexer;
     import juptune.data.asn1.lang.parser    : Asn1Parser;
 
-    auto lexer = Asn1Lexer(rawSourceCode);
+    auto lexer = Asn1Lexer(rawSourceCode, debugName, errorHandler);
     auto parser = Asn1Parser(lexer, &context);
     
     Asn1ModuleDefinitionNode modDef;
     auto result = parser.ModuleDefinition(modDef);
     if(result.isError)
+    {
+        parser.reportLastError(errorHandler);
         return result;
+    }
 
     result = asn1AstToIr(modDef, modIr, context, errorHandler);
     if(result.isError)
@@ -131,12 +135,13 @@ Result asn1Semantics(
 Result asn1ParseWithSemantics(
     scope ref Asn1ParserContext context,
     out Asn1ModuleIr modIr,
-    scope const(char)[] rawSourceCode,
+    const(char)[] rawSourceCode,
     scope Asn1ModuleRegistry registry,
     scope Asn1ErrorHandler errorHandler,
+    const(char)[] debugName = "",
 ) @nogc nothrow
 {
-    auto result = asn1Parse(context, modIr, rawSourceCode, errorHandler);
+    auto result = asn1Parse(context, modIr, rawSourceCode, errorHandler, debugName);
     if(result.isError)
         return result;
 

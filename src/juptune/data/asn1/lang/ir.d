@@ -3907,7 +3907,7 @@ unittest
             fooValue INTEGER ::= 1
             FooType ::= INTEGER (4)
         END
-    `, registry, new Asn1AlwaysCrashErrorHandler()).resultAssert;
+    `, registry, new Asn1PrintfErrorHandler()).resultAssert;
 
     asn1ParseWithSemantics(context, modTwo, `
         ModTwo { bar(2) } DEFINITIONS ::= BEGIN

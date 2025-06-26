@@ -8,7 +8,7 @@
 /// Contains the lexer.
 module juptune.data.asn1.lang.lexer;
 
-import juptune.data.asn1.lang.common : Asn1Location;
+import juptune.data.asn1.lang.common : Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
 
 struct Asn1Token
 {
@@ -445,14 +445,26 @@ struct Asn1Lexer
 
         Asn1Token[MAX_LOOKAHEAD] _lookahead;
         size_t _lookaheadCursor;
+
+        const(char)[] _sourceDebugName;
+        uint _debugLine;
+        Asn1ErrorHandler _errors;
     }
 
     @nogc nothrow:
 
-    this(const(char)[] input)
+    this(
+        const(char)[] input,
+        const(char)[] sourceDebugName = "",
+        Asn1ErrorHandler errorHandler = Asn1NullErrorHandler.instance,
+    )
     in(input.length < size_t.max - 1, "To help avoid overflow errors, the input is not allowed to be size_t.max long")
+    in(errorHandler !is null, "errorHandler is null")
     {
         this._input = input;
+        this._sourceDebugName = sourceDebugName;
+        this._debugLine = 1;
+        this._errors = errorHandler;
     }
 
     Result lookahead(size_t offset, scope out Asn1Token token)
@@ -510,7 +522,10 @@ struct Asn1Lexer
     
         if(this.eof)
         {
-            token = this.makeToken(Asn1Location(this._cursor, this._cursor), Asn1Token.Type.eof);
+            token = this.makeToken(
+                Asn1Location(this._cursor, this._cursor, this._sourceDebugName, this._debugLine), 
+                Asn1Token.Type.eof
+            );
             return Result.noError;
         }
         this._tokensRead++;
@@ -539,10 +554,15 @@ struct Asn1Lexer
             return Result.noError;
 
         this._tokensRead--;
-        
-        Array!char context;
-        this.buildError(context, Asn1Location(this._cursor));
-        return Result.make(Asn1LexerError.invalidCharacter, "Invalid character found - it's not the start character for any known token", String2.fromDestroyingArray(context)); // @suppress(dscanner.style.long_line)
+
+        return Result.make(
+            Asn1LexerError.invalidCharacter, 
+            "Invalid character found - it's not the start character for any known token", 
+            this._errors.errorAndString(
+                Asn1Location(this._cursor, this._cursor, this._sourceDebugName, this._debugLine),
+                "unexpected character '", ch0, "' when looking for start of next token"
+            )
+        );
     }
 
     private Result lexNextWhiteSpace(scope ref Asn1Token token)
@@ -571,9 +591,13 @@ struct Asn1Lexer
 
         if(this._input[location.end-1] == '-')
         {
-            Array!char context;
-            this.buildError(context, location);
-            return Result.make(Asn1LexerError.identifierEndsWithHyphen, "Identifiers/typeReferences cannot end with a hyphen - 11.2.1 & 11.3 ISO/IEC 8824-1:2003", String2.fromDestroyingArray(context)); // @suppress(dscanner.style.long_line)
+            return Result.make(
+                Asn1LexerError.identifierEndsWithHyphen, 
+                "Identifiers/typeReferences cannot end with a hyphen - 11.2.1 & 11.3 ISO/IEC 8824-1:2003",
+                this._errors.errorAndString(location,
+                    "identifier `", this._input[location.start..location.end], "` must not end with a hyphen"
+                )
+            );
         }
 
         const text = this._input[location.start..location.end];
@@ -596,6 +620,8 @@ struct Asn1Lexer
         // Comments have different enough logic that readUntil is too hard to use.
 
         Asn1Location location;
+        location.sourceName = this._sourceDebugName;
+        location.line = this._debugLine;
         location.start = this._cursor;
         this.advance(2); // Skip --
 
@@ -635,6 +661,8 @@ struct Asn1Lexer
         // Comments have different enough logic that readUntil is too hard to use.
 
         Asn1Location location;
+        location.sourceName = this._sourceDebugName;
+        location.line = this._debugLine;
         location.start = this._cursor;
         this.advance(2); // Skip /*
 
@@ -670,12 +698,16 @@ struct Asn1Lexer
                 continue;
             }
 
+            if(NewLine.isAllowed(this.peekAt(0)))
+                this._debugLine++;
             this.advance(1);
         }
 
-        Array!char context;
-        this.buildError(context, Asn1Location(this._cursor));
-        return Result.make(Asn1LexerError.eof, "Unterminated multi-line comment - unlike single-line comments, multi-line comments MUST be terminated - 11.6.4 ISO/IEC 8824-1:2003", String2.fromDestroyingArray(context)); // @suppress(dscanner.style.long_line)
+        return Result.make(
+            Asn1LexerError.eof, 
+            "Unterminated multi-line comment - unlike single-line comments, multi-line comments MUST be terminated - 11.6.4 ISO/IEC 8824-1:2003", // @suppress(dscanner.style.long_line)
+            this._errors.errorAndString(location, "multi-line comment is unterminated"),
+        );
     }
 
     private Result lexNextNumber(scope ref Asn1Token token)
@@ -685,6 +717,8 @@ struct Asn1Lexer
 
         Asn1Location location;
         location.start = this._cursor;
+        location.sourceName = this._sourceDebugName;
+        location.line = this._debugLine;
 
         while(!this.eof)
         {
@@ -693,7 +727,7 @@ struct Asn1Lexer
                 break;
             this.advance(1);
         }
-        const integerPart = Asn1Location(location.start, this._cursor);
+        const integerPart = Asn1Location(location.start, this._cursor, this._sourceDebugName, this._debugLine);
         Asn1Location fractionalPart, exponentPart;
         bool isReal = false;
 
@@ -704,6 +738,8 @@ struct Asn1Lexer
                 this.advance(1); // Skip .
                 isReal = true;
                 
+                fractionalPart.sourceName = this._sourceDebugName;
+                fractionalPart.line = this._debugLine;
                 fractionalPart.start = this._cursor;
                 while(!this.eof)
                 {
@@ -720,6 +756,8 @@ struct Asn1Lexer
                 this.advance(1); // Skip E
                 isReal = true;
                 
+                exponentPart.sourceName = this._sourceDebugName;
+                exponentPart.line = this._debugLine;
                 exponentPart.start = this._cursor;
                 while(!this.eof)
                 {
@@ -741,9 +779,13 @@ struct Asn1Lexer
         
             if(token.text.length > 1 && token.text[0] == '0')
             {
-                Array!char context;
-                this.buildError(context, location);
-                return Result.make(Asn1LexerError.integerStartsWithZero, "Multi-digit integers cannot start with a 0 - 11.8 ISO/IEC 8824-1:2003", String2.fromDestroyingArray(context)); // @suppress(dscanner.style.long_line)
+                return Result.make(
+                    Asn1LexerError.integerStartsWithZero, 
+                    "Multi-digit integers cannot start with a 0 - 11.8 ISO/IEC 8824-1:2003",
+                    this._errors.errorAndString(location,
+                        "integer `", token.text, "` must not start with a 0"
+                    )
+                );
             }
 
             string error;
@@ -781,6 +823,8 @@ struct Asn1Lexer
 
         Asn1Location location;
         location.start = this._cursor;
+        location.sourceName = this._sourceDebugName;
+        location.line = this._debugLine;
         this.advance(1); // Skip start quote
 
         while(!this.eof)
@@ -789,23 +833,31 @@ struct Asn1Lexer
             const ch = this.peekAt(0);
             if(ch == '\'')
                 break;
+            if(NewLine.isAllowed(ch))
+                this._debugLine++;
             this.advance(1);
         }
 
         if(this.eof)
         {
-            Array!char context;
-            this.buildError(context, Asn1Location(location.start, this._cursor));
-            return Result.make(Asn1LexerError.eof, "Unterminated typed string, hit EOF before finding closing quote", String2.fromDestroyingArray(context)); // @suppress(dscanner.style.long_line)
+            return Result.make(
+                Asn1LexerError.eof, 
+                "Unterminated typed string, hit EOF before finding closing quote",
+                this._errors.errorAndString(location, "string is unterminated")
+            );
         }
 
         this.advance(1); // Skip closing quote
 
         if(this.eof)
         {
-            Array!char context;
-            this.buildError(context, Asn1Location(this._cursor));
-            return Result.make(Asn1LexerError.eof, "Invalid typed string, expected type character after closing quote (e.g. B, H), but found EOF", String2.fromDestroyingArray(context)); // @suppress(dscanner.style.long_line)
+            return Result.make(
+                Asn1LexerError.eof, 
+                "Invalid typed string, expected type character after closing quote (e.g. B, H), but found EOF",
+                this._errors.errorAndString(location,
+                    "unexpected EOF when looking for character denoting type of typed string"
+                )
+            );
         }
 
         const type = this.peekAt(0);
@@ -824,9 +876,13 @@ struct Asn1Lexer
                 return this.validateHexString(token);
 
             default:
-                Array!char context;
-                this.buildError(context, Asn1Location(this._cursor));
-                return Result.make(Asn1LexerError.stringHasUnknownType, "Invalid typed string, unknown type character after closing quote", String2.fromDestroyingArray(context)); // @suppress(dscanner.style.long_line)
+                return Result.make(
+                    Asn1LexerError.stringHasUnknownType, 
+                    "Invalid typed string, unknown type character after closing quote", 
+                    this._errors.errorAndString(location,
+                        "character '", type, "' does not denote a valid typed string type"
+                    )
+                );
         }
     }
 
@@ -838,6 +894,8 @@ struct Asn1Lexer
 
         Asn1Location location;
         location.start = this._cursor;
+        location.sourceName = this._sourceDebugName;
+        location.line = this._debugLine;
         this.advance(1); // Skip start quote
 
         while(!this.eof)
@@ -852,14 +910,18 @@ struct Asn1Lexer
                 }
                 break;
             }
+            else if(WhiteSpace.isAllowed(ch))
+                this._debugLine++;
             this.advance(1);
         }
 
         if(this.eof)
         {
-            Array!char context;
-            this.buildError(context, Asn1Location(this._cursor));
-            return Result.make(Asn1LexerError.eof, "Unterminated character string, hit EOF before finding closing quote", String2.fromDestroyingArray(context)); // @suppress(dscanner.style.long_line)
+            return Result.make(
+                Asn1LexerError.eof, 
+                "Unterminated character string, hit EOF before finding closing quote",
+                this._errors.errorAndString(location, "string is unterminated")
+            );
         }
 
         this.advance(1); // Skip closing quote
@@ -886,6 +948,8 @@ struct Asn1Lexer
             if(left >= op.chars.length && chars[0..op.chars.length] == op.chars)
             {
                 Asn1Location location;
+                location.sourceName = this._sourceDebugName;
+                location.line = this._debugLine;
                 location.start = this._cursor;
                 this.advance(op.chars.length);
                 location.end = this._cursor;
@@ -908,6 +972,8 @@ struct Asn1Lexer
             if(ch == op.ch)
             {
                 Asn1Location location;
+                location.sourceName = this._sourceDebugName;
+                location.line = this._debugLine;
                 location.start = this._cursor;
                 this.advance(1);
                 location.end = this._cursor;
@@ -928,11 +994,13 @@ struct Asn1Lexer
         {
             if(!BitStringAlphabet.isAllowed(ch))
             {
-                Array!char context;
-                this.buildError(context, Asn1Location(this._cursor),
-                    "char: ", ch, " (base10 ", cast(int)ch, ") @ index ", i,
+                return Result.make(
+                    Asn1LexerError.bstringHasInvalidChars, 
+                    "Bitstring contains an invalid character, only 0; 1, and white space is allowed - 11.10 ISO/IEC 8824-1:2003", // @suppress(dscanner.style.long_line)
+                    this._errors.errorAndString(token.location,
+                        "character '", ch, "' is not allowed within bit strings, only 0; 1, and whitespace are",
+                    )
                 );
-                return Result.make(Asn1LexerError.bstringHasInvalidChars, "Bitstring contains an invalid character, only 0; 1, and white space is allowed - 11.10 ISO/IEC 8824-1:2003", String2.fromDestroyingArray(context)); // @suppress(dscanner.style.long_line)
             }
         }
 
@@ -948,11 +1016,13 @@ struct Asn1Lexer
         {
             if(!HexStringAlphabet.isAllowed(ch))
             {
-                Array!char context;
-                this.buildError(context, Asn1Location(this._cursor),
-                    "char: ", ch, " (base10 ", cast(int)ch, ") @ index ", i,
+                return Result.make(
+                    Asn1LexerError.hstringHasInvalidChars, 
+                    "Hexstring contains an invalid character, only 0-9, A-F, and white space is allowed - 11.12 ISO/IEC 8824-1:2003", // @suppress(dscanner.style.long_line)
+                    this._errors.errorAndString(token.location,
+                        "character '", ch, "' is not allowed within hex strings, only 0-9; A-F, and whitespace are",
+                    )
                 );
-                return Result.make(Asn1LexerError.hstringHasInvalidChars, "Hexstring contains an invalid character, only 0-9, A-F, and white space is allowed - 11.12 ISO/IEC 8824-1:2003", String2.fromDestroyingArray(context)); // @suppress(dscanner.style.long_line)
             }
         }
 
@@ -1000,6 +1070,8 @@ struct Asn1Lexer
     {
         import juptune.core.ds : String2, Array;
 
+        range.sourceName = This._sourceDebugName;
+        range.line = This._debugLine;
         range.start = This._cursor;
         while(!This.eof)
         {
@@ -1014,14 +1086,17 @@ struct Asn1Lexer
 
             if(!IsValidCharacter(ch))
             {
-                Array!char context;
-                This.buildError(context, range);
-
                 enum Error = ErrorContext~" - "~ValidCharacterError;
-                return Result.make(Asn1LexerError.invalidCharacter, Error, String2.fromDestroyingArray(context));
+                return Result.make(
+                    Asn1LexerError.invalidCharacter, 
+                    Error, 
+                    This._errors.errorAndString(range, Error)
+                );
             }
 
             This.advance(1);
+            if(NewLine.isAllowed(ch))
+                This._debugLine++;
         }
 
         if(allowEof)
@@ -1030,73 +1105,11 @@ struct Asn1Lexer
             return Result.noError;
         }
 
-        Array!char context;
-        This.buildError(context, range);
-
         enum Error = ErrorContext~" - unexpected EOF";
-        return Result.make(Asn1LexerError.eof, Error, String2.fromDestroyingArray(context));
+        return Result.make(Asn1LexerError.eof, Error, This._errors.errorAndString(range, Error));
     }
 
     /**** Other helpers ****/
-
-    Result makeError(ErrorT, Args...)(
-        ErrorT error,
-        string message,
-        const Asn1Location location, 
-        scope const Args args,
-    )
-    {
-        import juptune.core.ds : Array, String2;
-
-        Array!char buffer;
-        this.buildError(buffer, location, args);
-        auto result = Result.make(error, message, String2.fromDestroyingArray(buffer));
-
-        // version(unittest) debug
-        // {
-        //     import std.stdio : writeln;
-        //     writeln(result.error, " -> ", result.context.sliceMaybeFromStack);
-        // }
-
-        return result;
-    }
-
-    void buildError(Range, Args...)(
-        scope ref Range range,
-        const Asn1Location location, 
-        scope const Args args,
-    )
-    {
-        import juptune.core.util : toStringSink;
-
-        range.put("input[");
-        if(location.start >= this._input.length)
-        {
-            range.put("eof]");
-        }
-        else if(location.end <= location.start)
-        {
-            toStringSink(location.start, range);
-            range.put("] -> `");
-            range.put(this._input[location.start..location.start+1]);
-        }
-        else
-        {
-            toStringSink(location.start, range);
-            range.put("..");
-            toStringSink(location.end, range);
-            range.put("] -> `");
-            range.put(this._input[location.start..location.end]);
-        }
-
-        static if(Args.length == 0)
-            range.put("`");
-        else
-            range.put("`: ");
-
-        foreach(arg; args)
-            toStringSink(arg, range);
-    }
 
     Asn1Token makeToken(
         Asn1Location location, 
@@ -1105,7 +1118,6 @@ struct Asn1Lexer
     )
     {
         Asn1Token token;
-
         token.location = location;
         token.text = this._input[location.start..location.end];
         token.type = type;
