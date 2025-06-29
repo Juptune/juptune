@@ -15,14 +15,16 @@ alias InheritResults(alias Symbol) = getUDAs!(Symbol, Result);
 @mustuse
 struct Result
 {
-    int     errorCode;
-    string  errorType;
-    string  error;
-    String2 context;
-    string  file;
-    string  module_;
-    string  function_;
-    size_t  line;
+    import std.traits : Unqual;
+
+    int             errorCode;
+    TypeInfo_Enum   errorType;
+    string          error;
+    String2         context;
+    string          file;
+    string          module_;
+    string          function_;
+    size_t          line;
 
     void toString(OutputRange)(auto ref OutputRange range) const @trusted
     {
@@ -37,7 +39,7 @@ struct Result
         range.put("Line:     "); toStringSink(this.line, range); range.put("\n");
         range.put("-------------------------\n");
         range.put("Code:     "); toStringSink(this.errorCode, range); range.put("\n");
-        range.put("Type:     "); range.put(this.errorType); range.put("\n");
+        range.put("Type:     "); range.put(this.errorType.name); range.put("\n");
         range.put("Error:    "); range.put(this.error);
 
         if(this.context.length)
@@ -75,6 +77,14 @@ struct Result
         this.line      = other.line;
     }
 
+    bool opEquals()(scope auto ref Result other) const @nogc nothrow
+    {
+        return 
+            this.errorType is other.errorType
+            && this.errorCode == other.errorCode
+        ;
+    }
+
     static Result noError()
     {
         return Result.init;
@@ -97,7 +107,7 @@ struct Result
         auto r = Result.noError;
 
         r.errorCode = errorCode;
-        r.errorType = __traits(identifier, T); 
+        r.errorType = typeid(Unqual!T); 
         r.error     = error;
         r.context   = context;
 
@@ -126,7 +136,7 @@ struct Result
         auto r = Result.noError;
 
         r.errorCode = errorCode;
-        r.errorType = __traits(identifier, T); 
+        r.errorType = typeid(Unqual!T); 
         r.error     = error;
         r.context   = String2(context.slice);
 
@@ -140,7 +150,7 @@ struct Result
 
     bool isError()
     {
-        return this.errorType.length != 0;
+        return this.errorType !is null;
     }
 
     bool isError(T)(T value)
@@ -150,13 +160,13 @@ struct Result
 
     bool isErrorType(T)()
     {
-        return this.errorType == __traits(identifier, T);
+        return this.errorType is typeid(Unqual!T);
     }
 
     void changeErrorType(T)(T errorCode)
     {
         this.errorCode = errorCode;
-        this.errorType = __traits(identifier, T); 
+        this.errorType = typeid(Unqual!T); 
     }
 
     // Allows if(auto result = ...) { onError }
@@ -222,7 +232,7 @@ in(got.isError && expected.isError, "Both results must be errors")
     import juptune.core.ds   : Array, String;
     import juptune.core.util : toStringSink;
 
-    if(got.errorCode != expected.errorCode || got.errorType != expected.errorType)
+    if(got.errorCode != expected.errorCode || got.errorType !is expected.errorType)
     {
         Array!char msg;
         msg.put("Result mismatch!\n");
@@ -233,7 +243,7 @@ in(got.isError && expected.isError, "Both results must be errors")
         else
             got.errorCode.toStringSink(msg);
         msg.put(" of type ");
-        msg.put(got.errorType);
+        msg.put(got.errorType.name);
         
         msg.put("\n  Wanted: ");
         if(expected.isErrorType!ExpectedErrorT)
@@ -241,7 +251,7 @@ in(got.isError && expected.isError, "Both results must be errors")
         else
             expected.errorCode.toStringSink(msg);
         msg.put(" of type ");
-        msg.put(expected.errorType);
+        msg.put(expected.errorType.name);
 
         // Since this function is only ever used in unittests, we can bypass the global @nogc of this module.
         debug assert(false, "" ~ msg.slice);
