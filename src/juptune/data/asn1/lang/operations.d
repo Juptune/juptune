@@ -210,12 +210,12 @@ unittest
     Asn1ModuleIr modIr;
     scope registry = new Asn1ModuleRegistry();
     asn1ParseWithSemantics(context, modIr, `
-    MyMod DEFINITIONS ::= BEGIN
-        b INTEGER ::= 3
-        idA OBJECT IDENTIFIER ::= { foo(1) bar(2) baz(b) }
-        idB OBJECT IDENTIFIER ::= { baz(b) }
-        idC OBJECT IDENTIFIER ::= { b }
-    END
+        MyMod DEFINITIONS ::= BEGIN
+            b INTEGER ::= 3
+            idA OBJECT IDENTIFIER ::= { foo(1) bar(2) baz(b) }
+            idB OBJECT IDENTIFIER ::= { baz(b) }
+            idC OBJECT IDENTIFIER ::= { b }
+        END
     `, registry, new Asn1AlwaysCrashErrorHandler()).resultAssert;
 
     Asn1ValueAssignmentIr idA, idB, idC;
@@ -289,4 +289,208 @@ in(type !is null, "type is null")
     else if(auto ir = cast(Asn1TaggedTypeIr)type)
         return asn1GetExactUnderlyingType(ir.getUnderlyingTypeSkipTags());
     return type;
+}
+
+/++
+ + Walks over all meaningful tags for the given type, calling `onTag` for each meaningful tag.
+ +
+ + This function is useful for code that needs to handle EXPLICIT tags, as well as easily coalesce IMPLICIT tags,
+ + e.g. because you're writing a encoder/decoder.
+ +
+ + Notes:
+ +  Any side-by-side IMPLICIT tags will be collapsed into the left-most tag, so `[2] [0] [1]` would condense into just `[2]`.
+ +
+ +  If an EXPLICIT tag has an IMPLICIT tag to the left of it, the IMPLICIT tag's value is used but the EXPLICIT flag is kept,
+ +  so `[1] IMPLICIT [2] EXPLICIT` would result in `[1] EXPLICIT`.
+ +
+ +  A "meaningful tag" is either: any EXPLICIT tag (after IMPLICIT tags are merged into it), 
+ +  the type's default tag (after IMPLICIT tags are merged into it).
+ +
+ +  Some types (such as `CHOICE`) are not assigned a default tag by the x.680 specification, and so AFTER all other
+ +  meaningful tags have been sent to `onTag`, an `Asn1SemanticError.toolTypeMissingTag` error will be returned. This isn't
+ +  a fatal error, but more a way to detect types that have this annoying edge case your code likely needs to handle.
+ +
+ +  Type references are NOT followed, so tags of the referenced type are NOT returned but instead the above error
+ +  is thrown.
+ +
+ + Cases:
+ +  Please note that `BOOLEAN` has a default tag of `1`
+ +
+ +  `BOOLEAN`                           -> onTag(1, false)
+ +
+ +  `[0] IMPLICIT BOOLEAN`              -> onTag(0, false)
+ +
+ +  `[2] IMPLICIT [0] IMPLICIT BOOLEAN` -> onTag(2, false)
+ +
+ +  `[2] EXPLICIT BOOLEAN`              -> onTag(2, true), onTag(1, false)
+ +
+ +  `[1] IMPLICIT [2] EXPLICIT BOOLEAN` -> onTag(1, true), onTag(1, false)
+ +
+ +  `[3] EXPLICIT [2] EXPLICIT BOOLEAN` -> onTag(3, true), onTag(2, true), onTag(1, false)
+ +
+ +  `[2] EXPLICIT CHOICE { a BOOLEAN }` -> onTag(2, true), Asn1SemanticError.toolTypeMissingTag
+ +
+ + Params:
+ +  DelegateT = A function type that must match `Result (ulong tag, bool isExplicit, Asn1TaggedType.Class class_)`.
+ +  type      = The type to walk the tags of.
+ +  onTag     = The callback to use whenever a meaningful tag is encountered.
+ +
+ + Throws:
+ +  Anything `onTag` throws.
+ +
+ +  `Asn1SemanticError.toolTypeMissingTag` if the default tag of the exact underlying type of `type` is required,
+ +  but said type has no default tag assigned by x.680. As this is a "signal error" no error will be sent to `errors`.
+ +
+ + Returns:
+ +  A `Result` indicating if something went wrong.
+ + ++/
+Result asn1WalkTags(DelegateT)(Asn1TypeIr type, scope DelegateT onTag, scope Asn1ErrorHandler errors)
+{
+    import juptune.data.asn1.lang.ir : Asn1TaggedTypeIr, Asn1ValueReferenceIr, Asn1IntegerValueIr, Asn1SemanticError;
+
+    Asn1TaggedTypeIr latestImplicit; // May be null
+
+    Result asNumber(Asn1ValueIr valueIr, out ulong value)
+    {
+        if(auto valueRefIr = cast(Asn1ValueReferenceIr)valueIr)
+            valueIr = valueRefIr.getResolvedValueRecurse();
+        
+        auto intValueIr = cast(Asn1IntegerValueIr)valueIr;
+        assert(intValueIr !is null, "bug: Tag isn't an INTEGER? Why didn't the type checker catch this?");
+
+        return intValueIr.asUnsigned(value, errors);
+    }
+
+    while(true)
+    {
+        if(auto taggedIr = cast(Asn1TaggedTypeIr)type)
+        {
+            type = taggedIr.getUnderlyingType();
+
+            assert(taggedIr.getEncoding() != Asn1TaggedTypeIr.Encoding.unspecified, "bug: TaggedType has an unspecified encoding - were semantics ran?"); // @suppress(dscanner.style.long_line)
+            if(taggedIr.getEncoding() == Asn1TaggedTypeIr.Encoding.implicit)
+            {
+                if(latestImplicit is null)
+                    latestImplicit = taggedIr;
+                continue;
+            }
+
+            ulong tag;
+            auto result = asNumber(latestImplicit !is null ? latestImplicit.getNumberIr() : taggedIr.getNumberIr(), tag); // @suppress(dscanner.style.long_line)
+            if(result.isError)
+                return result;
+            latestImplicit = null;
+
+            result = onTag(tag, true, taggedIr.getClass());
+            if(result.isError)
+                return result;
+
+            continue;
+        }
+
+        ulong tag;
+        Asn1TaggedTypeIr.Class class_;
+        if(latestImplicit !is null)
+        {
+            auto result = asNumber(latestImplicit.getNumberIr(), tag);
+            if(result.isError)
+                return result;
+            class_ = latestImplicit.getClass();
+        }
+        else
+        {
+            if(type.getUniversalTag.isNull)
+            {
+                return Result.make(
+                    Asn1SemanticError.toolTypeMissingTag, 
+                    "the given type does not have a default tag, please detect this error code as an edge case"
+                );
+            }
+
+            tag = type.getUniversalTag.get();
+            class_ = Asn1TaggedTypeIr.Class.universal;
+        }
+
+        return onTag(tag, false, class_);
+    }
+}
+@("asn1WalkTags")
+unittest
+{
+    import std.conv                       : to;
+    import juptune.core.util              : resultAssert, resultAssertSameCode;
+    import juptune.data.asn1.lang.common  : Asn1ParserContext;
+    import juptune.data.asn1.lang.ir      : Asn1ModuleIr, Asn1ModuleRegistry, Asn1TaggedTypeIr,
+                                            Asn1IntegerValueIr, Asn1TypeAssignmentIr, Asn1SemanticError;
+    import juptune.data.asn1.lang.tooling : asn1ParseWithSemantics, Asn1AlwaysCrashErrorHandler;
+
+    Asn1ParserContext context;
+    Asn1ModuleIr modIr;
+    scope registry = new Asn1ModuleRegistry();
+    asn1ParseWithSemantics(context, modIr, `
+        MyMod DEFINITIONS ::= BEGIN
+            Case1 ::=                           BOOLEAN
+            Case2 ::=              [0] IMPLICIT BOOLEAN
+            Case3 ::= [2] IMPLICIT [0] IMPLICIT BOOLEAN
+            Case4 ::=              [2] EXPLICIT BOOLEAN
+            Case5 ::= [1] IMPLICIT [2] EXPLICIT BOOLEAN
+            Case6 ::= [3] EXPLICIT [2] EXPLICIT BOOLEAN
+            Case7 ::=              [2] EXPLICIT CHOICE { a BOOLEAN }
+        END
+    `, registry, new Asn1AlwaysCrashErrorHandler()).resultAssert;
+
+    static struct Got
+    {
+        ulong tag;
+        bool isExplicit;
+        Asn1TaggedTypeIr.Class class_;
+    }
+
+    Got[] tags;
+
+    scope collectTags = (ulong tagIr, bool isExplicit, Asn1TaggedTypeIr.Class class_){
+        tags ~= Got(tagIr, isExplicit, class_);
+        return Result.noError;
+    };
+
+    // Table testing? Never heard of it!
+    Asn1TypeAssignmentIr case1, case2, case3, case4, case5, case6, case7;
+    modIr.getAssignmentByName!Asn1TypeAssignmentIr("Case1", case1).resultAssert;
+    modIr.getAssignmentByName!Asn1TypeAssignmentIr("Case2", case2).resultAssert;
+    modIr.getAssignmentByName!Asn1TypeAssignmentIr("Case3", case3).resultAssert;
+    modIr.getAssignmentByName!Asn1TypeAssignmentIr("Case4", case4).resultAssert;
+    modIr.getAssignmentByName!Asn1TypeAssignmentIr("Case5", case5).resultAssert;
+    modIr.getAssignmentByName!Asn1TypeAssignmentIr("Case6", case6).resultAssert;
+    modIr.getAssignmentByName!Asn1TypeAssignmentIr("Case7", case7).resultAssert;
+
+    alias cl = Asn1TaggedTypeIr.Class;
+
+    tags = [];
+    asn1WalkTags(case1.getSymbolType(), collectTags, Asn1AlwaysCrashErrorHandler.instance).resultAssert;
+    assert(tags == [Got(1, false, cl.universal)], tags.to!string);
+
+    tags = [];
+    asn1WalkTags(case2.getSymbolType(), collectTags, Asn1AlwaysCrashErrorHandler.instance).resultAssert;
+    assert(tags == [Got(0, false)], tags.to!string);
+
+    tags = [];
+    asn1WalkTags(case3.getSymbolType(), collectTags, Asn1AlwaysCrashErrorHandler.instance).resultAssert;
+    assert(tags == [Got(2, false)], tags.to!string);
+
+    tags = [];
+    asn1WalkTags(case4.getSymbolType(), collectTags, Asn1AlwaysCrashErrorHandler.instance).resultAssert;
+    assert(tags == [Got(2, true), Got(1, false, cl.universal)], tags.to!string);
+
+    tags = [];
+    asn1WalkTags(case5.getSymbolType(), collectTags, Asn1AlwaysCrashErrorHandler.instance).resultAssert;
+    assert(tags == [Got(1, true), Got(1, false, cl.universal)], tags.to!string);
+
+    tags = [];
+    asn1WalkTags(case6.getSymbolType(), collectTags, Asn1AlwaysCrashErrorHandler.instance).resultAssert;
+    assert(tags == [Got(3, true), Got(2, true), Got(1, false, cl.universal)], tags.to!string);
+
+    tags = [];
+    asn1WalkTags(case7.getSymbolType(), collectTags, Asn1AlwaysCrashErrorHandler.instance)
+        .resultAssertSameCode!Asn1SemanticError(Result.make(Asn1SemanticError.toolTypeMissingTag));
+    assert(tags == [Got(2, true)], tags.to!string);
 }

@@ -5,8 +5,11 @@ juptune_data_dep = juptune_data_dep
 #### Sources ####
 
 dasn1_srcs = files(
+    './src/dasn1/compile.d',
     './src/dasn1/context.d',
     './src/dasn1/print.d',
+
+    './src/dasn1/generator/dlang.d',
     
     './src/main.d',
 )
@@ -33,5 +36,7 @@ dasn1_unittest_exe = executable(
 )
 
 #### Tests ####
+
+subdir('tests/adhoc')
 
 # test('dasn1-unittest', dasn1_unittest_exe)

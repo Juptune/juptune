@@ -21,6 +21,8 @@ import juptune.data.asn1.lang.ir        : Asn1ModuleIr, Asn1BaseIr, Asn1ModuleRe
  + ++/
 final class Asn1AlwaysCrashErrorHandler : Asn1ErrorHandler
 {
+    static __gshared instance = new Asn1AlwaysCrashErrorHandler();
+
     override void startLine(Asn1Location location) { assert(false, "Something tried to generate an error"); }
     override void putInLine(scope const(char)[] slice) { assert(false, "Something tried to generate an error"); }
     override void endLine() { assert(false, "Something tried to generate an error"); }

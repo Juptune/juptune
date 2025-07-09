@@ -35,7 +35,6 @@ int printCommand(string[] args)
         return 0;
     }
 
-    bool wereErrors;
     try
     {
         auto context = new CompilerContext();
@@ -59,7 +58,7 @@ int printCommand(string[] args)
         }
         writeln(handler.buffer.slice);
 
-        wereErrors = context.wereErrors;
+        return context.wereErrors ? 1 : 0;
     }
     catch(FileException exec)
     {
@@ -81,6 +80,4 @@ int printCommand(string[] args)
 
         return 1;
     }
-
-    return wereErrors ? 1 : 0;
 }

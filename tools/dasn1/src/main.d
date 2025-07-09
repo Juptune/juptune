@@ -7,7 +7,8 @@
 
 const MAIN_HELP = 
 `Commands:
-    print       - Parses ASN.1 notation files, and prints out how dasn1 interpreted each file.
+    compile dlang-raw   - TODO
+    print               - Parses ASN.1 notation files, and prints out how dasn1 interpreted each file.
 `;
 
 int main(string[] args)
@@ -28,6 +29,26 @@ int main(string[] args)
             case "print":
                 import dasn1.print : printCommand;
                 return printCommand(args[1..$]);
+
+            case "compile":
+                if(args.length == 2)
+                {
+                    writeln("error: `compile` is not a command, please specify the language-type pair e.g. `compile dlang-raw`\n"); // @suppress(dscanner.style.long_line)
+                    writeln(MAIN_HELP);
+                    return 1;
+                }
+
+                switch(args[2])
+                {
+                    case "dlang-raw":
+                        import dasn1.compile : compileDlangRawCommand;
+                        return compileDlangRawCommand(args[2..$]);
+
+                    default:
+                        writeln("error: `dlang-raw` is not a valid language-type pair.\n");
+                        writeln(MAIN_HELP);
+                        return 1;
+                }
 
             default:
                 writeln("error: invalid command '", args[1], "'\n");

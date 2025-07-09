@@ -13,7 +13,7 @@ import std.traits : getUDAs;
 alias InheritResults(alias Symbol) = getUDAs!(Symbol, Result);
 
 @mustuse
-struct Result
+struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
 {
     import std.traits : Unqual;
 

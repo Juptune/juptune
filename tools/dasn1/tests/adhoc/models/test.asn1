@@ -1,0 +1,8 @@
+TestModule { test(0) } DEFINITIONS ::= BEGIN
+    MyBool ::= BOOLEAN
+
+    MyChoice ::= CHOICE {
+        bitstring [0] EXPLICIT [APPLICATION 10] EXPLICIT BIT STRING,
+        boolean BOOLEAN
+    }
+END
