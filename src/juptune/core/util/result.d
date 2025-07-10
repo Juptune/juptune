@@ -176,7 +176,6 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
 
 template then(Funcs...)
 {
-    @nogc nothrow
     Result then()(scope auto ref Result _this)
     {
         if(_this.isError)
