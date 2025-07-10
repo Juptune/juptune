@@ -18,7 +18,6 @@ import juptune.data.asn1.lang : Asn1SemanticError, Asn1ParserError, Asn1LexerErr
 
 import dasn1.context : CompilerContext;
 import dasn1.generator.dlang;
-import std.regex; // Intentionally everything
 
 int compileDlangRawCommand(string[] args)
 {

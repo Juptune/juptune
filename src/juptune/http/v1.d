@@ -65,6 +65,8 @@ private
             // MIDDLE_OF_HEADER_VALUE
             foreach(ch; [' ', '\t'])
                 table[ch] = MIDDLE_OF_HEADER_VALUE;
+            table[' '] |= SP;
+            table['\t'] |= HTAB;
         }
 
         return table;
