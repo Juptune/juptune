@@ -183,6 +183,13 @@ struct RobinHoodHashMapBase(
         return ptr ? &ptr.value : null;
     }
 
+    void clear()
+    {
+        foreach(i; 0..this._map.array.length)
+            this._map.array[i] = Kvp.init;
+        this._map.length = 0;
+    }
+
     @property @safe
     size_t length() const
     {
@@ -256,28 +263,24 @@ struct RobinHoodHashMapBase(
         if(map.array.length == 0)
             return null;
 
-        // My brain isn't working and I can't get it to think about how to abuse
-        // the properties of Robin Hood hashing to make this faster, so for now
-        // we'll have O(n) worst case lookup times.
-        // p sure it's supposed to have O(log n) worst case?
         const hash = this.getHash!Hasher(key);
         index = hash % map.array.length;
         const startIndex = index;
 
         if(map.array[index].isSet && map.array[index].key == key)
             return &map.array[index];
-        
-        index = (index + 1) % map.array.length;
-        while(!(map.array[index].key == key && map.array[index].isSet) && index != startIndex)
-            index = (index + 1) % map.array.length;
 
-        if(index == startIndex)
-            return null;
-        else
+        auto psl = 1;
+        index = (index + 1) % map.array.length;
+        while(map.array[index].isSet && psl <= map.array[index].psl + 1 && index != startIndex)
         {
-            assert(map.array[index].key == key);
-            return &map.array[index];
+            if(map.array[index].key == key)
+                return &map.array[index];
+            index = (index + 1) % map.array.length;
+            psl++;
         }
+
+        return null;
     }
 
     bool moveToNewMap(size_t newMapSize)
@@ -349,8 +352,8 @@ struct RobinHoodHashMapBase(
                 auto tempKey = ptr.key;
                 auto tempValue = ptr.value;
                 auto tempPsl = ptr.psl;
-                map.array[index].key = key;
-                map.array[index].value = value;
+                ptr.key = key;
+                ptr.value = value;
                 ptr.psl = psl;
                 key = tempKey;
                 value = tempValue;
@@ -424,12 +427,22 @@ unittest
         assert(map.tryGet(i, b) == i);
         assert(b);
     }
-        
+
     foreach(i; 0..100_000)
     {
         bool b;
         map.tryRemove(i, b);
         assert(b);
+    }
+
+    foreach(i; 0..100_000)
+        map.put(i, i);
+    map.clear();
+    foreach(i; 0..100_000)
+    {
+        assert(map.get(i, -1) == -1);
+        map.put(i, i);
+        assert(map.get(i) == i);
     }
 }
 
