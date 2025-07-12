@@ -75,7 +75,7 @@ struct Asn1Identifier
     Encoding encoding() => _encoding;
 
     /// Returns: The numerical tag itself.
-    Tag tag() =>_tag;
+    Tag tag() => _tag;
 }
 
 /++
@@ -1281,6 +1281,9 @@ enum Asn1DecodeError
     identifierHasInvalidTag,   /// An identifier has a tag value that was unexpected for the decoding type.
 
     choiceHasNoMatch, /// An CHOICE type is unable to select a value while decoding the data stream.
+
+    sequenceMissingField, /// A SEQUENCE type is missing a non-optional field.
+    sequenceHasExtraData, /// A non-extensible SEQUENCE type has unread content bytes after attempted decoding of all known fields.
 }
 
 /++

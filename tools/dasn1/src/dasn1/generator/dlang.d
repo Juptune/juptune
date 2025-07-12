@@ -96,7 +96,7 @@ final class DlangCodeBuilder
             context.baseModuleComponents.joiner("."),
             '.',
             getModuleDlangIdentifier(mod.getModuleName(), mod.getModuleVersion(), context.errors),
-            ';'
+            ";"
         );
 
         mod.getImports().foreachImportByModuleGC((moduleRef, moduleVersion, _){
@@ -104,7 +104,7 @@ final class DlangCodeBuilder
                 "static import ",
                 context.baseModuleComponents.joiner("."), // TODO: Alow different modules to have different bases, configurable by the user
                 getModuleDlangIdentifier(moduleRef, moduleVersion, context.errors),
-                ';'
+                ";"
             );
             return Result.noError;
         }).resultEnforce;
@@ -167,18 +167,77 @@ final class DlangCodeBuilder
         dedent();
     }
 
-    void putResult(string suffix)
+    void putIdentifierClassCheck(
+        Asn1Identifier.Class class_,
+        
+        // For clarity, the following params should be assigned via named parameters
+        string tagType,
+        string tagValue,
+        string parentTypeType,
+        string parentTypeName,
+        const(char)[] fieldName,
+        string classVar = DECODER_VAR_HEADER~".identifier.class_"
+    )
     {
-        put(RESULT_SHORTHAND);
-        put('.');
-        put(suffix);
+        import std.conv : to;
+
+        putLine(
+            "if(",
+                classVar,
+                " != ",
+                ASN1_SHORTHAND, ".Asn1Identifier.Class.", class_.to!string,
+            ")"
+        );
+        indent();
+            putLine(
+                "return ", RESULT_TYPE, ".make(",
+                    ASN1_SHORTHAND, ".Asn1DecodeError.identifierHasInvalidClass, ",
+                    `"for `, parentTypeType, " ", parentTypeName, 
+                    ` when reading `, tagType, " ", tagValue, 
+                    ` for field '`, fieldName,
+                    `' the tag's class was expected to be `, class_.to!string,
+                    `", `, STRING_SHORTHAND, ".String2(",
+                        `"class was ", `, classVar,
+                    ")",
+                ");"
+            );
+        dedent();
     }
 
-    void putAsn1(string suffix)
+    void putIdentifierTagCheck(
+        string tagValue,
+        
+        // For clarity, the following params should be assigned via named parameters
+        string tagType,
+        string parentTypeType,
+        string parentTypeName,
+        const(char)[] fieldName,
+        string tagVar = DECODER_VAR_HEADER~".identifier.tag"
+    )
     {
-        put(ASN1_SHORTHAND);
-        put('.');
-        put(suffix);
+        import std.conv : to;
+
+        putLine(
+            "if(",
+                tagVar,
+                " != ",
+                tagValue,
+            ")"
+        );
+        indent();
+            putLine(
+                "return ", RESULT_TYPE, ".make(",
+                    ASN1_SHORTHAND, ".Asn1DecodeError.identifierHasInvalidTag, ",
+                    `"for `, parentTypeType, " ", parentTypeName, 
+                    ` when reading `, tagType, " ", tagValue, 
+                    ` for field '`, fieldName,
+                    `' the tag's value was expected to be `, tagValue,
+                    `", `, STRING_SHORTHAND, ".String2(",
+                        `"tag value was ", `, tagVar,
+                    ")",
+                ");"
+            );
+        dedent();
     }
 }
 
@@ -187,6 +246,7 @@ final class DlangCodeBuilder
 private immutable RESULT_SHORTHAND = "jres";
 private immutable ASN1_SHORTHAND = "asn1";
 private immutable BUFFER_SHORTHAND = "buf";
+private immutable STRING_SHORTHAND = "jstr";
 
 private immutable RESULT_TYPE = RESULT_SHORTHAND~".Result";
 private immutable MEMORY_BUFFER_TYPE = BUFFER_SHORTHAND~".MemoryReader";
@@ -199,6 +259,7 @@ private immutable DECODER_VAR_HEADER = "componentHeader";
 private immutable SETTER_FUNCTION_PREFIX = "set";
 private immutable GETTER_FUNCTION_PREFIX = "get";
 private immutable CHECKER_FUNCTION_PREFIX = "is";
+private immutable VALIDATE_FUNCTION_PREFIX = "validate";
 
 private immutable RETURN_NO_ERROR = "return "~RESULT_TYPE~".noError;";
 
@@ -244,6 +305,7 @@ string generateRawDlangModule(Asn1ModuleIr mod, ref DlangGeneratorContext contex
         putLine("static import ", ASN1_SHORTHAND, " = juptune.data.asn1.decode.bcd.encoding;");
         putLine("static import ", RESULT_SHORTHAND, " = juptune.core.util.result;");
         putLine("static import ", BUFFER_SHORTHAND, " = juptune.data.buffer;");
+        putLine("static import ", STRING_SHORTHAND, " = juptune.core.ds.string2;");
         endLine();
 
         mod.foreachAssignmentGC((assIr){
@@ -326,7 +388,7 @@ private void putRawType(
 
                 declareType(VALUE_UNION, (){
                     ir.foreachChoiceGC((name, typeIr, _){
-                        putLine(rawTypeOf(typeIr), ' ', name, ';');
+                        putLine(rawTypeOf(typeIr), ' ', name, ";");
                         return Result.noError;
                     }).resultEnforce;
                 }, type: "union");
@@ -340,8 +402,8 @@ private void putRawType(
                 endLine();
 
                 attributeBlock("private", (){
-                    putLine(CHOICE_ENUM, ' ', CHOICE_FIELD, ';');
-                    putLine(VALUE_UNION, ' ', VALUE_FIELD, ';');
+                    putLine(CHOICE_ENUM, ' ', CHOICE_FIELD, ";");
+                    putLine(VALUE_UNION, ' ', VALUE_FIELD, ";");
                 });
 
                 ir.foreachChoiceGC((name, typeIr, _){
@@ -355,8 +417,8 @@ private void putRawType(
                             if(typeIr.getMainConstraintOrNull() !is null)
                                 putLine("// TODO: Warning - type has a constraint but it's not being handled yet!");
 
-                            putLine(VALUE_FIELD, '.', name, " = ", SETTER_PARAM_VALUE, ';');
-                            putLine(CHOICE_FIELD, " = ", CHOICE_ENUM, '.', name, ';');
+                            putLine(VALUE_FIELD, '.', name, " = ", SETTER_PARAM_VALUE, ";");
+                            putLine(CHOICE_FIELD, " = ", CHOICE_ENUM, '.', name, ";");
                             put(RETURN_NO_ERROR);
                         }, 
                         funcAttributes: "@nogc nothrow"
@@ -373,8 +435,9 @@ private void putRawType(
                                     `"This '"~__traits(identifier, typeof(this))~"`, ` does not contain choice '`, name, `'"`, // @suppress(dscanner.style.long_line)
                                 ");"
                             );
-                            put("return ", VALUE_FIELD, '.', name, ';');
-                        }, funcAttributes: "@nogc nothrow"
+                            put("return ", VALUE_FIELD, '.', name, ";");
+                        },
+                        funcAttributes: "@nogc nothrow"
                     );
 
                     declareFunction(
@@ -382,7 +445,7 @@ private void putRawType(
                         asCamelCase(CHECKER_FUNCTION_PREFIX, name), 
                         (next){}, 
                         (){
-                            put("return ", CHOICE_FIELD, " == ", CHOICE_ENUM, '.', name, ';');
+                            put("return ", CHOICE_FIELD, " == ", CHOICE_ENUM, '.', name, ";");
                         }, 
                         funcAttributes: "@nogc nothrow const"
                     );
@@ -451,21 +514,218 @@ private void putRawType(
             }
         }
 
+        override void visit(Asn1SequenceTypeIr ir)
+        {
+            immutable MEMORY_VAR_PREFIX = "memory_";
+
+            this.wrapAroundSequenceLikeType(ir);
+
+            with(code) this.declareFromDecode((){
+                ir.foreachComponentGC((item){
+                    import std.conv : to;
+
+                    putLine("/+++ TAG FOR FIELD: ", item.name, " +++/");
+                    
+                    Nullable!ulong topLevelTag;
+                    Asn1Identifier.Class class_;
+                    topLevelIrTagAndClass(item.type, topLevelTag, class_, context.errors);
+
+                    assert(!topLevelTag.isNull, "TODO: Handle special case");
+                    assert(!item.isComponentsOf, "TODO: Handle COMPONENTS OF");
+                    assert(!item.isOptional, "TODO: Handle OPTIONAL");
+                    assert(!item.isExtensible, "TODO: Handle extensible fields");
+
+                    putLine(
+                        "result = ", ASN1_SHORTHAND, ".asn1DecodeComponentHeader!", DECODER_PARAM_RULESET, "(",
+                            DECODER_PARAM_MEMORY, ", ",
+                            DECODER_VAR_HEADER,
+                        ");"
+                    );
+                    putResultCheck();
+
+                    putIdentifierClassCheck(
+                        class_, 
+                        tagType: "top level tag",
+                        tagValue: topLevelTag.get.to!string,
+                        parentTypeType: "SEQUENCE",
+                        parentTypeName: name,
+                        fieldName: item.name
+                    );
+
+                    putIdentifierTagCheck(
+                        topLevelTag.get.to!string, 
+                        tagType: "top level tag",
+                        parentTypeType: "SEQUENCE",
+                        parentTypeName: name,
+                        fieldName: item.name
+                    );
+
+                    putLine(MEMORY_BUFFER_TYPE, " ", MEMORY_VAR_PREFIX, item.name, ";");
+                    putLine(
+                        "result = ", ASN1_SHORTHAND, ".asn1ReadContentBytes(",
+                            DECODER_PARAM_MEMORY, ", ",
+                            DECODER_VAR_HEADER, ".length, ",
+                            MEMORY_VAR_PREFIX, item.name,
+                        ");"
+                    );
+                    putResultCheck();
+
+                    putRawDerDecodingForField(
+                        item.type,
+                        item.name.idup,
+                        asCamelCase(SETTER_FUNCTION_PREFIX, item.name),
+                        code,
+                        context,
+                        parentIsWrapper: false,
+                        typeOfOverride: ('_'~item.name).idup,
+                        memoryVarOverride: (MEMORY_VAR_PREFIX~item.name).idup
+                    );
+
+                    putLine();
+                    return Result.noError;
+                }).resultEnforce;
+
+                if(ir.isExtensible)
+                {
+                    assert(false, "TODO: Skip over any remaining fields (after confirming this is 100% what needs to happen)");
+                }
+                else
+                {
+                    putLine("if(memory.bytesLeft != 0)");
+                    indent();
+                        putLine(
+                            "return ", RESULT_TYPE, ".make(", 
+                                ASN1_SHORTHAND, ".Asn1DecodeError.sequenceHasExtraData, ",
+                                `"when decoding non-extensible SEQUENCE `, name, 
+                                ` there were unsused content bytes after attempting to decode all known fields -`,
+                                ` this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input"`, 
+                            ");"
+                        );
+                    dedent();
+                }
+
+                putLine("return this.", VALIDATE_FUNCTION_PREFIX, "();");
+            }, emitFinalReturn: false);
+        }
+
+        private void wrapAroundSequenceLikeType(IrT)(IrT ir)
+        {
+            immutable IS_SET_PREFIX = "_isSet_";
+
+            immutable SETTER_PARAM_VALUE = "value";
+
+            // Model vars + functions
+            with(code)
+            {
+                attributeBlock("private", (){
+                    ir.foreachComponentGC((item){
+                        assert(!item.isOptional, "TODO: support OPTIONAL");
+                        assert(!item.isComponentsOf, "TODO: support COMPONENTS OF");
+                        assert(item.defaultValue is null, "TODO: support DEFAULT");
+
+                        // I don't want to use Nullable for non-optional fields since it makes some of the other code gen logic
+                        // kind of clunky, especially where `typeof()` is currently used.
+                        if(!item.isOptional)
+                            putLine("bool ", IS_SET_PREFIX, item.name, ";");
+
+                        putLine(rawTypeOf(item.type), " _", item.name, ";");
+                        return Result.noError;
+                    }).resultEnforce;
+                });
+
+                ir.foreachComponentGC((item){
+                    declareFunction(
+                        RESULT_TYPE, 
+                        asCamelCase(SETTER_FUNCTION_PREFIX, item.name), 
+                        (next){
+                            put("typeof(_", item.name, ") ", SETTER_PARAM_VALUE);
+                            next();
+                        }, (){
+                            if(item.type.getMainConstraintOrNull() !is null)
+                                putLine("// TODO: Warning - type has a constraint but it's not being handled yet!");
+
+                            if(!item.isOptional)
+                                putLine(IS_SET_PREFIX, item.name, " = true;");
+                            
+                            putLine('_', item.name, " = ", SETTER_PARAM_VALUE, ";");
+                            put(RETURN_NO_ERROR);
+                        }, 
+                        funcAttributes: "@nogc nothrow"
+                    );
+
+                    declareFunction(
+                        ("typeof(_"~item.name~")").idup, 
+                        asCamelCase(GETTER_FUNCTION_PREFIX, item.name), 
+                        (next){},
+                        (){
+                            if(!item.isOptional)
+                            {
+                                putLine(
+                                    "assert(", IS_SET_PREFIX, item.name,
+                                        `, "Non-optional field '`, item.name,
+                                        `' has not been set yet - please use validate() to check!"`,
+                                    ");"
+                                );
+                            }
+
+                            put("return _", item.name, ";");
+                        },
+                        funcAttributes: "@nogc nothrow"
+                    );
+
+                    return Result.noError;
+                }).resultEnforce;
+
+                declareFunction(
+                    RESULT_TYPE, 
+                    VALIDATE_FUNCTION_PREFIX,
+                    (next){},
+                    (){
+                        ir.foreachComponentGC((item){
+                            if(!item.isOptional)
+                            {
+                                putLine("if(!", IS_SET_PREFIX, item.name, ")");
+                                indent();
+                                    putLine(
+                                        "return ", RESULT_TYPE, ".make(",
+                                            ASN1_SHORTHAND, ".Asn1DecodeError.sequenceMissingField",
+                                            `, "for SEQUENCE type `, name,
+                                            ` non-optional field '`, item.name,
+                                            `' has not been given a value - either because its setter wasn't called,`,
+                                            ` or the decoded data stream did not provide the field."`,
+                                        ");"
+                                    );
+                                dedent();
+                            }
+
+                            return Result.noError;
+                        }).resultEnforce;
+
+                        put(RETURN_NO_ERROR);
+                    },
+                    funcAttributes: "@nogc nothrow"
+                );
+            }
+        }
+
         private void wrapAroundBasicType(string typeName)
         {
+            immutable IS_SET_VAR = "_isSet";
             immutable SETTER_PARAM_NAME = "newValue";
 
             with(code)
             {
                 attributeBlock("private", (){
-                    putLine(typeName, ' ', BASIC_FIELD_NAME, ';');
+                    putLine(typeName, " ", BASIC_FIELD_NAME, ";");
+                    putLine("bool ", IS_SET_VAR, ";");
                 });
 
                 declareFunction(RESULT_TYPE, SETTER_FUNCTION_PREFIX, (next){
-                    put(typeName, ' ', SETTER_PARAM_NAME);
+                    put(typeName, " ", SETTER_PARAM_NAME);
                     next();
                 }, (){
-                    putLine(BASIC_FIELD_NAME, " = ", SETTER_PARAM_NAME, ';');
+                    putLine(BASIC_FIELD_NAME, " = ", SETTER_PARAM_NAME, ";");
+                    putLine(IS_SET_VAR, " = true;");
 
                     put(RETURN_NO_ERROR);
                 }, funcAttributes: "@nogc nothrow");
@@ -473,7 +733,8 @@ private void putRawType(
                 declareFunction(typeName, GETTER_FUNCTION_PREFIX, 
                     (next){},
                     (){
-                        put("return ", BASIC_FIELD_NAME, ';');
+                        putLine("assert(", IS_SET_VAR, `, "Cannot call get() when no value has been set!");`);
+                        put("return ", BASIC_FIELD_NAME, ";");
                     }, funcAttributes: "@nogc nothrow"
                 );
             }
@@ -506,8 +767,8 @@ private void putRawType(
                     next();
                 }, (){
                     putLine("auto result = ", RESULT_TYPE, ".noError;");
-                    putLine(ASN1_SHORTHAND, ".Asn1ComponentHeader ", DECODER_VAR_HEADER, ';');
-                    putLine(DECODER_VAR_HEADER, ".identifier = ", DECODER_PARAM_IDENT, ';');
+                    putLine(ASN1_SHORTHAND, ".Asn1ComponentHeader ", DECODER_VAR_HEADER, ";");
+                    putLine(DECODER_VAR_HEADER, ".identifier = ", DECODER_PARAM_IDENT, ";");
                     putLine("this = typeof(this).init;");
                     endLine();
 
@@ -532,7 +793,8 @@ private void putRawDerDecodingForField(
     DlangCodeBuilder code,
     ref DlangGeneratorContext context,
     bool parentIsWrapper,
-    string typeOfOverride = ""
+    string typeOfOverride = "",
+    string memoryVarOverride = DECODER_PARAM_MEMORY,
 )
 {
     final class DecoderVisitor : Asn1IrVisitorGC
@@ -544,7 +806,7 @@ private void putRawDerDecodingForField(
 
         private void decodePrimitive()
         {
-            string memoryVar = DECODER_PARAM_MEMORY;
+            string memoryVar = memoryVarOverride;
             
             with(code)
             {
@@ -553,7 +815,7 @@ private void putRawDerDecodingForField(
                 putLine(
                     "typeof(", 
                         typeOfOverride.length > 0 ? typeOfOverride : fieldName, 
-                    ") temp_", fieldName, ';'
+                    ") temp_", fieldName, ";"
                 );
                 putLine(
                     "result = typeof(temp_", fieldName, 
@@ -576,7 +838,7 @@ private void putRawDerDecodingForField(
             {
                 if(auto taggedIr = cast(Asn1TaggedTypeIr)fieldType)
                 {
-                    string initialMemoryVar = DECODER_PARAM_MEMORY;
+                    string initialMemoryVar = memoryVarOverride;
                     size_t depth;
 
                     auto result = asn1WalkTags(taggedIr, (ulong tagValue, bool isExplicit, Asn1TaggedTypeIr.Class class_){ // @suppress(dscanner.style.long_line)
@@ -586,7 +848,7 @@ private void putRawDerDecodingForField(
                             return Result.noError;
 
                         memoryVar = "memory_"~depth.to!string~fieldName;
-                        putLine(MEMORY_BUFFER_TYPE, ' ', memoryVar, ';');
+                        putLine(MEMORY_BUFFER_TYPE, ' ', memoryVar, ";");
 
                         indent();
                         scope(exit) dedent();
@@ -611,43 +873,22 @@ private void putRawDerDecodingForField(
                             );
                         dedent();
 
-                        putLine(
-                            "if(", 
-                                DECODER_VAR_HEADER, ".identifier.class_",
-                                " != ",
-                                ASN1_SHORTHAND, ".Asn1Identifier.Class.", irClassToDecoderClass(class_).to!string,
-                            ")"
+                        putIdentifierClassCheck(
+                            irClassToDecoderClass(class_),
+                            tagType: "EXPLICIT tag",
+                            tagValue: tagValue.to!string,
+                            parentTypeType: "TODO",
+                            parentTypeName: "TODO",
+                            fieldName: fieldName,
                         );
-                        indent();
-                            putLine(
-                                "return ", RESULT_TYPE, ".make(",
-                                    ASN1_SHORTHAND, ".Asn1DecodeError.identifierHasInvalidClass, ",
-                                    `"when reading EXPLICIT tag `, tagValue.to!string, 
-                                    ` for field `, fieldName,
-                                    ` the tag's class was expected to be `, irClassToDecoderClass(class_).to!string,
-                                    `"`,
-                                ");"
-                            );
-                        dedent();
 
-                        putLine(
-                            "if(", 
-                                DECODER_VAR_HEADER, ".identifier.tag",
-                                " != ",
-                                tagValue.to!string,
-                            ")"
+                        putIdentifierTagCheck(
+                            tagValue.to!string,
+                            tagType: "EXPLICIT tag",
+                            parentTypeType: "TODO",
+                            parentTypeName: "TODO",
+                            fieldName: fieldName,
                         );
-                        indent();
-                            putLine(
-                                "return ", RESULT_TYPE, ".make(",
-                                    ASN1_SHORTHAND, ".Asn1DecodeError.identifierHasInvalidTag, ",
-                                    `"when reading EXPLICIT tag `, tagValue.to!string, 
-                                    ` for field `, fieldName,
-                                    ` the tag's value was expected to be `, irClassToDecoderClass(class_).to!string,
-                                    `"`,
-                                ");"
-                            );
-                        dedent();
 
                         putLine(
                             "result = ", ASN1_SHORTHAND, ".asn1DecodeComponentHeader!", DECODER_PARAM_RULESET, "(",
