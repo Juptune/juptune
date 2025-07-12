@@ -514,6 +514,62 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 
     override Result visit(Asn1SequenceTypeIr ir)
     {
+        import std.typecons : Nullable;
+        import juptune.core.ds : HashMap;
+        import juptune.data.asn1.lang.operations : asn1TopLevelTagOf;
+
+        // NOTE: It's obviously very inefficient to loop over sequence components over and over again,
+        //       but my priority is to make this code easier to read and maintain, even at the cost of performance.
+        
+        // ISO/IEC 8824-1:2021 25.6.1 - OPTIONAL and DEFAULT fields must have consecutively unique tags.
+        static struct Tag
+        {
+            ulong value;
+            Asn1TaggedTypeIr.Class class_;
+        }
+        HashMap!(Tag, bool) tagSet;
+        bool checkedLastField;
+        auto result = ir.foreachComponent((item){
+            const shouldCheck = item.isOptional || item.defaultValue !is null;
+            scope(exit) checkedLastField = shouldCheck;
+
+            if(shouldCheck || checkedLastField)
+            {
+                Nullable!ulong tagValue;
+                Asn1TaggedTypeIr.Class class_;
+                auto result = asn1TopLevelTagOf(item.type, tagValue, class_, this._errors);
+                if(result.isError)
+                    return result;
+
+                if(tagValue.isNull)
+                    assert(false, "TODO: handle this very annoying edge case");
+
+                auto tag = Tag(tagValue.get, class_);
+                scope(exit)
+                {
+                    if(shouldCheck)
+                        tagSet.put(tag, true);
+                    else
+                        tagSet.clear();
+                }
+
+                if(tagSet.get(tag, false))
+                {
+                    this.reportError(
+                        item.type.getRoughLocation(),
+                        Asn1SemanticError.duplicateTag,
+                        "field '", item.name, "'",
+                        " has a tag of [", tag.class_, " ", tag.value, "]", 
+                        " which conflicts with one or more DEFAULT/OPTIONAL fields before it"
+                    );
+                    return Result.noError;
+                }
+            }
+            return Result.noError;
+        }, expandComponentsOf: true);
+        if(result.isError)
+            return result;
+
         bool _;
         return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
             assert(false, "bug: Missing constraint case for SEQUENCE (type check variant)?");
@@ -1782,6 +1838,58 @@ unittest
             "INTEGER (0..TRUE)",
             Asn1SemanticError.constraint
         ),
+    ]);
+}
+
+@("Asn1SequenceTypeIr")
+unittest
+{
+    alias Harness = GenericTestHarness!(Asn1TypeIr, Asn1SequenceTypeIr, (ref parser){
+        Asn1TypeNode node;
+        parser.Type(node).resultAssert;
+        return node;
+    });
+
+    with(Harness) run([
+        "Empty": T("SEQUENCE {}", Asn1SemanticError.none),
+        "Basic values": T(`
+            SEQUENCE {
+                a BOOLEAN,
+                b INTEGER
+            }
+        `, Asn1SemanticError.none),
+
+        "duplicate tags - success - unique consecutive tags": T(`
+            SEQUENCE {
+                a [1] IMPLICIT BOOLEAN OPTIONAL,
+                b [2] IMPLICIT BOOLEAN DEFAULT TRUE
+            }
+        `, Asn1SemanticError.none),
+        "duplicate tags - success - non-unique, non-consecutive tags": T(`
+            SEQUENCE {
+                a [1] IMPLICIT BOOLEAN OPTIONAL,
+                b [2] IMPLICIT BOOLEAN,
+                c [1] IMPLICIT BOOLEAN OPTIONAL
+            }
+        `, Asn1SemanticError.none),
+        "duplicate tags - success - non-unique tag where first field is not OPTIONAL or DEFAULT": T(`
+            SEQUENCE {
+                a [1] IMPLICIT BOOLEAN,
+                c [1] IMPLICIT BOOLEAN OPTIONAL
+            }
+        `, Asn1SemanticError.none),
+        "duplicate tags - error - consecutive OPTIONAL/DEFAULT fields": T(`
+            SEQUENCE {
+                a [1] IMPLICIT BOOLEAN OPTIONAL,
+                b [1] IMPLICIT BOOLEAN DEFAULT TRUE
+            }
+        `, Asn1SemanticError.duplicateTag),
+        "duplicate tags - error - non-OPTIONAL/DEFAULT field following consecutive fields": T(`
+            SEQUENCE {
+                a [1] IMPLICIT BOOLEAN OPTIONAL,
+                b [1] IMPLICIT BOOLEAN 
+            }
+        `, Asn1SemanticError.duplicateTag),
     ]);
 }
 

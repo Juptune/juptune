@@ -39,6 +39,7 @@ enum Asn1SemanticError
     fieldNotFound,
     impossibleValue,
     symbolNotFound,
+    duplicateTag,
 
     // Other
     duplicateModule,
@@ -2054,16 +2055,41 @@ private final class Asn1SequenceTypeBase(string Kind, ubyte UniversalTag) : Asn1
 
     private Result foreachComponentImpl(DelegateT)(
         scope DelegateT handler,
+        bool expandComponentsOf = false
     )
     {
-        foreach(item; this._components)
+        import juptune.data.asn1.lang.operations : asn1GetExactUnderlyingType;
+
+        Result foreachComponentOf(typeof(this) ir, bool isTopLevel = false)
         {
-            auto result = handler(item);
-            if(result.isError)
-                return result;
+            foreach(item; ir._components)
+            {
+                if(item.isExtensible && !isTopLevel)
+                    continue; // ISO/IEC 8824-1:2021 25.5 - Extensible fields of COMPONENT OF types must be ignored
+
+                if(item.isComponentsOf && expandComponentsOf)
+                {
+                    auto typeIr = asn1GetExactUnderlyingType(item.type);
+                    if(auto castedIr = cast(typeof(this))typeIr)
+                    {
+                        auto result = foreachComponentOf(castedIr);
+                        if(result.isError)
+                            return result;
+                        continue;
+                    }
+
+                    assert(false, "bug: COMPONENT OF isn't of the correct type - why wasn't this caught during semantic passes?"); // @suppress(dscanner.style.long_line)
+                }
+
+                auto result = handler(item);
+                if(result.isError)
+                    return result;
+            }
+
+            return Result.noError;
         }
 
-        return Result.noError;
+        return foreachComponentOf(this, isTopLevel: true);
     }
 
     @nogc nothrow:

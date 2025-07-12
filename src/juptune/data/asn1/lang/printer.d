@@ -1116,7 +1116,7 @@ unittest
                 b BOOLEAN OPTIONAL,
                 c INTEGER DEFAULT 1,
                 ...,
-                d BOOLEAN
+                d [2] BOOLEAN
             }
             SetEdgeCase ::= SET {
                 a INTEGER,
