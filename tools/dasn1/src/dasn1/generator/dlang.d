@@ -245,11 +245,13 @@ final class DlangCodeBuilder
 
 private immutable RESULT_SHORTHAND = "jres";
 private immutable ASN1_SHORTHAND = "asn1";
-private immutable BUFFER_SHORTHAND = "buf";
+private immutable BUFFER_SHORTHAND = "jbuf";
 private immutable STRING_SHORTHAND = "jstr";
+private immutable TYPE_CON_SHORTHAND = "tcon";
 
 private immutable RESULT_TYPE = RESULT_SHORTHAND~".Result";
 private immutable MEMORY_BUFFER_TYPE = BUFFER_SHORTHAND~".MemoryReader";
+private immutable NULLABLE_TYPE = TYPE_CON_SHORTHAND~".Nullable";
 
 private immutable DECODER_PARAM_RULESET = "ruleset";
 private immutable DECODER_PARAM_MEMORY = "memory";
@@ -302,6 +304,7 @@ string generateRawDlangModule(Asn1ModuleIr mod, ref DlangGeneratorContext contex
     with(code)
     {
         putStartOfModule(mod, "raw", context);
+        putLine("static import ", TYPE_CON_SHORTHAND, " = std.typecons;");
         putLine("static import ", ASN1_SHORTHAND, " = juptune.data.asn1.decode.bcd.encoding;");
         putLine("static import ", RESULT_SHORTHAND, " = juptune.core.util.result;");
         putLine("static import ", BUFFER_SHORTHAND, " = juptune.data.buffer;");
@@ -517,6 +520,7 @@ private void putRawType(
         override void visit(Asn1SequenceTypeIr ir)
         {
             immutable MEMORY_VAR_PREFIX = "memory_";
+            immutable BACKTRACK_VAR_PREFIX = "backtrack_";
 
             this.wrapAroundSequenceLikeType(ir);
 
@@ -532,8 +536,18 @@ private void putRawType(
 
                     assert(!topLevelTag.isNull, "TODO: Handle special case");
                     assert(!item.isComponentsOf, "TODO: Handle COMPONENTS OF");
-                    assert(!item.isOptional, "TODO: Handle OPTIONAL");
                     assert(!item.isExtensible, "TODO: Handle extensible fields");
+                    assert(item.defaultValue is null, "TODO: Handle DEFAULT");
+                    
+                    if(item.isOptional) // Backup the MemoryBuffer and restore it if the field doesn't exist.
+                    {
+                        putLine(
+                            "auto ", BACKTRACK_VAR_PREFIX, item.name, " = ", MEMORY_BUFFER_TYPE, "(",
+                                DECODER_PARAM_MEMORY, ".buffer, ",
+                                DECODER_PARAM_MEMORY, ".cursor",
+                            ");"
+                        );
+                    }
 
                     putLine(
                         "result = ", ASN1_SHORTHAND, ".asn1DecodeComponentHeader!", DECODER_PARAM_RULESET, "(",
@@ -542,23 +556,44 @@ private void putRawType(
                         ");"
                     );
                     putResultCheck();
+                    
+                    if(item.isOptional)
+                    {
+                        putLine(
+                            "if(",
+                                DECODER_VAR_HEADER, ".identifier.class_",
+                                " == ",
+                                ASN1_SHORTHAND, ".Asn1Identifier.Class.", class_.to!string,
 
-                    putIdentifierClassCheck(
-                        class_, 
-                        tagType: "top level tag",
-                        tagValue: topLevelTag.get.to!string,
-                        parentTypeType: "SEQUENCE",
-                        parentTypeName: name,
-                        fieldName: item.name
-                    );
+                                " && ",
 
-                    putIdentifierTagCheck(
-                        topLevelTag.get.to!string, 
-                        tagType: "top level tag",
-                        parentTypeType: "SEQUENCE",
-                        parentTypeName: name,
-                        fieldName: item.name
-                    );
+                                DECODER_VAR_HEADER, ".identifier.tag",
+                                " == ",
+                                topLevelTag.get.to!string,
+                            ")"
+                        );
+                        putLine("{");
+                        indent();
+                    }
+                    else
+                    {
+                        putIdentifierClassCheck(
+                            class_, 
+                            tagType: "top level tag",
+                            tagValue: topLevelTag.get.to!string,
+                            parentTypeType: "SEQUENCE",
+                            parentTypeName: name,
+                            fieldName: item.name
+                        );
+
+                        putIdentifierTagCheck(
+                            topLevelTag.get.to!string, 
+                            tagType: "top level tag",
+                            parentTypeType: "SEQUENCE",
+                            parentTypeName: name,
+                            fieldName: item.name
+                        );
+                    }
 
                     putLine(MEMORY_BUFFER_TYPE, " ", MEMORY_VAR_PREFIX, item.name, ";");
                     putLine(
@@ -580,6 +615,21 @@ private void putRawType(
                         typeOfOverride: ('_'~item.name).idup,
                         memoryVarOverride: (MEMORY_VAR_PREFIX~item.name).idup
                     );
+
+                    if(item.isOptional)
+                    {
+                        dedent();
+                        putLine("}");
+                        putLine("else");
+                        indent();
+                            putLine(
+                                DECODER_PARAM_MEMORY, " = ", MEMORY_BUFFER_TYPE, "(",
+                                    BACKTRACK_VAR_PREFIX, item.name, ".buffer, ",
+                                    BACKTRACK_VAR_PREFIX, item.name, ".cursor",
+                                ");"
+                            );
+                        dedent();
+                    }
 
                     putLine();
                     return Result.noError;
@@ -619,21 +669,23 @@ private void putRawType(
             {
                 attributeBlock("private", (){
                     ir.foreachComponentGC((item){
-                        assert(!item.isOptional, "TODO: support OPTIONAL");
                         assert(!item.isComponentsOf, "TODO: support COMPONENTS OF");
                         assert(item.defaultValue is null, "TODO: support DEFAULT");
 
-                        // I don't want to use Nullable for non-optional fields since it makes some of the other code gen logic
+                        // I don't want to use Nullable since it makes some of the other code gen logic
                         // kind of clunky, especially where `typeof()` is currently used.
-                        if(!item.isOptional)
-                            putLine("bool ", IS_SET_PREFIX, item.name, ";");
-
+                        putLine("bool ", IS_SET_PREFIX, item.name, ";");
                         putLine(rawTypeOf(item.type), " _", item.name, ";");
+
                         return Result.noError;
                     }).resultEnforce;
                 });
 
                 ir.foreachComponentGC((item){
+                    const itemTypeName = (item.isOptional)
+                        ? (NULLABLE_TYPE~"!("~rawTypeOf(item.type)~")")
+                        : ("typeof(_"~item.name~")").idup;
+
                     declareFunction(
                         RESULT_TYPE, 
                         asCamelCase(SETTER_FUNCTION_PREFIX, item.name), 
@@ -643,22 +695,58 @@ private void putRawType(
                         }, (){
                             if(item.type.getMainConstraintOrNull() !is null)
                                 putLine("// TODO: Warning - type has a constraint but it's not being handled yet!");
-
-                            if(!item.isOptional)
-                                putLine(IS_SET_PREFIX, item.name, " = true;");
                             
+                            putLine(IS_SET_PREFIX, item.name, " = true;");
                             putLine('_', item.name, " = ", SETTER_PARAM_VALUE, ";");
                             put(RETURN_NO_ERROR);
                         }, 
                         funcAttributes: "@nogc nothrow"
                     );
 
+                    if(item.isOptional) // Generate a setter overload that supports setting the value to null
+                    {
+                        declareFunction(
+                            RESULT_TYPE, 
+                            asCamelCase(SETTER_FUNCTION_PREFIX, item.name), 
+                            (next){
+                                put(itemTypeName, " ", SETTER_PARAM_VALUE);
+                                next();
+                            }, (){
+                                if(item.type.getMainConstraintOrNull() !is null)
+                                    putLine("// TODO: Warning - type has a constraint but it's not being handled yet!");
+                                
+                                putLine("if(!", SETTER_PARAM_VALUE, ".isNull)");
+                                indent();
+                                    putLine(
+                                        "return ", asCamelCase(SETTER_FUNCTION_PREFIX, item.name), "(",
+                                            SETTER_PARAM_VALUE, ".get()",
+                                        ");"
+                                    );
+                                dedent();
+                                putLine("else");
+                                indent();
+                                    putLine(IS_SET_PREFIX, item.name, " = false;");
+                                dedent();
+                                put(RETURN_NO_ERROR);
+                            }, 
+                            funcAttributes: "@nogc nothrow"
+                        );
+                    }
+
                     declareFunction(
-                        ("typeof(_"~item.name~")").idup, 
+                        itemTypeName, 
                         asCamelCase(GETTER_FUNCTION_PREFIX, item.name), 
                         (next){},
                         (){
-                            if(!item.isOptional)
+                            if(item.isOptional)
+                            {
+                                putLine("if(", IS_SET_PREFIX, item.name, ")");
+                                indent();
+                                    putLine("return typeof(return)(_", item.name, ");");
+                                dedent();
+                                put("return typeof(return).init;");
+                            }
+                            else
                             {
                                 putLine(
                                     "assert(", IS_SET_PREFIX, item.name,
@@ -666,9 +754,8 @@ private void putRawType(
                                         `' has not been set yet - please use validate() to check!"`,
                                     ");"
                                 );
+                                put("return _", item.name, ";");
                             }
-
-                            put("return _", item.name, ";");
                         },
                         funcAttributes: "@nogc nothrow"
                     );

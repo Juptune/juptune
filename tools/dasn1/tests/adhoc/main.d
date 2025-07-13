@@ -30,7 +30,7 @@ unittest
         0xA2, // Constructed, [2]
             0x06, // Short form, length of 6
                 0x01, 0x01, 0xFF, // Primitive BOOLEAN of TRUE
-                0x01, 0x01, 0x00, // Primitive BOOLEAN of FALSE
+                0x02, 0x01, 0x00, // Primitive BOOLEAN of FALSE
     ];
     auto memory = MemoryReader(asn1);
     
@@ -65,5 +65,6 @@ unittest
     asn1ReadContentBytes(memory, header.length, content).resultAssert;
     mySequence.fromDecoding!(Asn1Ruleset.der)(content, header.identifier).resultAssert;
     assert(mySequence.getA().asBool);
-    assert(!mySequence.getB().asBool);
+    assert(mySequence.getB().isNull);
+    assert(!mySequence.getC().asBool);
 }

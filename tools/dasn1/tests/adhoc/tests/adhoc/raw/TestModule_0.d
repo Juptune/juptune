@@ -1,8 +1,9 @@
 module tests.adhoc.raw.TestModule_0;
 
+static import tcon = std.typecons;
 static import asn1 = juptune.data.asn1.decode.bcd.encoding;
 static import jres = juptune.core.util.result;
-static import buf = juptune.data.buffer;
+static import jbuf = juptune.data.buffer;
 static import jstr = juptune.core.ds.string2;
 
 struct MyBool
@@ -31,7 +32,7 @@ struct MyBool
 
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
-        scope ref buf.MemoryReader memory,
+        scope ref jbuf.MemoryReader memory,
         const asn1.Asn1Identifier ident,
     ) 
     {
@@ -126,7 +127,7 @@ struct MyChoice
 
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
-        scope ref buf.MemoryReader memory,
+        scope ref jbuf.MemoryReader memory,
         const asn1.Asn1Identifier ident,
     ) 
     {
@@ -138,7 +139,7 @@ struct MyChoice
         if(ident.class_ == asn1.Asn1Identifier.Class.contextSpecific && ident.tag == 0)
         {
             /++ FIELD - bitstring ++/
-            buf.MemoryReader memory_0bitstring;
+            jbuf.MemoryReader memory_0bitstring;
                 // EXPLICIT TAG - 0
                 if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
                     return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 0 for field bitstring a primitive tag was found when a constructed one was expected");
@@ -152,7 +153,7 @@ struct MyChoice
                 result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_0bitstring);
                 if(result.isError)
                     return result;
-            buf.MemoryReader memory_1bitstring;
+            jbuf.MemoryReader memory_1bitstring;
                 // EXPLICIT TAG - 10
                 if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
                     return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 10 for field bitstring a primitive tag was found when a constructed one was expected");
@@ -204,6 +205,8 @@ struct MySequence
         asn1.Asn1Bool _a;
         bool _isSet_b;
         asn1.Asn1Bool _b;
+        bool _isSet_c;
+        asn1.Asn1Bool _c;
     }
 
     jres.Result setA(
@@ -231,11 +234,39 @@ struct MySequence
         return jres.Result.noError;
     }
 
-    typeof(_b) getB(
+    jres.Result setB(
+        tcon.Nullable!(asn1.Asn1Bool) value,
     ) @nogc nothrow
     {
-        assert(_isSet_b, "Non-optional field 'b' has not been set yet - please use validate() to check!");
-        return _b;
+        if(!value.isNull)
+            return setB(value.get());
+        else
+            _isSet_b = false;
+        return jres.Result.noError;
+    }
+
+    tcon.Nullable!(asn1.Asn1Bool) getB(
+    ) @nogc nothrow
+    {
+        if(_isSet_b)
+            return typeof(return)(_b);
+        return typeof(return).init;
+    }
+
+    jres.Result setC(
+        typeof(_c) value,
+    ) @nogc nothrow
+    {
+        _isSet_c = true;
+        _c = value;
+        return jres.Result.noError;
+    }
+
+    typeof(_c) getC(
+    ) @nogc nothrow
+    {
+        assert(_isSet_c, "Non-optional field 'c' has not been set yet - please use validate() to check!");
+        return _c;
     }
 
     jres.Result validate(
@@ -243,14 +274,14 @@ struct MySequence
     {
         if(!_isSet_a)
             return jres.Result.make(asn1.Asn1DecodeError.sequenceMissingField, "for SEQUENCE type MySequence non-optional field 'a' has not been given a value - either because its setter wasn't called, or the decoded data stream did not provide the field.");
-        if(!_isSet_b)
-            return jres.Result.make(asn1.Asn1DecodeError.sequenceMissingField, "for SEQUENCE type MySequence non-optional field 'b' has not been given a value - either because its setter wasn't called, or the decoded data stream did not provide the field.");
+        if(!_isSet_c)
+            return jres.Result.make(asn1.Asn1DecodeError.sequenceMissingField, "for SEQUENCE type MySequence non-optional field 'c' has not been given a value - either because its setter wasn't called, or the decoded data stream did not provide the field.");
         return jres.Result.noError;
     }
 
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
-        scope ref buf.MemoryReader memory,
+        scope ref jbuf.MemoryReader memory,
         const asn1.Asn1Identifier ident,
     ) 
     {
@@ -267,7 +298,7 @@ struct MySequence
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE MySequence when reading top level tag 1 for field 'a' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 1)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE MySequence when reading top level tag 1 for field 'a' the tag's value was expected to be 1", jstr.String2("tag value was ", componentHeader.identifier.tag));
-        buf.MemoryReader memory_a;
+        jbuf.MemoryReader memory_a;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_a);
         if(result.isError)
             return result;
@@ -282,23 +313,47 @@ struct MySequence
 
         
         /+++ TAG FOR FIELD: b +++/
+        auto backtrack_b = jbuf.MemoryReader(memory.buffer, memory.cursor);
+        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
+        if(result.isError)
+            return result;
+        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 1)
+        {
+            jbuf.MemoryReader memory_b;
+            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_b);
+            if(result.isError)
+                return result;
+            /++ FIELD - b ++/
+            typeof(_b) temp_b;
+            result = typeof(temp_b).fromDecoding!ruleset(memory_b, temp_b, componentHeader.identifier);
+            if(result.isError)
+                return result;
+            result = this.setB(temp_b);
+            if(result.isError)
+                return result;
+
+        }
+        else
+            memory = jbuf.MemoryReader(backtrack_b.buffer, backtrack_b.cursor);
+        
+        /+++ TAG FOR FIELD: c +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
             return result;
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE MySequence when reading top level tag 1 for field 'b' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
-        if(componentHeader.identifier.tag != 1)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE MySequence when reading top level tag 1 for field 'b' the tag's value was expected to be 1", jstr.String2("tag value was ", componentHeader.identifier.tag));
-        buf.MemoryReader memory_b;
-        result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_b);
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE MySequence when reading top level tag 2 for field 'c' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+        if(componentHeader.identifier.tag != 2)
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE MySequence when reading top level tag 2 for field 'c' the tag's value was expected to be 2", jstr.String2("tag value was ", componentHeader.identifier.tag));
+        jbuf.MemoryReader memory_c;
+        result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_c);
         if(result.isError)
             return result;
-        /++ FIELD - b ++/
-        typeof(_b) temp_b;
-        result = typeof(temp_b).fromDecoding!ruleset(memory_b, temp_b, componentHeader.identifier);
+        /++ FIELD - c ++/
+        typeof(_c) temp_c;
+        result = typeof(temp_c).fromDecoding!ruleset(memory_c, temp_c, componentHeader.identifier);
         if(result.isError)
             return result;
-        result = this.setB(temp_b);
+        result = this.setC(temp_c);
         if(result.isError)
             return result;
 

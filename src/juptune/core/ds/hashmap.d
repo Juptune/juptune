@@ -10,6 +10,8 @@ import juptune.core.ds.alloc, juptune.core.ds.array, std.digest.murmurhash, std.
 import std.traits : hasElaborateDestructor, hasElaborateCopyConstructor;
 import std.algorithm : move;
 
+// TODO: This code is like 5 years old and really, _really_ needs a proper look over since I'm not sure I've
+//       implemented it entirely right.
 struct RobinHoodHashMapBase(
     alias Alloc,
     size_t DefaultInitSize,

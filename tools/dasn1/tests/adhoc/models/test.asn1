@@ -8,6 +8,7 @@ TestModule { test(0) } DEFINITIONS ::= BEGIN
 
     MySequence ::= SEQUENCE {
         a BOOLEAN,
-        b BOOLEAN
+        b BOOLEAN OPTIONAL,
+        c [UNIVERSAL 2] IMPLICIT BOOLEAN
     }
 END

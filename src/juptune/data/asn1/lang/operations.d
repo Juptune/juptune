@@ -78,7 +78,14 @@ in(errors !is null, "errors is null")
         void put(ulong i)
         {
             if(length > stack.length)
+            {
+                if(heap.length == 0) // Add stack values to the heap
+                {
+                    foreach(value; stack)
+                        heap.put(value);
+                }
                 heap.put(i);
+            }
             else
                 stack[cursor] = i;
             cursor++;
