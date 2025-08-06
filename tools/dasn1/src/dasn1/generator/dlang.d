@@ -654,7 +654,7 @@ private void putRawType(
                     dedent();
                 }
 
-                putLine("return this.", VALIDATE_FUNCTION_PREFIX, "();");
+                put("return this.", VALIDATE_FUNCTION_PREFIX, "();");
             }, emitFinalReturn: false);
         }
 

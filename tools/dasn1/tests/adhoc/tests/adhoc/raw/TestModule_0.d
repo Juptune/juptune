@@ -361,7 +361,6 @@ struct MySequence
         if(memory.bytesLeft != 0)
             return jres.Result.make(asn1.Asn1DecodeError.sequenceHasExtraData, "when decoding non-extensible SEQUENCE MySequence there were unsused content bytes after attempting to decode all known fields - this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input");
         return this.validate();
-
     }
 
 }
