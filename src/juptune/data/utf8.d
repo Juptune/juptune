@@ -43,6 +43,37 @@ Result utf8Validate(alias AlgorithmT = Utf8DefaultAlgorithm)(scope const(void)[]
     return AlgorithmT.validate(input);
 }
 
+/++
+ + Validates and decodes the next UTF-8 codepoint from the given input.
+ +
+ + Notes:
+ +  After calling this function on success, the `cursor` will be advanced to the
+ +  position of the next codepoint to decode.
+ +
+ +  The value of `decoded` and `cursor` is undefined if an error is thrown.
+ +
+ + Params:
+ +  AlgorithmT = The particular algorithm to use to perform validation & decoding.
+ +  input      = The input to validate and decode.
+ +  cursor     = The cursor into `input` to decode the next codepoint from.
+ +  decoded    = The decoded codepoint.
+ +
+ + Throws:
+ +  `Utf8Error.invalid`, `Utf8Error.tooShort`, `Utf8Error.tooLong`, `Utf8Error.overlong`, `Utf8Error.tooLarge`,
+ +  `Utf8Error.surrogate`, and `Utf8Error.eof`. Please see their documentation on what conditions trigger them.
+ +
+ + Returns:
+ +  A non-errorful `Result` if `input` is a valid UTF-8 string, otherwise a `Result` roughly specifying why `input` is invalid.
+ + ++/
+Result utf8DecodeNext(alias AlgorithmT = Utf8DefaultAlgorithm)(
+    scope const(void)[] input,
+    scope ref size_t cursor,
+    scope ref dchar decoded,
+) @nogc nothrow @safe
+{
+    return AlgorithmT.decodeNext(input, cursor, decoded);
+}
+
 /++++ Algorithms ++++/
 
 /// The default set of UTF-8 algorithms for this platform.
@@ -60,6 +91,7 @@ private template Utf8FallbackAlgorithm_()
         scope const bytes = cast(const(ubyte)[])input;
 
         size_t i = 0;
+        dchar ignore;
         while(i < bytes.length)
         {
             // ASCII fast path as described in the linked paper.
@@ -73,99 +105,130 @@ private template Utf8FallbackAlgorithm_()
                 continue;
             }
 
-            switch(bytes[i])
-            {
-                // ASCII
-                case 0b00000000: .. case 0b01111111:
-                    i++;
-                    continue;
-
-                // 2 bytes
-                case 0b11000010: .. case 0b11011111:
-                    if(i + 1 >= bytes.length)
-                        return Result.make(Utf8Error.eof, "Ran out of bytes when decoding 2-byte UTF-8 codepoint.");
-                    if((bytes[i+1] & 0xC0) != 0x80)
-                        return Result.make(Utf8Error.tooShort, "For 2-byte UTF-8 codepoint, the next byte isn't a continuation byte."); // @suppress(dscanner.style.long_line)
-                    i += 2;
-                    break;
-
-                // 3 bytes (Lower end of allowed values)
-                case 0b11100000:
-                    if(i + 2 >= bytes.length)
-                        return Result.make(Utf8Error.eof, "Ran out of bytes when decoding 3-byte (lower) UTF-8 codepoint."); // @suppress(dscanner.style.long_line)
-                    
-                    const byte1 = bytes[i+1];
-                    if((byte1 & 0xC0) != 0x80 || (bytes[i+2] & 0xC0) != 0x80)
-                        return Result.make(Utf8Error.tooShort, "For 3-byte (lower) UTF-8 codepoint, one of the next bytes isn't a continuation byte."); // @suppress(dscanner.style.long_line)
-                    if(byte1 >= 0b10000000 && byte1 <= 0b10011111)
-                        return Result.make(Utf8Error.overlong, "For 3-byte (lower) UTF-8 codepoint, value is <= U+7FF");
-                    i += 3;
-                    break;
-
-                // 3 bytes (potential surrogate)
-                case 0b11101101:
-                    if(i + 2 >= bytes.length)
-                        return Result.make(Utf8Error.eof, "Ran out of bytes when decoding 3-byte (surrogate) UTF-8 codepoint."); // @suppress(dscanner.style.long_line)
-                    
-                    const byte1 = bytes[i+1];
-                    if((byte1 & 0xC0) != 0x80 || (bytes[i+2] & 0xC0) != 0x80)
-                        return Result.make(Utf8Error.tooShort, "For 3-byte (surrogate) UTF-8 codepoint, one of the next bytes isn't a continuation byte."); // @suppress(dscanner.style.long_line)
-                    if(byte1 >= 0b10100000 && byte1 <= 0b10111111)
-                        return Result.make(Utf8Error.surrogate, "For 3-byte (surrogate) UTF-8 codepoint, value could be confused as a UTF-16 surrogate."); // @suppress(dscanner.style.long_line)
-                    i += 3;
-                    break;
-
-                // 3 bytes (rest of the potential values)
-                case 0b11100001: .. case 0b11101100:
-                case 0b11101110: .. case 0b11101111:
-                    if(i + 2 >= bytes.length)
-                        return Result.make(Utf8Error.eof, "Ran out of bytes when decoding 3-byte UTF-8 codepoint."); // @suppress(dscanner.style.long_line)
-                    if((bytes[i+1] & 0xC0) != 0x80 || (bytes[i+2] & 0xC0) != 0x80)
-                        return Result.make(Utf8Error.tooShort, "For 3-byte UTF-8 codepoint, one of the next bytes isn't a continuation byte."); // @suppress(dscanner.style.long_line)
-                    i += 3;
-                    break;
-
-                // 4 bytes (potentially too small)
-                case 0b11110000:
-                    if(i + 3 >= bytes.length)
-                        return Result.make(Utf8Error.eof, "Ran out of bytes when decoding 4-byte (lower) UTF-8 codepoint."); // @suppress(dscanner.style.long_line)
-                    
-                    const byte1 = bytes[i+1];
-                    if((byte1 & 0xC0) != 0x80 || (bytes[i+2] & 0xC0) != 0x80 || (bytes[i+3] & 0xC0) != 0x80)
-                        return Result.make(Utf8Error.tooShort, "For 4-byte (lower) UTF-8 codepoint, one of the next bytes isn't a continuation byte."); // @suppress(dscanner.style.long_line)
-                    if(byte1 >= 0b10000000 && byte1 <= 0b10001111)
-                        return Result.make(Utf8Error.overlong, "For 4-byte (lower) UTF-8 codepoint, value is <= U+FFFF."); // @suppress(dscanner.style.long_line)
-                    i += 4;
-                    break;
-
-                // 4 bytes (no potential for being too large or small)
-                case 0b11110001: .. case 0b11110011:
-                    if(i + 3 >= bytes.length)
-                        return Result.make(Utf8Error.eof, "Ran out of bytes when decoding 4-byte UTF-8 codepoint."); // @suppress(dscanner.style.long_line)
-                    if((bytes[i+1] & 0xC0) != 0x80 || (bytes[i+2] & 0xC0) != 0x80 || (bytes[i+3] & 0xC0) != 0x80)
-                        return Result.make(Utf8Error.tooShort, "For 4-byte UTF-8 codepoint, one of the next bytes isn't a continuation byte."); // @suppress(dscanner.style.long_line)
-                    i += 4;
-                    break;
-
-                // 4 bytes (potentially too large)
-                case 0b11110100:
-                    if(i + 3 >= bytes.length)
-                        return Result.make(Utf8Error.eof, "Ran out of bytes when decoding 4-byte (upper) UTF-8 codepoint."); // @suppress(dscanner.style.long_line)
-                    
-                    const byte1 = bytes[i+1];
-                    if((byte1 & 0xC0) != 0x80 || (bytes[i+2] & 0xC0) != 0x80 || (bytes[i+3] & 0xC0) != 0x80)
-                        return Result.make(Utf8Error.tooShort, "For 4-byte (upper) UTF-8 codepoint, one of the next bytes isn't a continuation byte."); // @suppress(dscanner.style.long_line)
-                    if(byte1 >= 0b10100000 && byte1 <= 0b10111111)
-                        return Result.make(Utf8Error.tooLarge, "For 4-byte (upper) UTF-8 codepoint, value is > U+10FFFF."); // @suppress(dscanner.style.long_line)
-                    i += 4;
-                    break;
-
-                default:
-                    return Result.make(Utf8Error.invalid, "UTF-8 leading byte contains 5 or more header bits.");
-            }
+            auto result = next!false(bytes, i, ignore);
+            if(result.isError)
+                return result;
         }
 
         return Result.noError; 
+    }
+
+    Result decodeNext(scope const(void)[] input, scope ref size_t cursor, scope ref dchar decoded) @safe
+    {
+        return next!true(cast(const(ubyte)[])input, cursor, decoded);
+    }
+
+    pragma(inline, true)
+    Result next(bool DoDecode)(scope const(ubyte[]) bytes, scope ref size_t i, scope ref dchar decoded)
+    {
+        switch(bytes[i])
+        {
+            // ASCII
+            case 0b00000000: .. case 0b01111111:
+                static if(DoDecode)
+                    decoded = cast(dchar)bytes[i];
+                i++;
+                break;
+
+            // 2 bytes
+            case 0b11000010: .. case 0b11011111:
+                if(i + 1 >= bytes.length)
+                    return Result.make(Utf8Error.eof, "Ran out of bytes when decoding 2-byte UTF-8 codepoint.");
+                if((bytes[i+1] & 0xC0) != 0x80)
+                    return Result.make(Utf8Error.tooShort, "For 2-byte UTF-8 codepoint, the next byte isn't a continuation byte."); // @suppress(dscanner.style.long_line)
+                static if(DoDecode)
+                    decoded = ((bytes[i] & 0b00011111) << 6) | (bytes[i+1] & 0b00111111);
+                i += 2;
+                break;
+
+            // 3 bytes (Lower end of allowed values)
+            case 0b11100000:
+                if(i + 2 >= bytes.length)
+                    return Result.make(Utf8Error.eof, "Ran out of bytes when decoding 3-byte (lower) UTF-8 codepoint."); // @suppress(dscanner.style.long_line)
+                
+                const byte1 = bytes[i+1];
+                if((byte1 & 0xC0) != 0x80 || (bytes[i+2] & 0xC0) != 0x80)
+                    return Result.make(Utf8Error.tooShort, "For 3-byte (lower) UTF-8 codepoint, one of the next bytes isn't a continuation byte."); // @suppress(dscanner.style.long_line)
+                if(byte1 >= 0b10000000 && byte1 <= 0b10011111)
+                    return Result.make(Utf8Error.overlong, "For 3-byte (lower) UTF-8 codepoint, value is <= U+7FF");
+                static if(DoDecode)
+                    decoded = ((bytes[i] & 0b00001111) << 12) | ((bytes[i+1] & 0b00111111) << 6) | (bytes[i+2] & 0b00111111); // @suppress(dscanner.style.long_line)
+                i += 3;
+                break;
+
+            // 3 bytes (potential surrogate)
+            case 0b11101101:
+                if(i + 2 >= bytes.length)
+                    return Result.make(Utf8Error.eof, "Ran out of bytes when decoding 3-byte (surrogate) UTF-8 codepoint."); // @suppress(dscanner.style.long_line)
+                
+                const byte1 = bytes[i+1];
+                if((byte1 & 0xC0) != 0x80 || (bytes[i+2] & 0xC0) != 0x80)
+                    return Result.make(Utf8Error.tooShort, "For 3-byte (surrogate) UTF-8 codepoint, one of the next bytes isn't a continuation byte."); // @suppress(dscanner.style.long_line)
+                if(byte1 >= 0b10100000 && byte1 <= 0b10111111)
+                    return Result.make(Utf8Error.surrogate, "For 3-byte (surrogate) UTF-8 codepoint, value could be confused as a UTF-16 surrogate."); // @suppress(dscanner.style.long_line)
+                static if(DoDecode)
+                    decoded = ((bytes[i] & 0b00001111) << 12) | ((bytes[i+1] & 0b00111111) << 6) | (bytes[i+2] & 0b00111111); // @suppress(dscanner.style.long_line)
+                i += 3;
+                break;
+
+            // 3 bytes (rest of the potential values)
+            case 0b11100001: .. case 0b11101100:
+            case 0b11101110: .. case 0b11101111:
+                if(i + 2 >= bytes.length)
+                    return Result.make(Utf8Error.eof, "Ran out of bytes when decoding 3-byte UTF-8 codepoint."); // @suppress(dscanner.style.long_line)
+                if((bytes[i+1] & 0xC0) != 0x80 || (bytes[i+2] & 0xC0) != 0x80)
+                    return Result.make(Utf8Error.tooShort, "For 3-byte UTF-8 codepoint, one of the next bytes isn't a continuation byte."); // @suppress(dscanner.style.long_line)
+                static if(DoDecode)
+                    decoded = ((bytes[i] & 0b00001111) << 12) | ((bytes[i+1] & 0b00111111) << 6) | (bytes[i+2] & 0b00111111); // @suppress(dscanner.style.long_line)
+                i += 3;
+                break;
+
+            // 4 bytes (potentially too small)
+            case 0b11110000:
+                if(i + 3 >= bytes.length)
+                    return Result.make(Utf8Error.eof, "Ran out of bytes when decoding 4-byte (lower) UTF-8 codepoint."); // @suppress(dscanner.style.long_line)
+                
+                const byte1 = bytes[i+1];
+                if((byte1 & 0xC0) != 0x80 || (bytes[i+2] & 0xC0) != 0x80 || (bytes[i+3] & 0xC0) != 0x80)
+                    return Result.make(Utf8Error.tooShort, "For 4-byte (lower) UTF-8 codepoint, one of the next bytes isn't a continuation byte."); // @suppress(dscanner.style.long_line)
+                if(byte1 >= 0b10000000 && byte1 <= 0b10001111)
+                    return Result.make(Utf8Error.overlong, "For 4-byte (lower) UTF-8 codepoint, value is <= U+FFFF."); // @suppress(dscanner.style.long_line)
+                static if(DoDecode)
+                    decoded = ((bytes[i] & 0b00000111) << 18) | ((bytes[i+1] & 0b00111111) << 12) | ((bytes[i+2] & 0b00111111) << 6) | (bytes[i+3] & 0b00111111); // @suppress(dscanner.style.long_line)
+                i += 4;
+                break;
+
+            // 4 bytes (no potential for being too large or small)
+            case 0b11110001: .. case 0b11110011:
+                if(i + 3 >= bytes.length)
+                    return Result.make(Utf8Error.eof, "Ran out of bytes when decoding 4-byte UTF-8 codepoint."); // @suppress(dscanner.style.long_line)
+                if((bytes[i+1] & 0xC0) != 0x80 || (bytes[i+2] & 0xC0) != 0x80 || (bytes[i+3] & 0xC0) != 0x80)
+                    return Result.make(Utf8Error.tooShort, "For 4-byte UTF-8 codepoint, one of the next bytes isn't a continuation byte."); // @suppress(dscanner.style.long_line)
+                static if(DoDecode)
+                    decoded = ((bytes[i] & 0b00000111) << 18) | ((bytes[i+1] & 0b00111111) << 12) | ((bytes[i+2] & 0b00111111) << 6) | (bytes[i+3] & 0b00111111); // @suppress(dscanner.style.long_line)
+                i += 4;
+                break;
+
+            // 4 bytes (potentially too large)
+            case 0b11110100:
+                if(i + 3 >= bytes.length)
+                    return Result.make(Utf8Error.eof, "Ran out of bytes when decoding 4-byte (upper) UTF-8 codepoint."); // @suppress(dscanner.style.long_line)
+                
+                const byte1 = bytes[i+1];
+                if((byte1 & 0xC0) != 0x80 || (bytes[i+2] & 0xC0) != 0x80 || (bytes[i+3] & 0xC0) != 0x80)
+                    return Result.make(Utf8Error.tooShort, "For 4-byte (upper) UTF-8 codepoint, one of the next bytes isn't a continuation byte."); // @suppress(dscanner.style.long_line)
+                if(byte1 >= 0b10100000 && byte1 <= 0b10111111)
+                    return Result.make(Utf8Error.tooLarge, "For 4-byte (upper) UTF-8 codepoint, value is > U+10FFFF."); // @suppress(dscanner.style.long_line)
+                static if(DoDecode)
+                    decoded = ((bytes[i] & 0b00000111) << 18) | ((bytes[i+1] & 0b00111111) << 12) | ((bytes[i+2] & 0b00111111) << 6) | (bytes[i+3] & 0b00111111); // @suppress(dscanner.style.long_line)
+                i += 4;
+                break;
+
+            default:
+                return Result.make(Utf8Error.invalid, "UTF-8 leading byte contains 5 or more header bits.");
+        }
+
+        return Result.noError;
     }
 }
 
@@ -180,6 +243,8 @@ alias Utf8FallbackAlgorithm = Utf8FallbackAlgorithm_!();
 version(unittest):
 
 import std.meta : AliasSeq;
+
+private alias AllAlgorithms = AliasSeq!(Utf8FallbackAlgorithm);
 
 @("utf8Validate - Tests cases from https://github.com/flenniken/utf8tests (shoutout!)")
 unittest
@@ -310,7 +375,7 @@ unittest
         cases["15.0."~i.to!string(16)] = T([cast(ubyte)i, 0x20, 0x00, 0x00], Utf8Error.tooShort);
     }
 
-    static foreach(AlgorithmT; AliasSeq!(Utf8FallbackAlgorithm))
+    static foreach(AlgorithmT; AllAlgorithms)
     foreach(testName, testCase; cases)
     {
         try
@@ -320,6 +385,44 @@ unittest
                 result.resultAssert;
             else
                 resultAssertSameCode!Utf8Error(result, Result.make(testCase.expectedError.get));
+        }
+        catch(Error ex) // @suppress(dscanner.suspicious.catch_em_all)
+        {
+            assert(false, "["~testName~"] "~ex.msg);
+        }
+    }
+}
+
+@("utf8DecodeNext - General success")
+unittest
+{
+    import juptune.core.util : resultAssert;
+    import std.typecons : Nullable;
+
+    static struct T
+    {
+        const(ubyte)[] input;
+        dchar expected;
+    }
+
+    T[string] cases = [
+        // Cases from: https://en.wikipedia.org/wiki/UTF-8
+        "Ascii W": T([0x57], 'W'),
+        "Greek Beta": T([0xCE, 0x92], 'Β'),
+        "Korean Wi": T([0xEC, 0x9C, 0x84], '위'),
+        "Some Gothic character": T([0xF0, 0x90, 0x8D, 0x85], '𐍅'),
+    ];
+
+    static foreach(AlgorithmT; AllAlgorithms)
+    foreach(testName, testCase; cases)
+    {
+        try
+        {
+            dchar decoded;
+            size_t cursor;
+            utf8DecodeNext!AlgorithmT(testCase.input, cursor, decoded).resultAssert;
+            assert(cursor == testCase.input.length, "cursor is not at the end of the given input?");
+            assert(decoded == testCase.expected);
         }
         catch(Error ex) // @suppress(dscanner.suspicious.catch_em_all)
         {
