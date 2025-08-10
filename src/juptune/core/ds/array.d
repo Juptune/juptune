@@ -146,7 +146,9 @@ struct ArrayBase(
 
     void reserve(size_t amount)
     {
-        this.length = this.length + amount;
+        const oldLength = this._length;
+        this.length = this.length + amount; // Increases capacity if needed.
+        this._length = oldLength;
     }
 
     inout(ValueT)[] opIndex() inout
