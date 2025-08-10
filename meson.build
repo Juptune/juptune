@@ -75,6 +75,9 @@ data_srcs = files(
     './src/juptune/data/asn1/lang/printer.d',
     './src/juptune/data/asn1/lang/tooling.d',
     './src/juptune/data/asn1/lang/typecheck.d',
+
+    './src/juptune/data/json/builder.d',
+    './src/juptune/data/json/package.d',
 )
 
 event_srcs = files(

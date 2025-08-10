@@ -102,7 +102,7 @@ Result utf8Encode(
     dchar ch,
     scope ref Utf8EncodeCharBuffer buffer,
     scope ref ubyte[] outSlice,
-)
+) @safe @nogc nothrow
 {
     if(ch <= 0x7F) // ASCII
     {
