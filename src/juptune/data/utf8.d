@@ -24,6 +24,8 @@ enum Utf8Error
     eof         /// Ran out of bytes while decoding a codepoint.
 }
 
+alias Utf8EncodeCharBuffer = ubyte[4];
+
 /++
  + Validates that the entirety of the given input is a correct, well-formed UTF-8 string.
  +
@@ -72,6 +74,68 @@ Result utf8DecodeNext(alias AlgorithmT = Utf8DefaultAlgorithm)(
 ) @nogc nothrow @safe
 {
     return AlgorithmT.decodeNext(input, cursor, decoded);
+}
+
+/++
+ + Encodes (but does not validate) the given Unicode codepoint into UTF-8 codeunits.
+ +
+ + Notes:
+ +  This function does not validate that `ch` is a valid codepoint. It is up to the caller
+ +  the use the other validation functions when appropriate to confirm the encoding is valid.
+ +
+ +  For `buffer`, just initialise an empty `Utf8EncodeCharBuffer` and pass it in - it's just to make
+ +  handling the variable-lengthiness of UTF-8 easier.
+ +
+ + Params:
+ +  ch          = The codepoint to encode.
+ +  buffer      = A buffer to store the encoded codepoint into.
+ +  outSlice    = A slice of `buffer` containing the bytes that were used for encoding `ch`.
+ +
+ + Throws:
+ +  `Utf8Error.invalid` if `ch` is greater than 0x10FFFF - as any value above that number is not allowed
+ +  to be encoded under UTF-8.
+ +
+ + Returns:
+ +  A `Result` indicating whether encoding was succesful or not.
+ + ++/
+Result utf8Encode(
+    dchar ch,
+    scope ref Utf8EncodeCharBuffer buffer,
+    scope ref ubyte[] outSlice,
+)
+{
+    if(ch <= 0x7F) // ASCII
+    {
+        buffer[0] = cast(ubyte)ch;
+        outSlice = buffer[0..1];
+        return Result.noError;
+    }
+    else if(ch <= 0x7FF) // Two bytes
+    {
+        buffer[0] = 0b110_00000 | ((ch & 0b0111_1100_0000) >> 6);
+        buffer[1] = 0b10_000000 | ( ch & 0b0000_0011_1111);
+        outSlice = buffer[0..2];
+        return Result.noError;
+    }
+    else if(ch <= 0xFFFF) // Three bytes
+    {
+        buffer[0] = 0b1110_0000 | ((ch & 0b1111_0000_0000_0000) >> 12);
+        buffer[1] = 0b10_000000 | ((ch & 0b0000_1111_1100_0000) >> 6);
+        buffer[2] = 0b10_000000 | ( ch & 0b0000_0000_0011_1111);
+        outSlice = buffer[0..3];
+        return Result.noError;
+    }
+    else if(ch <= 0x10FFFF) // Four bytes
+    {
+        buffer[0] = 0b11110_000 | ((ch & 0b1_1100_0000_0000_0000_0000) >> 18);
+        buffer[1] = 0b10_000000 | ((ch & 0b0_0011_1111_0000_0000_0000) >> 12);
+        buffer[2] = 0b10_000000 | ((ch & 0b0_0000_0000_1111_1100_0000) >> 6);
+        buffer[3] = 0b10_000000 | ( ch & 0b0_0000_0000_0000_0011_1111);
+        outSlice = buffer[0..4];
+        return Result.noError;
+    }
+
+    return Result.make(Utf8Error.invalid, "Attempted to encode an invalid UTF-8 codepoint");
 }
 
 /++++ Algorithms ++++/
@@ -423,6 +487,50 @@ unittest
             utf8DecodeNext!AlgorithmT(testCase.input, cursor, decoded).resultAssert;
             assert(cursor == testCase.input.length, "cursor is not at the end of the given input?");
             assert(decoded == testCase.expected);
+        }
+        catch(Error ex) // @suppress(dscanner.suspicious.catch_em_all)
+        {
+            assert(false, "["~testName~"] "~ex.msg);
+        }
+    }
+}
+
+@("utf8Encode - General success")
+unittest
+{
+    import juptune.core.util : resultAssert;
+    import std.typecons : Nullable;
+
+    static struct T
+    {
+        dchar input;
+        const(ubyte)[] expected;
+    }
+
+    T[string] cases = [
+        // Cases from: https://en.wikipedia.org/wiki/UTF-8
+        "Ascii W": T('W', [0x57]),
+        "Greek Beta": T('Β', [0xCE, 0x92]),
+        "Korean Wi": T('위', [0xEC, 0x9C, 0x84]),
+        "Some Gothic character": T('𐍅', [0xF0, 0x90, 0x8D, 0x85]),
+
+        "Max ASCII": T(cast(dchar)0x7F, [0x7F]),
+        "Max Two Byte": T(cast(dchar)0x7FF, [0xDF, 0xBF]),
+        "Max Three Byte": T(cast(dchar)0xFFFF, [0xEF, 0xBF, 0xBF]),
+        "Max Four Byte": T(cast(dchar)0x10FFFF, [0xF4, 0x8F, 0xBF, 0xBF]),
+    ];
+
+    static foreach(AlgorithmT; AllAlgorithms)
+    foreach(testName, testCase; cases)
+    {
+        try
+        {
+            Utf8EncodeCharBuffer buffer;
+            ubyte[] usedBuffer;
+            utf8Encode(testCase.input, buffer, usedBuffer).resultAssert;
+            assert(usedBuffer == testCase.expected);
+
+            utf8Validate(usedBuffer).resultAssert;
         }
         catch(Error ex) // @suppress(dscanner.suspicious.catch_em_all)
         {
