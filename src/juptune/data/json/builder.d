@@ -413,41 +413,24 @@ struct JsonBuilder(SinkT)
 
         Result flush()
         {
+            import juptune.data.utf8 : utf8Validate;
+
             if(start >= cursor)
                 return Result.noError;
 
-            auto result = this._sink(str[start..cursor]);
+            const slice = str[start..cursor];
+
+            auto result = utf8Validate(slice);
+            if(result.isError)
+                return result;
+
+            result = this._sink(slice);
             start = cursor + 1;
             return result;
         }
 
         while(cursor < str.length)
         {
-            import std.ascii : isASCII;
-
-            // NOTE: In defiance of the RFC, characters outside of the Unicode Basic Multilingual Plane are just
-            //       encoded as a normal UTF-8 codepoint, because UTF-16 surrogate pairs are not worth the effort.
-            if(!str[cursor].isASCII)
-            {
-                import juptune.data.utf8 : Utf8EncodeCharBuffer, utf8Encode, utf8Validate;
-
-                result = flush();
-                if(result.isError)
-                    return result;
-
-                const oldCursor = cursor;
-                dchar ch;
-                result = utf8DecodeNext(str, cursor, ch);
-                if(result.isError)
-                    return result;
-
-                result = this._sink(str[oldCursor..cursor]);
-                if(result.isError)
-                    return result;
-                start = cursor; // Otherwise it might include some of the UTF-8 bytes we've already moved past, when we call flush().
-                continue;
-            }
-
             const ch = str[cursor++];
 
             switch(ch)
