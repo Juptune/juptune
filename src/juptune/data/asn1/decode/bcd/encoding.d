@@ -98,8 +98,7 @@ struct Asn1LongLength
 
     @safe nothrow pure:
 
-    // version(unittest) since I don't know how I want to handle constructing things manually yet, but I need this for testing at the very least.
-    version(unittest) static Asn1LongLength fromNumberGC(T)(T number)
+    static Asn1LongLength fromNumberGC(T)(T number)
     if(isUnsigned!T)
     {
         import std.bitmanip : nativeToBigEndian;
@@ -263,8 +262,7 @@ struct Asn1Integer
 
     @trusted nothrow: // TODO: Look into why array's dtor is unsafe/untrusted // @suppress(dscanner.trust_too_much)
 
-    // version(unittest) since I don't know how I want to handle constructing things manually yet, but I need this for testing at the very least.
-    version(unittest) static Asn1Integer fromNumberGC(T)(T number)
+    static Asn1Integer fromNumberGC(T)(T number)
     if(isIntegral!T)
     {
         import std.bitmanip : nativeToBigEndian;
@@ -274,6 +272,8 @@ struct Asn1Integer
 
         return Asn1Integer.fromUnownedBytes(bytes);
     }
+
+    const(ubyte)[] rawBytes() => this._value;
 
     /++ 
      + Constructs an `Asn1Integer` using a slice to external memory - this memory containing the raw bytes
@@ -1206,11 +1206,501 @@ alias Asn1ObjectIdentifier = Asn1ObjectIdentifierImpl!false;
  + ++/
 alias Asn1RelativeObjectIdentifier = Asn1ObjectIdentifierImpl!true;
 
-/**
-    TODO TYPES:
-        8.21 - Need to handle UTF support in @nogc?
-        8.22 - ^^
-**/
+// TODO: Document
+// TODO: Mention that this type is specifically designed for dasn1's code generation, since it's a really
+//       awkward issue to deal with.
+// TODO: Also mention that yes, this is a really inefficient design, but allocating memory has some annoying
+//       complications - especially around dasn1's code generation.
+struct Asn1SetOfImpl(ElementT, bool IsSetOf)
+{
+    private
+    {
+        static struct FromDecoding
+        {
+            const(ubyte)[] data;
+            size_t length;
+        }
+
+        static struct InMemory
+        {
+            ElementT[] elements;
+        }
+
+        enum ImplType
+        {
+            FAILSAFE,
+            fromDecoding,
+            inMemory,
+        }
+
+        ImplType _implType;
+        union
+        {
+            FromDecoding _fromDecoding;
+            InMemory _inMemory;
+        }
+    }
+
+    alias foreachElement = foreachElementImpl!(
+        Result delegate(ElementT) @nogc nothrow,
+        Result delegate(scope ref MemoryReader, scope out ElementT, const Asn1Identifier) @nogc nothrow,
+    );
+    alias foreachElementGC = foreachElementImpl!(
+        Result delegate(ElementT),
+        Result delegate(scope ref MemoryReader, scope out ElementT, const Asn1Identifier),
+    );
+    alias foreachElementAuto = foreachElementAutoImpl!(Result delegate(ElementT) @nogc nothrow, Asn1Ruleset.der);
+    alias foreachElementAutoGC = foreachElementAutoImpl!(Result delegate(ElementT), Asn1Ruleset.der);
+
+    private Result foreachElementAutoImpl(HandlerT, Asn1Ruleset ruleset)(scope HandlerT handler)
+    {
+        scope decoder = (scope ref MemoryReader memory, scope out ElementT element, const Asn1Identifier identifier) {
+            static if(__traits(isStaticFunction, ElementT.fromDecoding!ruleset))
+                return ElementT.fromDecoding!ruleset(memory, element, identifier);
+            else
+                return element.fromDecoding!ruleset(memory, identifier);
+        };
+        return this.foreachElementImpl(handler, decoder);
+    }
+
+    private Result foreachElementImpl(HandlerT, DecoderT)(
+        scope HandlerT handler,
+        scope DecoderT decoder,
+    )
+    {
+        final switch(this._implType) with(ImplType)
+        {
+            case FAILSAFE: assert(false, "bug: FAILSAFE");
+
+            case inMemory:
+                foreach(element; this._inMemory.elements)
+                {
+                    auto result = handler(element);
+                    if(result.isError)
+                        return result;
+                }
+                return Result.noError;
+
+            case fromDecoding:
+                auto dataReader = MemoryReader(this._fromDecoding.data);
+                while(dataReader.bytesLeft > 0)
+                {
+                    Asn1ComponentHeader header;
+                    MemoryReader elementReader;
+                    auto error = asn1DecodeComponentHeader!(Asn1Ruleset.der)(dataReader, header);
+                    if(error.isError)
+                        return error;
+                    error = asn1ReadContentBytes(dataReader, header.length, elementReader);
+                    if(error.isError)
+                        return error;
+
+                    ElementT element;
+                    error = decoder(elementReader, element, header.identifier);
+                    if(error.isError)
+                        return error;
+                    
+                    error = handler(element);
+                    if(error.isError)
+                        return error;
+                }
+                return Result.noError;
+        }
+    }
+
+    @trusted @nogc nothrow: // @suppress(dscanner.trust_too_much)
+
+    size_t toHash() const @nogc @safe pure nothrow
+    {
+        // Nullable calls into toHash, and for some reason its __traits(compile) check *Passes* despite it generating errors.
+        // So we have to have this dummy toHash here to make it all work right, lol.
+        assert(false, "TODO: Support this I guess?");
+        return 0;    
+    }
+    
+    size_t elementCount()
+    {
+        final switch(this._implType) with(ImplType)
+        {
+            case FAILSAFE: assert(false, "bug: FAILSAFE");
+            case inMemory: return this._inMemory.elements.length;
+            case fromDecoding: return this._fromDecoding.length;
+        }
+    }
+
+    static typeof(this) fromInMemory(ElementT[] elements)
+    {
+        typeof(this) set;
+        set._implType = ImplType.inMemory;
+        set._inMemory.elements = elements;
+        return set;
+    }
+
+    static Result fromDecoding(Asn1Ruleset ruleset)(
+        scope ref MemoryReader mem, 
+        scope out typeof(this) result,
+        const Asn1Identifier ident,
+    )
+    {
+        if(ident.encoding() == Asn1Identifier.Encoding.primitive)
+        {
+            enum Error = "Asn1SetOf!" ~ ElementT.stringof ~ " cannot be primitive, it must be constructed";
+            return Result.make(Asn1DecodeError.setOfIsPrimitive, Error); // @suppress(dscanner.style.long_line)
+        }
+
+        const(ubyte)[] data;
+        if(!mem.readBytes(mem.bytesLeft, data))
+        {
+            enum Error = "Ran out of bytes when reading contents for Asn1SetOf!" ~ ElementT.stringof;
+            return Result.make(Asn1DecodeError.eof, Error);
+        }
+
+        result._implType = ImplType.fromDecoding;
+        result._fromDecoding.data = data;
+
+        static if(ruleset == Asn1Ruleset.der && IsSetOf)
+        {{
+            auto error = checkIsSorted(data);
+            if(error.isError)
+                return error;
+        }}
+
+        // TODO: Could technically just turn checkIsSorted into one-pass thing that can both validate and find the element length.
+        auto dataReader = MemoryReader(data);
+        while(dataReader.bytesLeft > 0)
+        {
+            Asn1ComponentHeader header;
+            MemoryReader elementReader;
+            auto error = asn1DecodeComponentHeader!(Asn1Ruleset.der)(dataReader, header);
+            if(error.isError)
+                return error;
+            error = asn1ReadContentBytes(dataReader, header.length, elementReader);
+            if(error.isError)
+                return error;
+
+            result._fromDecoding.length++;
+        }
+
+        return Result.noError;
+    }
+
+    static if(IsSetOf)
+    private static Result checkIsSorted(const(ubyte)[] data)
+    {
+        /*
+            Essentially:
+                DER mandates that SET OF must be in a well known order - I can't actually find the part
+                of the spec that mentions what this looks like, but other internet searches defines it
+                to be the following:
+
+                * SET OF elements must be ordered from "shortest" to "longest".
+                * If the encoding of an element has less bytes than another, then the former element is "shorter".
+                * If the encoding of two elements has the same amount of bytes, then:
+                    * Search for the first byte that differs between the two encodings.
+                    * The encoding where this different byte is a lower value than the other encoding, is the "shorter" one.
+                    * I can't find any info on how to handle identical encodings.
+        */
+
+        if(data.length == 0)
+            return Result.noError;
+
+        auto memory = MemoryReader(data);
+        Result getElementBytes(scope out const(ubyte)[] bytes)
+        {
+            Asn1ComponentHeader header;
+            MemoryReader elementReader;
+            auto result = asn1DecodeComponentHeader!(Asn1Ruleset.der)(memory, header);
+            if(result.isError)
+                return result;
+
+            result = asn1ReadContentBytes(memory, header.length, elementReader);
+            if(result.isError)
+                return result;
+
+            elementReader.readBytes(elementReader.bytesLeft, bytes);
+            return Result.noError;
+        }
+
+        const(ubyte)[] prevBytes;
+        auto result = getElementBytes(prevBytes);
+        if(result.isError)
+            return result;
+
+        while(memory.bytesLeft > 0)
+        {
+            const(ubyte)[] bytes;
+            result = getElementBytes(bytes);
+            if(result.isError)
+                return result;
+
+            scope(exit) prevBytes = bytes;
+
+            if(prevBytes.length < bytes.length)
+                continue;
+            else if(prevBytes.length > bytes.length)
+            {
+                enum Error = "DER encoded element is not in 'shortest' order for Asn1SetOf!" ~ ElementT.stringof;
+                return Result.make(Asn1DecodeError.setOfDerIsUnordered, Error);
+            }
+
+            foreach(i, thisByte; bytes)
+            {
+                if(thisByte == prevBytes[i])
+                    continue;
+                else if(thisByte < prevBytes[i])
+                {
+                    enum Error = "DER encoded element is not in 'shortest' order for Asn1SetOf!" ~ ElementT.stringof;
+                    return Result.make(Asn1DecodeError.setOfDerIsUnordered, Error);
+                }
+                break;
+            }
+        }
+
+        return Result.noError;
+    }
+}
+
+alias Asn1SetOf(ElementT) = Asn1SetOfImpl!(ElementT, true);
+alias Asn1SequenceOf(ElementT) = Asn1SetOfImpl!(ElementT, false);
+
+struct Asn1Utf8String
+{
+    private
+    {
+        static struct FromDecoding
+        {
+            const(ubyte)[] data;
+        }
+
+        enum ImplType
+        {
+            FAILSAFE,
+            fromDecoding,
+        }
+
+        ImplType _implType;
+        union
+        {
+            FromDecoding _fromDecoding;
+        }
+    }
+
+    @trusted @nogc nothrow: // @suppress(dscanner.trust_too_much)
+
+    size_t toHash() const @nogc @safe pure nothrow
+    {
+        // Nullable calls into toHash, and for some reason its __traits(compile) check *Passes* despite it generating errors.
+        // So we have to have this dummy toHash here to make it all work right, lol.
+        assert(false, "TODO: Support this I guess?");
+        return 0;    
+    }
+
+    static Result fromDecoding(Asn1Ruleset ruleset)(
+        scope ref MemoryReader mem, 
+        scope out typeof(this) result,
+        const Asn1Identifier ident,
+    )
+    {
+        import juptune.data.utf8 : utf8Validate;
+
+        if(ident.encoding() == Asn1Identifier.Encoding.constructed)
+            return Result.make(Asn1DecodeError.utf8StringIsConstructedUnderDer, "Asn1Utf8String cannot be constructed under DER, it must be primitive"); // @suppress(dscanner.style.long_line)
+
+        const(ubyte)[] data;
+        if(!mem.readBytes(mem.bytesLeft, data))
+            return Result.make(Asn1DecodeError.eof, "Ran out of bytes when reading contents for Asn1Utf8String");
+
+        result._implType = ImplType.fromDecoding;
+        result._fromDecoding.data = data;
+
+        return utf8Validate(data);
+    }
+
+    const(char)[] asSlice()
+    {
+        final switch(this._implType) with(ImplType)
+        {
+            case FAILSAFE: assert(false, "bug: FAILSAFE");
+            case fromDecoding:
+                // This is fine - D strings are UTF8 encoded, and .data has passed through utf8Validate.
+                return cast(const(char)[])this._fromDecoding.data;
+        }
+    }
+}
+
+struct Asn1AsciiAlphabetString(string DebugName, string AlphaChars)
+{
+    import juptune.data.alphabet : AsciiAlphabet;
+    alias Alphabet = AsciiAlphabet!AlphaChars;
+
+    private
+    {
+        static struct FromDecoding
+        {
+            const(ubyte)[] data;
+        }
+
+        enum ImplType
+        {
+            FAILSAFE,
+            fromDecoding,
+        }
+
+        ImplType _implType;
+        union
+        {
+            FromDecoding _fromDecoding;
+        }
+    }
+
+    @trusted @nogc nothrow: // @suppress(dscanner.trust_too_much)
+
+    size_t toHash() const @nogc @safe pure nothrow
+    {
+        // Nullable calls into toHash, and for some reason its __traits(compile) check *Passes* despite it generating errors.
+        // So we have to have this dummy toHash here to make it all work right, lol.
+        assert(false, "TODO: Support this I guess?");
+        return 0;    
+    }
+
+    static Result fromDecoding(Asn1Ruleset ruleset)(
+        scope ref MemoryReader mem, 
+        scope out typeof(this) result,
+        const Asn1Identifier ident,
+    )
+    {
+        if(ident.encoding() == Asn1Identifier.Encoding.constructed)
+        {
+            enum Error = DebugName~" cannot be constructed under DER, it must be primitive";
+            return Result.make(Asn1DecodeError.printableStringIsConstructedUnderDer, Error); // @suppress(dscanner.style.long_line)
+        }
+
+        const(ubyte)[] data;
+        if(!mem.readBytes(mem.bytesLeft, data))
+        {
+            enum Error = "Ran out of bytes when reading contents for "~DebugName;
+            return Result.make(Asn1DecodeError.eof, Error);
+        }
+
+        result._implType = ImplType.fromDecoding;
+        result._fromDecoding.data = data;
+
+        foreach(ch; cast(const(char)[])data)
+        {
+            if(!Alphabet().isAllowed(ch))
+            {
+                enum Error = DebugName~" contains invalid characters";
+                return Result.make(Asn1DecodeError.printableStringHasInvalidChars, Error); // @suppress(dscanner.style.long_line)
+            }
+        }
+
+        return Result.noError;
+    }
+
+    const(char)[] asSlice()
+    {
+        final switch(this._implType) with(ImplType)
+        {
+            case FAILSAFE: assert(false, "bug: FAILSAFE");
+            case fromDecoding:
+                // This is fine - Printable strings are just a subset of ASCII.
+                return cast(const(char)[])this._fromDecoding.data;
+        }
+    }
+}
+
+alias Asn1PrintableString = Asn1AsciiAlphabetString!("Asn1PrintableString", "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'()+,-./:=? "); // @suppress(dscanner.style.long_line)
+alias Asn1NumericString = Asn1AsciiAlphabetString!("Asn1NumericString", "0123456789 "); // @suppress(dscanner.style.long_line)
+alias Asn1Ia5String = Asn1AsciiAlphabetString!("Asn1NumericString", (){
+    char[127] alphabet;
+    foreach(i, ref ch; alphabet)
+        ch = cast(char)i;
+    return alphabet[].idup;
+}());
+
+struct Asn1UtcTime
+{
+    private
+    {
+        ubyte _year;
+        ubyte _month;
+        ubyte _day;
+        ubyte _hour;
+        ubyte _minute;
+        ubyte _second;
+    }
+
+    @trusted @nogc nothrow: // @suppress(dscanner.trust_too_much)
+
+    static Result fromParsingLiteral(Asn1Ruleset ruleset)(scope const(char)[] literal, scope out typeof(this) result)
+    {
+        import juptune.core.util : fromBase10, IntToCharBuffer;
+
+        static assert(ruleset == Asn1Ruleset.der, "TODO: Support non-DER");
+
+        enum DER_LENGTH = "YYMMDDhhmmssZ".length;
+
+        if(literal.length != DER_LENGTH)
+        {
+            import std.conv : to;
+            enum Error = "UTCTime literal must be exactly "~DER_LENGTH.to!string~" characters long under DER";
+            return Result.make(Asn1DecodeError.utcTimeIsWrongSize, Error);
+        }
+
+        if(literal[12] != 'Z')
+            return Result.make(Asn1DecodeError.utcTimeHasTimezoneUnderDer, "UTCTime literals cannot contain a timezone under DER"); // @suppress(dscanner.style.long_line)
+
+        string error;
+        result._year = fromBase10!ubyte(literal[0..2], error);
+        if(error !is null) return Result.make(Asn1DecodeError.utcTimeInvalidLiteral, error);
+        result._month = fromBase10!ubyte(literal[2..4], error);
+        if(error !is null) return Result.make(Asn1DecodeError.utcTimeInvalidLiteral, error);
+        result._day = fromBase10!ubyte(literal[4..6], error);
+        if(error !is null) return Result.make(Asn1DecodeError.utcTimeInvalidLiteral, error);
+        result._hour = fromBase10!ubyte(literal[6..8], error);
+        if(error !is null) return Result.make(Asn1DecodeError.utcTimeInvalidLiteral, error);
+        result._minute = fromBase10!ubyte(literal[8..10], error);
+        if(error !is null) return Result.make(Asn1DecodeError.utcTimeInvalidLiteral, error);
+        result._second = fromBase10!ubyte(literal[10..12], error);
+        if(error !is null) return Result.make(Asn1DecodeError.utcTimeInvalidLiteral, error);
+
+        if(result._month < 1 || result._month > 12)
+            return Result.make(Asn1DecodeError.utcTimeInvalidLiteral, "UTCTime literal contains an invalid month - it must be a value between 1 and 12 (inclusive)"); // @suppress(dscanner.style.long_line)
+        if(result._day < 1 || result._day > 31)
+            return Result.make(Asn1DecodeError.utcTimeInvalidLiteral, "UTCTime literal contains an invalid day - it must be a value between 1 and 31 (inclusive)"); // @suppress(dscanner.style.long_line)
+        if(result._hour > 23)
+            return Result.make(Asn1DecodeError.utcTimeInvalidLiteral, "UTCTime literal contains an invalid hour - it must be a value between 0 and 23 (inclusive)"); // @suppress(dscanner.style.long_line)
+        if(result._minute > 59)
+            return Result.make(Asn1DecodeError.utcTimeInvalidLiteral, "UTCTime literal contains an invalid minute - it must be a value between 0 and 59 (inclusive)"); // @suppress(dscanner.style.long_line)
+        if(result._second > 59)
+            return Result.make(Asn1DecodeError.utcTimeInvalidLiteral, "UTCTime literal contains an invalid second - it must be a value between 0 and 59 (inclusive)"); // @suppress(dscanner.style.long_line)
+
+        return Result.noError;
+    }
+
+    static Result fromDecoding(Asn1Ruleset ruleset)(
+        scope ref MemoryReader mem, 
+        scope out typeof(this) result,
+        const Asn1Identifier ident,
+    )
+    {
+        if(ident.encoding() == Asn1Identifier.Encoding.constructed)
+            return Result.make(Asn1DecodeError.utcTimeIsConstructedUnderDer, "Asn1UtcTime cannot be constructed under DER, it must be primitive"); // @suppress(dscanner.style.long_line)
+
+        const(ubyte)[] data;
+        if(!mem.readBytes(mem.bytesLeft, data))
+            return Result.make(Asn1DecodeError.eof, "Ran out of bytes when reading contents for Asn1UtcTime");
+
+        return Asn1UtcTime.fromParsingLiteral!ruleset(cast(const(char)[])data, result);
+    }
+
+    // NOTE: Can't use Phobos' DateTime because the ctor can throw (and thus use the GC), lmfao.
+    uint year() const pure => (this._year >= 50) ? 1950 + (this._year - 50) : 2000 + this._year;
+    uint month() const pure => this._month;
+    uint day() const pure => this._day;
+    uint hour() const pure => this._hour;
+    uint minute() const pure => this._minute;
+    uint second() const pure => this._second;
+}
 
 /// Represents the decoded identifier and length bytes of an ASN.1 record.
 struct Asn1ComponentHeader
@@ -1271,6 +1761,9 @@ enum Asn1DecodeError
     constructionIsPrimitive, /// Generic construction is marked as primitive.
     primitiveIsConstructed,  /// Generic primitive is marked as constructed.
 
+    setOfIsPrimitive, /// Set of is marked as primitive.
+    setOfDerIsUnordered, /// A DER-encoded SET OF is not properly encoded - elements must be encoded in 'shortest' order, but wasn't.
+
     oidInvalidEncoding, /// OID violates the spec in some way.
     oidIsConstructed,   /// OID is marked as constructed.
 
@@ -1284,6 +1777,19 @@ enum Asn1DecodeError
 
     sequenceMissingField, /// A SEQUENCE type is missing a non-optional field.
     sequenceHasExtraData, /// A non-extensible SEQUENCE type has unread content bytes after attempted decoding of all known fields.
+
+    setMissingField, /// A SET type is missing a non-optional field.
+    setHasExtraData, /// A non-extensible SET type has unread content bytes after attempted decoding of all known fields.
+
+    utf8StringIsConstructedUnderDer, /// A UTF8String was marked as constructed under DER, which is not allowed.
+
+    printableStringIsConstructedUnderDer, /// A PrintableString was marked as constructed under DER, which is not allowed.
+    printableStringHasInvalidChars, /// A PrintableString contains characters that are not allowed.
+
+    utcTimeIsConstructedUnderDer, /// A UTCTime was marked as constructed under DER, which is not allowed.
+    utcTimeIsWrongSize, /// A UTCTime literal is not the right size.
+    utcTimeHasTimezoneUnderDer, /// A UTCTime literal was given a timezone under DER, which is not allowed.
+    utcTimeInvalidLiteral, /// A UTCTime literal is invalid for some non-specific reason (e.g. invalid characters).
 }
 
 /++
@@ -2622,6 +3128,344 @@ unittest
                 assert(false, "Expected an error, but didn't get one.");
 
             assert(obj.components.equal(test.expectedIds), format("\n  Got: %s\n  Expected: %s", obj.components, test.expectedIds)); // @suppress(dscanner.style.long_line)
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1SetOf - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+
+    static struct T
+    {
+        ubyte[] data;
+        Asn1Identifier ident;
+        ulong[] expectedValues;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, ulong[] expectedValues)
+        {
+            this.data = data;
+            this.expectedValues = expectedValues;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                Asn1Identifier.Encoding.constructed, 
+                0
+            );
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1Identifier.Encoding encoding = Asn1Identifier.Encoding.constructed) // @suppress(dscanner.style.long_line)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                encoding, 
+                0
+            );
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "empty": T([], []),
+        "1 element": T([0x02, 0x01, 0x0A], [10]),
+        "2 elements": T([
+            0x02, 0x01, 0x0A,
+            0x02, 0x01, 0x0C,
+        ], [10, 12]),
+
+        "error - unordered due to size": T([
+            0x02, 0x02, 0x01, 0x00,
+            0x02, 0x01, 0x0A,
+        ], err.setOfDerIsUnordered),
+        "error - unordered due to bytes": T([
+            0x02, 0x01, 0x0C,
+            0x02, 0x01, 0x0A,
+        ], err.setOfDerIsUnordered),
+    ];
+
+    foreach(name, test; cases)
+    {
+        import std.algorithm : canFind, equal;
+
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Asn1SetOf!Asn1Integer obj;
+            auto result = Asn1SetOf!Asn1Integer.fromDecoding!(Asn1Ruleset.der)(mem, obj, test.ident);
+
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(obj.elementCount == test.expectedValues.length);
+            
+            size_t i;
+            obj.foreachElement((Asn1Integer element){
+                ulong value;
+                element.asInt(value).resultAssert;
+                assert(value == test.expectedValues[i++]);
+                return Result.noError;
+            }, (scope ref reader, scope out number, const identifier){
+                return Asn1Integer.fromDecoding!(Asn1Ruleset.der)(reader, number, identifier);
+            }).resultAssert;
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1Utf8String - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+
+    static struct T
+    {
+        ubyte[] data;
+        Asn1Identifier ident;
+        string expected;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, string expected)
+        {
+            this.data = data;
+            this.expected = expected;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                Asn1Identifier.Encoding.primitive, 
+                0
+            );
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1Identifier.Encoding encoding = Asn1Identifier.Encoding.primitive) // @suppress(dscanner.style.long_line)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                encoding, 
+                0
+            );
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "empty": T([], ""),
+        "ASCII": T(['a', 'b', 'c'], "abc"),
+        "Unicode": T([0xEC, 0x9C, 0x84], "위"),
+    ];
+
+    foreach(name, test; cases)
+    {
+        import std.algorithm : canFind, equal;
+
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Asn1Utf8String obj;
+            auto result = Asn1Utf8String.fromDecoding!(Asn1Ruleset.der)(mem, obj, test.ident);
+
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(obj.asSlice == test.expected);
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1PrintableString - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+
+    static struct T
+    {
+        ubyte[] data;
+        Asn1Identifier ident;
+        string expected;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, string expected)
+        {
+            this.data = data;
+            this.expected = expected;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                Asn1Identifier.Encoding.primitive, 
+                0
+            );
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1Identifier.Encoding encoding = Asn1Identifier.Encoding.primitive) // @suppress(dscanner.style.long_line)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                encoding, 
+                0
+            );
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "empty": T([], ""),
+        "ASCII": T(['a', 'b', 'c'], "abc"),
+
+        "error - invalid chars": T(['@'], err.printableStringHasInvalidChars),
+    ];
+
+    foreach(name, test; cases)
+    {
+        import std.algorithm : canFind, equal;
+
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Asn1PrintableString obj;
+            auto result = Asn1PrintableString.fromDecoding!(Asn1Ruleset.der)(mem, obj, test.ident);
+
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(obj.asSlice == test.expected);
+        }
+        catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
+            assert(false, "\n["~name~"]: "~err.msg);
+    }
+}
+
+@("Asn1UtcTime - General Conformance")
+unittest
+{
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import std.format        : format;
+    import std.typecons      : Nullable;
+
+    static struct T
+    {
+        ubyte[] data;
+        Asn1Identifier ident;
+        uint expectedYear, expectedMonth, expectedDay, expectedHour, expectedMinute, expectedSecond;
+        Nullable!Asn1DecodeError expectedError;
+
+        this(ubyte[] data, uint expectedYear, uint expectedMonth, uint expectedDay, uint expectedHour, uint expectedMinute, uint expectedSecond) // @suppress(dscanner.style.long_line)
+        {
+            this.data = data;
+            this.expectedYear = expectedYear;
+            this.expectedMonth = expectedMonth;
+            this.expectedDay = expectedDay;
+            this.expectedHour = expectedHour;
+            this.expectedMinute = expectedMinute;
+            this.expectedSecond = expectedSecond;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                Asn1Identifier.Encoding.primitive, 
+                0
+            );
+        }
+
+        this(ubyte[] data, Asn1DecodeError error, Asn1Identifier.Encoding encoding = Asn1Identifier.Encoding.primitive) // @suppress(dscanner.style.long_line)
+        {
+            this.data = data;
+            this.expectedError = error;
+            this.ident = Asn1Identifier(
+                Asn1Identifier.Class.universal, 
+                encoding, 
+                0
+            );
+        }
+    }
+
+    alias err = Asn1DecodeError;
+    const cases = [
+        "recommendation 1": T(cast(ubyte[])"920521000000Z", 1992, 05, 21, 00, 00, 00),
+        "recommendation 2": T(cast(ubyte[])"920622123421Z", 1992, 06, 22, 12, 34, 21),
+        "recommendation 3": T(cast(ubyte[])"920722132100Z", 1992, 07, 22, 13, 21, 00),
+
+        // Don't ask... just don't - ASN.1's UTCTime is insane.
+        "year for 2000": T(cast(ubyte[])"000101000000Z", 2000, 01, 01, 00, 00, 00),
+        "year for 2049": T(cast(ubyte[])"490101000000Z", 2049, 01, 01, 00, 00, 00),
+        "year for 1950": T(cast(ubyte[])"500101000000Z", 1950, 01, 01, 00, 00, 00),
+        "year for 1999": T(cast(ubyte[])"990101000000Z", 1999, 01, 01, 00, 00, 00),
+
+        "error - wrong size under DER": T(cast(ubyte[])"000102000060+0500", err.utcTimeIsWrongSize),
+        "error - invalid chars": T(cast(ubyte[])"ab0102000060Z", err.utcTimeInvalidLiteral),
+        "error - no Z at the end": T(cast(ubyte[])"000102000060+", err.utcTimeHasTimezoneUnderDer),
+        "error - invalid month - cannot be 0": T(cast(ubyte[])"000001000000Z", err.utcTimeInvalidLiteral),
+        "error - invalid month - too large": T(cast(ubyte[])"003101000000Z", err.utcTimeInvalidLiteral),
+        "error - invalid day - cannot be 0": T(cast(ubyte[])"000100000000Z", err.utcTimeInvalidLiteral),
+        "error - invalid day - too large": T(cast(ubyte[])"000132000000Z", err.utcTimeInvalidLiteral),
+        "error - invalid hour - too large": T(cast(ubyte[])"000102240000Z", err.utcTimeInvalidLiteral),
+        "error - invalid minute - too large": T(cast(ubyte[])"000102006000Z", err.utcTimeInvalidLiteral),
+        "error - invalid second - too large": T(cast(ubyte[])"000102000060Z", err.utcTimeInvalidLiteral),
+    ];
+
+    foreach(name, test; cases)
+    {
+        import std.algorithm : canFind, equal;
+
+        try
+        {
+            auto mem = MemoryReader(test.data);
+
+            Asn1UtcTime obj;
+            auto result = Asn1UtcTime.fromDecoding!(Asn1Ruleset.der)(mem, obj, test.ident);
+
+            if(result.isError)
+            {
+                if(test.expectedError.isNull)
+                    result.resultAssert();
+                resultAssertSameCode!err(result, Result.make(test.expectedError.get));
+                continue;
+            }
+            else if(!test.expectedError.isNull)
+                assert(false, "Expected an error, but didn't get one.");
+
+            assert(obj.year == test.expectedYear);
+            assert(obj.month == test.expectedMonth);
+            assert(obj.day == test.expectedDay);
+            assert(obj.hour == test.expectedHour);
+            assert(obj.minute == test.expectedMinute);
+            assert(obj.second == test.expectedSecond);
         }
         catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
             assert(false, "\n["~name~"]: "~err.msg);

@@ -62,6 +62,7 @@ def refreshModelsForTest(testName):
     )
 
 refreshModelsForTest('adhoc')
+refreshModelsForTest('x509')
 
 local_resource(
     'test dasn1',

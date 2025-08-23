@@ -142,6 +142,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     override Result visit(Asn1NullValueIr ir) => Result.noError;
     override Result visit(Asn1ValueReferenceIr ir) => Result.noError;
     override Result visit(Asn1ObjectIdSequenceValueIr ir) => Result.noError;
+    override Result visit(Asn1NamedValueSequenceIr ir) => Result.noError;
 
     /++++ Type checkers ++++/
 
@@ -506,6 +507,11 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
             bool _;
             return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
                 // Restricted character type support is kinda complex, so TODO: implement a bit later
+                if(auto constraintIr = cast(Asn1SizeConstraintIr)constraint)
+                {
+                    this.checkSizeConstraintTypeOnly(constraintIr, shouldReport, wasSuccess);
+                    return Result.noError;
+                }
                 assert(false, "bug: Missing constraint case for TODO (type check variant)?");
                 return Result.noError;
             }, false, _, ir.getRoughLocation());
@@ -542,7 +548,10 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
                     return result;
 
                 if(tagValue.isNull)
-                    assert(false, "TODO: handle this very annoying edge case");
+                {
+                    // pragma(msg, "TODO: handle this very annoying edge case");
+                    return Result.noError;
+                }
 
                 auto tag = Tag(tagValue.get, class_);
                 scope(exit)
@@ -581,6 +590,11 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     {
         bool _;
         return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
+            if(auto constraintIr = cast(Asn1SizeConstraintIr)constraint)
+            {
+                this.checkSizeConstraintTypeOnly(constraintIr, shouldReport, wasSuccess);
+                return Result.noError;
+            }
             assert(false, "bug: Missing constraint case for SEQUENCE OF (type check variant)?");
             return Result.noError;
         }, false, _, ir.getRoughLocation());
@@ -599,7 +613,21 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     {
         bool _;
         return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
+            if(auto constraintIr = cast(Asn1SizeConstraintIr)constraint)
+            {
+                this.checkSizeConstraintTypeOnly(constraintIr, shouldReport, wasSuccess);
+                return Result.noError;
+            }
             assert(false, "bug: Missing constraint case for SET OF (type check variant)?");
+            return Result.noError;
+        }, false, _, ir.getRoughLocation());
+    }
+
+    override Result visit(Asn1UtcTimeTypeIr ir)
+    {
+        bool _;
+        return this.checkConstraints(ir, (constraint, shouldReport, out wasSuccess){
+            assert(false, "bug: Missing constraint case for UTCTime (type check variant)?");
             return Result.noError;
         }, false, _, ir.getRoughLocation());
     }

@@ -62,7 +62,6 @@ data_srcs = files(
     './src/juptune/data/package.d',
     './src/juptune/data/utf8.d',
 
-    './src/juptune/data/asn1/constraints.d',
     './src/juptune/data/asn1/decode/bcd/encoding.d',
     './src/juptune/data/asn1/lang/ast.d',
     './src/juptune/data/asn1/lang/ast2ir.d',

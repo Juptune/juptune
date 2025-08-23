@@ -37,9 +37,16 @@ final class DlangCodeBuilder
 
     private
     {
+        Asn1ModuleIr _currentModule;
         Appender!(char[]) _buffer;
         uint _indent;
         bool _startOfLine;
+    }
+
+    private this(Asn1ModuleIr currentModule)
+    in(currentModule !is null)
+    {
+        this._currentModule = currentModule;
     }
 
     void indent()
@@ -115,7 +122,7 @@ final class DlangCodeBuilder
     void declareType(string name, scope void delegate() putBody, string type = "struct")
     {
         put(type); put(' ');
-        put(name); endLine();
+        put(fixName(name)); endLine();
         put('{'); endLine();
         indent();
             putBody();
@@ -262,6 +269,7 @@ private immutable SETTER_FUNCTION_PREFIX = "set";
 private immutable GETTER_FUNCTION_PREFIX = "get";
 private immutable CHECKER_FUNCTION_PREFIX = "is";
 private immutable VALIDATE_FUNCTION_PREFIX = "validate";
+private immutable DEFAULT_VALUE_PREFIX = "defaultOf";
 
 private immutable RETURN_NO_ERROR = "return "~RESULT_TYPE~".noError;";
 
@@ -300,7 +308,7 @@ string getModuleDlangIdentifier(
 
 string generateRawDlangModule(Asn1ModuleIr mod, ref DlangGeneratorContext context)
 {
-    auto code = new DlangCodeBuilder();
+    auto code = new DlangCodeBuilder(mod);
     with(code)
     {
         putStartOfModule(mod, "raw", context);
@@ -314,6 +322,19 @@ string generateRawDlangModule(Asn1ModuleIr mod, ref DlangGeneratorContext contex
         mod.foreachAssignmentGC((assIr){
             if(auto typeAssIr = cast(Asn1TypeAssignmentIr)assIr)
                 putRawType(typeAssIr.getSymbolName().idup, typeAssIr.getSymbolType(), code, context);
+            else if(auto valueAssIr = cast(Asn1ValueAssignmentIr)assIr)
+            {
+                declareFunction(
+                    rawTypeOf(valueAssIr.getSymbolType()),
+                    fixName(valueAssIr.getSymbolName()),
+                    (scope next){},
+                    (){
+                        putValueLiteral("mainValue", valueAssIr.getSymbolType(), valueAssIr.getSymbolValue(), code, context); // @suppress(dscanner.style.long_line)
+                        putLine("return mainValue;");
+                    },
+                    "@nogc nothrow"
+                );
+            }
             else assert(false, "bug: Unhandled assignment type?");
 
             return Result.noError;
@@ -321,6 +342,191 @@ string generateRawDlangModule(Asn1ModuleIr mod, ref DlangGeneratorContext contex
     }
 
     return code.toString();
+}
+
+private void putValueLiteral(
+    string varName,
+    Asn1TypeIr typeIr,
+    Asn1ValueIr valueIr,
+    DlangCodeBuilder code,
+    ref DlangGeneratorContext context,
+)
+{
+    varName = fixName(varName);
+
+    final class TypeVisitor : Asn1IrVisitorGC
+    {
+        override void visit(Asn1TaggedTypeIr ir)
+        {
+            ir.getUnderlyingTypeSkipTags().visitGC(this);
+        }
+
+        override void visit(Asn1ObjectIdentifierTypeIr ir)
+        {
+            import std.conv : to;
+
+            ulong[] ids;
+            void getIds(Asn1ValueIr idIr)
+            {
+                if(auto objIdIr = cast(Asn1ObjectIdSequenceValueIr)idIr)
+                {
+                    objIdIr.foreachObjectIdGC((subValueIr){
+                        getIds(subValueIr);
+                        return Result.noError;
+                    }, context.errors).resultEnforce;
+                }
+                else if(auto valueSeqIr = cast(Asn1ValueSequenceIr)idIr)
+                {
+                    valueSeqIr.foreachSequenceValueGC((subValueIr){
+                        getIds(subValueIr);
+                        return Result.noError;
+                    }, context.errors).resultEnforce;
+                }
+                else if(auto namedSeqIr = cast(Asn1NamedValueSequenceIr)idIr)
+                {
+                    // TODO: juptune.data.asn1 should probably find a more elegant way to handle transforming this
+                    //       into an Asn1ObjectIdSequenceValueIr during semantics.
+                    namedSeqIr.foreachSequenceNamedValueGC((subValueName, subValueIr){
+                        // TEMP: Again, something like this really needs to be handled inside of Juptune itself...
+                        //       I just have 0 idea on what the best way to handle this is.
+                        auto item = code._currentModule.lookup(new Asn1ValueReferenceIr(
+                            subValueIr.getRoughLocation(), subValueName
+                        ));
+                        assert(!item.isNull, "todo: this needs to be handled in Juptune for a better error message");
+                        
+                        auto castedIr = cast(Asn1ValueAssignmentIr)item.get;
+                        assert(castedIr !is null, "todo: this also needs to be handled in Juptune for a better error message");
+
+                        getIds(castedIr.getSymbolValue());                        
+                        getIds(subValueIr);
+                        return Result.noError;
+                    }, context.errors).resultEnforce;
+                }
+                else if(auto intValueIr = cast(Asn1IntegerValueIr)idIr)
+                {
+                    // Type checker should've made sure it's unsigned.
+                    ulong id;
+                    intValueIr.asUnsigned(id, context.errors).resultEnforce;
+                    ids ~= id;
+                }
+                else assert(false, "Unhandled OBJECT IDENTIFIER value type: "~typeid(idIr).name);
+            }
+            getIds(valueIr);
+
+            // TODO: Validate first and second ids are in bounds.
+
+            with(code)
+            {
+                const valueName = varName~"__value";
+                putLine("static immutable ubyte[] ", valueName, " = [");
+                indent();
+                foreach(i, id; ids[2..$])
+                {
+                    if(id <= 127)
+                    {
+                        put(id.to!string, ", ");
+                        continue;
+                    }
+
+                    put("/* ", id.to!string, " */ ");
+
+                    ubyte[] bits7InReverse;
+                    bool isFirst = true;
+                    while(id > 0)
+                    {
+                        bits7InReverse ~= isFirst ? (id & 0b0111_1111) : (id & 0b0111_1111) | 0b1000_0000;
+                        id >>= 7;
+                        isFirst = false;
+                    }
+
+                    for(ptrdiff_t j = cast(ptrdiff_t)bits7InReverse.length-1; j >= 0; j--)
+                        put("0x", bits7InReverse[j].to!string(16), ", ");
+                }
+                dedent();
+                putLine();
+                putLine("];");
+                put(varName, " = ", rawTypeOf(typeIr), ".fromUnownedBytes(");
+                    put(ids.length == 0 ? "0" : ids[0].to!string, ", ");
+                    put(ids.length == 1 ? "0" : ids[1].to!string, ", ");
+                putLine(valueName, ");");
+            }
+        }
+
+        override void visit(Asn1TypeReferenceIr ir)
+        {
+            with(code)
+            {
+                const underlyingVarName = varName~"__underlying";
+                indent();
+                    putValueLiteral(
+                        underlyingVarName, 
+                        ir.getResolvedTypeRecurse(Asn1TypeReferenceIr.StopForConstraints.no),
+                        valueIr,
+                        code,
+                        context
+                    );
+                dedent();
+
+                // TODO: Need to distinguish between types that have a .set, and ones that have more complex stuff (e.g. SEQUENCES)?
+                putLine(
+                    RESULT_SHORTHAND, ".resultAssert(",
+                        varName, ".set(", underlyingVarName, ")",
+                    ");"
+                );
+            }
+        }
+
+        override void visit(Asn1IntegerTypeIr ir)
+        {
+            import std.conv : to;
+            import juptune.data.asn1.decode.bcd.encoding : Asn1Integer;
+
+            auto intValueIr = cast(Asn1IntegerValueIr)valueIr;
+            assert(intValueIr !is null, "bug: Type checker didn't catch that this isn't an integer?");
+
+            ulong value;
+            intValueIr.asUnsigned(value, context.errors).resultEnforce;
+
+            with(code)
+            {
+                const underlyingVarName = varName~"__underlying";
+                auto number = Asn1Integer.fromNumberGC(value);
+
+                putLine("static immutable ubyte[] ", underlyingVarName, "= [");
+                indent();
+                put("/* ", value.to!string, " */ ");
+                foreach(byte_; number.rawBytes)
+                    put("0x", byte_.to!string(16), ", ");
+                dedent();
+                putLine();
+                putLine("];");
+
+                putLine(varName, " = ", ASN1_SHORTHAND, ".Asn1Integer.fromUnownedBytes(", underlyingVarName, ");");
+            }
+        }
+
+        override void visit(Asn1BooleanTypeIr ir)
+        {
+            auto boolValueIr = cast(Asn1BooleanValueIr)valueIr;
+            assert(boolValueIr !is null, "bug: Type checker didn't catch that this isn't a boolean?");
+
+            with(code)
+            {
+                if(boolValueIr.asBool)
+                    putLine(varName, " = ", ASN1_SHORTHAND, ".Asn1Bool(0xFF);");
+                else
+                    putLine(varName, " = ", ASN1_SHORTHAND, ".Asn1Bool(0);");
+            }
+        }
+    }
+
+    if(auto valueRefIr = cast(Asn1ValueReferenceIr)valueIr)
+        valueIr = valueRefIr.getResolvedValueRecurse();
+
+    code.putLine(rawTypeOf(typeIr), " ", varName, ";");
+
+    scope visitor = new TypeVisitor();
+    typeIr.visitGC(visitor);
 }
 
 private void putRawType(
@@ -334,19 +540,22 @@ private void putRawType(
     {
         static immutable BASIC_FIELD_NAME = "_value";
 
-        override void visit(Asn1TaggedTypeIr ir)
-        {
-            ir.getUnderlyingTypeSkipTags().visitGC(this);
-        }
+        override void visit(Asn1TaggedTypeIr ir) => ir.getUnderlyingTypeSkipTags().visitGC(this);
+        override void visit(Asn1BooleanTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
+        override void visit(Asn1ObjectIdentifierTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
+        override void visit(Asn1OctetStringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
+        override void visit(Asn1SetOfTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
+        override void visit(Asn1SequenceOfTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
+        override void visit(Asn1UTF8StringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
+        override void visit(Asn1PrintableStringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
+        override void visit(Asn1NumericStringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
+        override void visit(Asn1IA5StringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
+        override void visit(Asn1TypeReferenceIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
+        override void visit(Asn1UtcTimeTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
 
-        override void visit(Asn1BooleanTypeIr ir)
-        {
-            this.wrapAroundBasicType(rawTypeOf(ir));
-        }
-        
         override void visit(Asn1BitStringTypeIr ir)
         {
-            with(code)
+            with(code) if(ir.hasNamedBits())
             {
                 putLine("enum NamedBit");
                 putLine('{');
@@ -359,6 +568,30 @@ private void putRawType(
                     assert(intValueIr !is null, "bug: Value's not an integer, why didn't the type checker catch this?");
 
                     putLine(name, " = ", intValueIr.getNumberText(), ',');
+                    return Result.noError;
+                }).resultEnforce;
+                dedent();
+                putLine('}');
+            }
+
+            this.wrapAroundBasicType(rawTypeOf(ir));
+        }
+        
+        override void visit(Asn1IntegerTypeIr ir)
+        {
+            with(code) if(ir.hasNamedNumbers())
+            {
+                putLine("enum NamedNumber");
+                putLine('{');
+                indent();
+                ir.foreachNamedNumberGC((name, value){
+                    if(auto valueRefIr = cast(Asn1ValueReferenceIr)value)
+                        value = valueRefIr.getResolvedValueRecurse();
+                    
+                    auto intValueIr = cast(Asn1IntegerValueIr)value;
+                    assert(intValueIr !is null, "bug: Value's not an integer, why didn't the type checker catch this?");
+
+                    putLine(fixName(name), " = ", intValueIr.getNumberText(), ',');
                     return Result.noError;
                 }).resultEnforce;
                 dedent();
@@ -384,14 +617,14 @@ private void putRawType(
                 declareType(CHOICE_ENUM, (){
                     putLine("_FAILSAFE,");
                     ir.foreachChoiceGC((name, typeIr, _){
-                        putLine(name, ","); // TODO: I wonder if this should be 1:1 with the underlying tag
+                        putLine(fixName(name), ","); // TODO: I wonder if this should be 1:1 with the underlying tag
                         return Result.noError;
                     }).resultEnforce;
                 }, type: "enum");
 
                 declareType(VALUE_UNION, (){
                     ir.foreachChoiceGC((name, typeIr, _){
-                        putLine(rawTypeOf(typeIr), ' ', name, ";");
+                        putLine(rawTypeOf(typeIr), ' ', fixName(name), ";");
                         return Result.noError;
                     }).resultEnforce;
                 }, type: "union");
@@ -414,31 +647,31 @@ private void putRawType(
                         RESULT_TYPE, 
                         asCamelCase(SETTER_FUNCTION_PREFIX, name), 
                         (next){
-                            put("typeof(", VALUE_UNION, '.', name, ") ", SETTER_PARAM_VALUE);
+                            put("typeof(", VALUE_UNION, '.', fixName(name), ") ", SETTER_PARAM_VALUE);
                             next();
                         }, (){
                             if(typeIr.getMainConstraintOrNull() !is null)
                                 putLine("// TODO: Warning - type has a constraint but it's not being handled yet!");
 
-                            putLine(VALUE_FIELD, '.', name, " = ", SETTER_PARAM_VALUE, ";");
-                            putLine(CHOICE_FIELD, " = ", CHOICE_ENUM, '.', name, ";");
+                            putLine(VALUE_FIELD, '.', fixName(name), " = ", SETTER_PARAM_VALUE, ";");
+                            putLine(CHOICE_FIELD, " = ", CHOICE_ENUM, '.', fixName(name), ";");
                             put(RETURN_NO_ERROR);
                         }, 
                         funcAttributes: "@nogc nothrow"
                     );
 
                     declareFunction(
-                        ("typeof("~VALUE_UNION~'.'~name~")").idup, 
+                        ("typeof("~VALUE_UNION~'.'~fixName(name)~")").idup, 
                         asCamelCase(GETTER_FUNCTION_PREFIX, name), 
                         (next){},
                         (){
                             putLine(
                                 "assert(", 
-                                    CHOICE_FIELD, " == ", CHOICE_ENUM, '.', name, ", ",
-                                    `"This '"~__traits(identifier, typeof(this))~"`, ` does not contain choice '`, name, `'"`, // @suppress(dscanner.style.long_line)
+                                    CHOICE_FIELD, " == ", CHOICE_ENUM, '.', fixName(name), ", ",
+                                    `"This '"~__traits(identifier, typeof(this))~"`, ` does not contain choice '`, fixName(name), `'"`, // @suppress(dscanner.style.long_line)
                                 ");"
                             );
-                            put("return ", VALUE_FIELD, '.', name, ";");
+                            put("return ", VALUE_FIELD, '.', fixName(name), ";");
                         },
                         funcAttributes: "@nogc nothrow"
                     );
@@ -448,7 +681,7 @@ private void putRawType(
                         asCamelCase(CHECKER_FUNCTION_PREFIX, name), 
                         (next){}, 
                         (){
-                            put("return ", CHOICE_FIELD, " == ", CHOICE_ENUM, '.', name, ";");
+                            put("return ", CHOICE_FIELD, " == ", CHOICE_ENUM, '.', fixName(name), ";");
                         }, 
                         funcAttributes: "@nogc nothrow const"
                     );
@@ -519,44 +752,146 @@ private void putRawType(
 
         override void visit(Asn1SequenceTypeIr ir)
         {
-            immutable MEMORY_VAR_PREFIX = "memory_";
-            immutable BACKTRACK_VAR_PREFIX = "backtrack_";
-
             this.wrapAroundSequenceLikeType(ir);
 
             with(code) this.declareFromDecode((){
-                ir.foreachComponentGC((item){
-                    import std.conv : to;
-
-                    putLine("/+++ TAG FOR FIELD: ", item.name, " +++/");
-                    
+                ir.foreachComponentGC((item){                    
                     Nullable!ulong topLevelTag;
                     Asn1Identifier.Class class_;
                     topLevelIrTagAndClass(item.type, topLevelTag, class_, context.errors);
 
-                    assert(!topLevelTag.isNull, "TODO: Handle special case");
-                    assert(!item.isComponentsOf, "TODO: Handle COMPONENTS OF");
-                    assert(!item.isExtensible, "TODO: Handle extensible fields");
-                    assert(item.defaultValue is null, "TODO: Handle DEFAULT");
-                    
-                    if(item.isOptional) // Backup the MemoryBuffer and restore it if the field doesn't exist.
-                    {
+                    return this.decodeFieldOfSequenceLikeType(topLevelTag, class_, item);
+                }).resultEnforce;
+
+                if(ir.isExtensible)
+                {
+                    assert(false, "TODO: Skip over any remaining fields (after confirming this is 100% what needs to happen)");
+                }
+                else
+                {
+                    putLine("if(memory.bytesLeft != 0)");
+                    indent();
                         putLine(
-                            "auto ", BACKTRACK_VAR_PREFIX, item.name, " = ", MEMORY_BUFFER_TYPE, "(",
-                                DECODER_PARAM_MEMORY, ".buffer, ",
-                                DECODER_PARAM_MEMORY, ".cursor",
+                            "return ", RESULT_TYPE, ".make(", 
+                                ASN1_SHORTHAND, ".Asn1DecodeError.sequenceHasExtraData, ",
+                                `"when decoding non-extensible SEQUENCE `, name, 
+                                ` there were unsused content bytes after attempting to decode all known fields -`,
+                                ` this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input"`, 
                             ");"
                         );
-                    }
+                    dedent();
+                }
 
+                put("return this.", VALIDATE_FUNCTION_PREFIX, "();");
+            }, emitFinalReturn: false);
+        }
+
+        override void visit(Asn1SetTypeIr ir)
+        {
+            import std.algorithm : sort;
+
+            this.wrapAroundSequenceLikeType(ir);
+
+            static struct TagAndItem
+            {
+                ulong tag;
+                Asn1Identifier.Class class_;
+                Asn1SetTypeIr.Item item;
+            }
+
+            TagAndItem[] tagAndItems;
+            ir.foreachComponentGC((item){
+                Nullable!ulong topLevelTag;
+                Asn1Identifier.Class class_;
+                topLevelIrTagAndClass(item.type, topLevelTag, class_, context.errors);
+
+                if(!topLevelTag.isNull)
+                {
+                    tagAndItems ~= TagAndItem(topLevelTag.get, class_, item);
+                    return Result.noError;
+                }
+
+                assert(false, "TODO: Support CHOICE within a SET... good luck");
+                return Result.noError;
+            }).resultEnforce;
+
+            tagAndItems.sort!"a.tag < b.tag"();
+
+            with(code) this.declareFromDecode((){
+                // DER and BER encodings of SET are too different to create a singular solution for.
+                // DER is closer to how SEQUENCE works, whereas BER is much more of a PITA.
+                putLine("static assert(ruleset == ", ASN1_SHORTHAND, `.Asn1Ruleset.der, "TODO: Support non-DER SET encodings");`); // @suppress(dscanner.style.long_line)
+
+                foreach(item; tagAndItems)
+                {
+                    this.decodeFieldOfSequenceLikeType(
+                        Nullable!ulong(item.tag),
+                        item.class_,
+                        item.item
+                    ).resultEnforce;
+                }
+
+                if(ir.isExtensible)
+                {
+                    assert(false, "TODO: Skip over any remaining fields (after confirming this is 100% what needs to happen)");
+                }
+                else
+                {
+                    putLine("if(memory.bytesLeft != 0)");
+                    indent();
+                        putLine(
+                            "return ", RESULT_TYPE, ".make(", 
+                                ASN1_SHORTHAND, ".Asn1DecodeError.setHasExtraData, ",
+                                `"when decoding non-extensible SET `, name, 
+                                ` there were unsused content bytes after attempting to decode all known fields -`,
+                                ` this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input"`, 
+                            ");"
+                        );
+                    dedent();
+                }
+
+                put("return this.", VALIDATE_FUNCTION_PREFIX, "();");
+            }, emitFinalReturn: false);
+        }
+
+        private Result decodeFieldOfSequenceLikeType(ItemT)(
+            Nullable!ulong topLevelTag,
+            Asn1Identifier.Class class_,
+            ItemT item,
+        )
+        {
+            import std.conv : to;
+
+            immutable MEMORY_VAR_PREFIX = "memory_";
+            immutable BACKTRACK_VAR_PREFIX = "backtrack_";
+
+            with(code)
+            {
+                putLine("/+++ TAG FOR FIELD: ", item.name, " +++/");
+
+                assert(!item.isComponentsOf, "TODO: Handle COMPONENTS OF");
+                assert(!item.isExtensible, "TODO: Handle extensible fields");
+
+                if(item.isOptional) // Backup the MemoryBuffer and restore it if the field doesn't exist.
+                {
                     putLine(
-                        "result = ", ASN1_SHORTHAND, ".asn1DecodeComponentHeader!", DECODER_PARAM_RULESET, "(",
-                            DECODER_PARAM_MEMORY, ", ",
-                            DECODER_VAR_HEADER,
+                        "auto ", BACKTRACK_VAR_PREFIX, fixName(item.name), " = ", MEMORY_BUFFER_TYPE, "(",
+                            DECODER_PARAM_MEMORY, ".buffer, ",
+                            DECODER_PARAM_MEMORY, ".cursor",
                         ");"
                     );
-                    putResultCheck();
-                    
+                }
+
+                putLine(
+                    "result = ", ASN1_SHORTHAND, ".asn1DecodeComponentHeader!", DECODER_PARAM_RULESET, "(",
+                        DECODER_PARAM_MEMORY, ", ",
+                        DECODER_VAR_HEADER,
+                    ");"
+                );
+                putResultCheck();
+                
+                if(!topLevelTag.isNull)
+                {
                     if(item.isOptional)
                     {
                         putLine(
@@ -594,28 +929,37 @@ private void putRawType(
                             fieldName: item.name
                         );
                     }
+                }
 
-                    putLine(MEMORY_BUFFER_TYPE, " ", MEMORY_VAR_PREFIX, item.name, ";");
-                    putLine(
-                        "result = ", ASN1_SHORTHAND, ".asn1ReadContentBytes(",
-                            DECODER_PARAM_MEMORY, ", ",
-                            DECODER_VAR_HEADER, ".length, ",
-                            MEMORY_VAR_PREFIX, item.name,
-                        ");"
-                    );
-                    putResultCheck();
+                putLine(MEMORY_BUFFER_TYPE, " ", MEMORY_VAR_PREFIX, fixName(item.name), ";");
+                putLine(
+                    "result = ", ASN1_SHORTHAND, ".asn1ReadContentBytes(",
+                        DECODER_PARAM_MEMORY, ", ",
+                        DECODER_VAR_HEADER, ".length, ",
+                        MEMORY_VAR_PREFIX, fixName(item.name),
+                    ");"
+                );
+                putResultCheck();
 
-                    putRawDerDecodingForField(
-                        item.type,
-                        item.name.idup,
-                        asCamelCase(SETTER_FUNCTION_PREFIX, item.name),
-                        code,
-                        context,
-                        parentIsWrapper: false,
-                        typeOfOverride: ('_'~item.name).idup,
-                        memoryVarOverride: (MEMORY_VAR_PREFIX~item.name).idup
-                    );
+                if(topLevelTag.isNull && item.isOptional)
+                {
+                    putLine("result = (){ // Field is OPTIONAL and has a variable starting tag");
+                    indent();
+                }
 
+                putRawDerDecodingForField(
+                    item.type,
+                    item.name.idup,
+                    asCamelCase(SETTER_FUNCTION_PREFIX, item.name),
+                    code,
+                    context,
+                    parentIsWrapper: false,
+                    typeOfOverride: ('_'~item.name).idup,
+                    memoryVarOverride: (MEMORY_VAR_PREFIX~item.name).idup
+                );
+
+                if(!topLevelTag.isNull)
+                {
                     if(item.isOptional)
                     {
                         dedent();
@@ -624,38 +968,40 @@ private void putRawType(
                         indent();
                             putLine(
                                 DECODER_PARAM_MEMORY, " = ", MEMORY_BUFFER_TYPE, "(",
-                                    BACKTRACK_VAR_PREFIX, item.name, ".buffer, ",
-                                    BACKTRACK_VAR_PREFIX, item.name, ".cursor",
+                                    BACKTRACK_VAR_PREFIX, fixName(item.name), ".buffer, ",
+                                    BACKTRACK_VAR_PREFIX, fixName(item.name), ".cursor",
                                 ");"
                             );
                         dedent();
                     }
-
-                    putLine();
-                    return Result.noError;
-                }).resultEnforce;
-
-                if(ir.isExtensible)
-                {
-                    assert(false, "TODO: Skip over any remaining fields (after confirming this is 100% what needs to happen)");
                 }
                 else
                 {
-                    putLine("if(memory.bytesLeft != 0)");
-                    indent();
-                        putLine(
-                            "return ", RESULT_TYPE, ".make(", 
-                                ASN1_SHORTHAND, ".Asn1DecodeError.sequenceHasExtraData, ",
-                                `"when decoding non-extensible SEQUENCE `, name, 
-                                ` there were unsused content bytes after attempting to decode all known fields -`,
-                                ` this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input"`, 
-                            ");"
-                        );
-                    dedent();
+                    if(item.isOptional)
+                    {
+                        putLine("return ", RESULT_TYPE, ".noError;");
+                        dedent();
+                        putLine("}();");
+                        putLine("if(result.isError(", ASN1_SHORTHAND, ".Asn1DecodeError.choiceHasNoMatch))");
+                        indent();
+                            putLine(
+                                DECODER_PARAM_MEMORY, " = ", MEMORY_BUFFER_TYPE, "(",
+                                    BACKTRACK_VAR_PREFIX, fixName(item.name), ".buffer, ",
+                                    BACKTRACK_VAR_PREFIX, fixName(item.name), ".cursor",
+                                ");"
+                            );
+                        dedent();
+                        putLine("else if(result.isError)");
+                        indent();
+                            putLine("return result;");
+                        dedent();
+                    }
                 }
 
-                put("return this.", VALIDATE_FUNCTION_PREFIX, "();");
-            }, emitFinalReturn: false);
+                putLine();
+            }
+
+            return Result.noError;
         }
 
         private void wrapAroundSequenceLikeType(IrT)(IrT ir)
@@ -670,12 +1016,11 @@ private void putRawType(
                 attributeBlock("private", (){
                     ir.foreachComponentGC((item){
                         assert(!item.isComponentsOf, "TODO: support COMPONENTS OF");
-                        assert(item.defaultValue is null, "TODO: support DEFAULT");
 
                         // I don't want to use Nullable since it makes some of the other code gen logic
                         // kind of clunky, especially where `typeof()` is currently used.
-                        putLine("bool ", IS_SET_PREFIX, item.name, ";");
-                        putLine(rawTypeOf(item.type), " _", item.name, ";");
+                        putLine("bool ", IS_SET_PREFIX, fixName(item.name), ";");
+                        putLine(rawTypeOf(item.type), " _", fixName(item.name), ";");
 
                         return Result.noError;
                     }).resultEnforce;
@@ -684,20 +1029,20 @@ private void putRawType(
                 ir.foreachComponentGC((item){
                     const itemTypeName = (item.isOptional)
                         ? (NULLABLE_TYPE~"!("~rawTypeOf(item.type)~")")
-                        : ("typeof(_"~item.name~")").idup;
+                        : ("typeof(_"~fixName(item.name)~")").idup;
 
                     declareFunction(
                         RESULT_TYPE, 
                         asCamelCase(SETTER_FUNCTION_PREFIX, item.name), 
                         (next){
-                            put("typeof(_", item.name, ") ", SETTER_PARAM_VALUE);
+                            put("typeof(_", fixName(item.name), ") ", SETTER_PARAM_VALUE);
                             next();
                         }, (){
                             if(item.type.getMainConstraintOrNull() !is null)
                                 putLine("// TODO: Warning - type has a constraint but it's not being handled yet!");
                             
-                            putLine(IS_SET_PREFIX, item.name, " = true;");
-                            putLine('_', item.name, " = ", SETTER_PARAM_VALUE, ";");
+                            putLine(IS_SET_PREFIX, fixName(item.name), " = true;");
+                            putLine('_', fixName(item.name), " = ", SETTER_PARAM_VALUE, ";");
                             put(RETURN_NO_ERROR);
                         }, 
                         funcAttributes: "@nogc nothrow"
@@ -725,7 +1070,7 @@ private void putRawType(
                                 dedent();
                                 putLine("else");
                                 indent();
-                                    putLine(IS_SET_PREFIX, item.name, " = false;");
+                                    putLine(IS_SET_PREFIX, fixName(item.name), " = false;");
                                 dedent();
                                 put(RETURN_NO_ERROR);
                             }, 
@@ -740,25 +1085,45 @@ private void putRawType(
                         (){
                             if(item.isOptional)
                             {
-                                putLine("if(", IS_SET_PREFIX, item.name, ")");
+                                putLine("if(", IS_SET_PREFIX, fixName(item.name), ")");
                                 indent();
-                                    putLine("return typeof(return)(_", item.name, ");");
+                                    putLine("return typeof(return)(_", fixName(item.name), ");");
                                 dedent();
                                 put("return typeof(return).init;");
                             }
                             else
                             {
                                 putLine(
-                                    "assert(", IS_SET_PREFIX, item.name,
+                                    "assert(", IS_SET_PREFIX, fixName(item.name),
                                         `, "Non-optional field '`, item.name,
                                         `' has not been set yet - please use validate() to check!"`,
                                     ");"
                                 );
-                                put("return _", item.name, ";");
+                                put("return _", fixName(item.name), ";");
                             }
                         },
                         funcAttributes: "@nogc nothrow"
                     );
+
+                    if(item.defaultValue !is null)
+                    {
+                        declareFunction(
+                            "static " ~ itemTypeName,
+                            asCamelCase(DEFAULT_VALUE_PREFIX, item.name),
+                            (next){},
+                            (){
+                                putValueLiteral(
+                                    "mainValue", 
+                                    item.type, 
+                                    item.defaultValue, 
+                                    code, 
+                                    context
+                                );
+                                putLine("return mainValue;");
+                            },
+                            funcAttributes: "@nogc nothrow"
+                        );
+                    }
 
                     return Result.noError;
                 }).resultEnforce;
@@ -769,9 +1134,22 @@ private void putRawType(
                     (next){},
                     (){
                         ir.foreachComponentGC((item){
-                            if(!item.isOptional)
+                            if(item.defaultValue !is null)
                             {
-                                putLine("if(!", IS_SET_PREFIX, item.name, ")");
+                                putLine("if(!", IS_SET_PREFIX, fixName(item.name), ")");
+                                putLine("{");
+                                indent();
+                                    putLine("auto result = this.", asCamelCase(SETTER_FUNCTION_PREFIX, item.name), "(",
+                                        asCamelCase(DEFAULT_VALUE_PREFIX, item.name), "()",
+                                    ");");
+                                    putResultCheck();
+                                dedent();
+                                putLine("}");
+                            }
+                            
+                            if(!item.isOptional && item.defaultValue is null)
+                            {
+                                putLine("if(!", IS_SET_PREFIX, fixName(item.name), ")");
                                 indent();
                                     putLine(
                                         "return ", RESULT_TYPE, ".make(",
@@ -890,6 +1268,70 @@ private void putRawDerDecodingForField(
 
         override void visit(Asn1BooleanTypeIr ir) => this.decodePrimitive();
         override void visit(Asn1BitStringTypeIr ir) => this.decodePrimitive();
+        override void visit(Asn1OctetStringTypeIr ir) => this.decodePrimitive();
+        override void visit(Asn1ObjectIdentifierTypeIr ir) => this.decodePrimitive();
+        override void visit(Asn1IntegerTypeIr ir) => this.decodePrimitive();
+        override void visit(Asn1UTF8StringTypeIr ir) => this.decodePrimitive();
+        override void visit(Asn1PrintableStringTypeIr ir) => this.decodePrimitive();
+        override void visit(Asn1NumericStringTypeIr ir) => this.decodePrimitive();
+        override void visit(Asn1IA5StringTypeIr ir) => this.decodePrimitive();
+        override void visit(Asn1UtcTimeTypeIr ir) => this.decodePrimitive();
+
+        override void visit(Asn1TypeReferenceIr ir)
+        {
+            with(code)
+            {
+                this.decodeTags(memoryVarOverride);
+
+                putLine(
+                    "typeof(", 
+                        fixName(typeOfOverride.length > 0 ? typeOfOverride : fieldName), 
+                    ") temp_", fixName(fieldName), ";"
+                );
+                putLine(
+                    "result = temp_", fixName(fieldName), ".fromDecoding!", DECODER_PARAM_RULESET, "(",
+                        memoryVarOverride, ", ",
+                        DECODER_VAR_HEADER, ".identifier",
+                    ");"
+                );
+                putResultCheck();
+                putLine("result = this.", setterName, "(temp_", fixName(fieldName), ");");
+                putResultCheck();
+                endLine();
+            }
+        }
+
+        override void visit(Asn1SetOfTypeIr ir)
+        {
+            this.decodePrimitive();
+
+            // This doesn't decode into anything - it's just for validation.
+            with(code)
+            {
+                putLine(
+                    "result = this.", typeOfOverride.length > 0 ? typeOfOverride : fieldName, 
+                    ".foreachElementAuto((element) => ", RESULT_TYPE, ".noError", ");"
+                );
+                putResultCheck();
+                endLine();
+            }
+        }
+
+        override void visit(Asn1SequenceOfTypeIr ir)
+        {
+            this.decodePrimitive();
+
+            // This doesn't decode into anything - it's just for validation.
+            with(code)
+            {
+                putLine(
+                    "result = this.", typeOfOverride.length > 0 ? typeOfOverride : fieldName, 
+                    ".foreachElementAuto((element) => ", RESULT_TYPE, ".noError", ");"
+                );
+                putResultCheck();
+                endLine();
+            }
+        }
 
         private void decodePrimitive()
         {
@@ -901,19 +1343,19 @@ private void putRawDerDecodingForField(
 
                 putLine(
                     "typeof(", 
-                        typeOfOverride.length > 0 ? typeOfOverride : fieldName, 
-                    ") temp_", fieldName, ";"
+                        fixName(typeOfOverride.length > 0 ? typeOfOverride : fieldName), 
+                    ") temp_", fixName(fieldName), ";"
                 );
                 putLine(
-                    "result = typeof(temp_", fieldName, 
+                    "result = typeof(temp_", fixName(fieldName), 
                     ").fromDecoding!", DECODER_PARAM_RULESET, "(",
                         memoryVar, ", ",
-                        "temp_", fieldName, ", ",
+                        "temp_", fixName(fieldName), ", ",
                         DECODER_VAR_HEADER, ".identifier",
                     ");"
                 );
                 putResultCheck();
-                putLine("result = this.", setterName, "(temp_", fieldName, ");");
+                putLine("result = this.", setterName, "(temp_", fixName(fieldName), ");");
                 putResultCheck();
                 endLine();
             }
@@ -1006,6 +1448,8 @@ private void putRawDerDecodingForField(
     }
 
     code.putLine("/++ FIELD - ", fieldName, " ++/");
+    fieldName = fixName(fieldName);
+    memoryVarOverride = fixName(memoryVarOverride);
 
     scope visitor = new DecoderVisitor();
     fieldType.visitGC(visitor);
@@ -1019,9 +1463,19 @@ private string rawTypeOf(Asn1TypeIr ir)
     {
         override void visit(Asn1BooleanTypeIr ir) { result = ASN1_SHORTHAND~".Asn1Bool"; }
         override void visit(Asn1BitStringTypeIr ir) { result = ASN1_SHORTHAND~".Asn1BitString"; }
+        override void visit(Asn1ObjectIdentifierTypeIr ir) { result = ASN1_SHORTHAND~".Asn1ObjectIdentifier"; }
+        override void visit(Asn1OctetStringTypeIr ir) { result = ASN1_SHORTHAND~".Asn1OctetString"; }
+        override void visit(Asn1SetOfTypeIr ir) { result = ASN1_SHORTHAND~".Asn1SetOf!("~rawTypeOf(ir.getTypeOfItems())~")"; } // @suppress(dscanner.style.long_line)
+        override void visit(Asn1SequenceOfTypeIr ir) { result = ASN1_SHORTHAND~".Asn1SequenceOf!("~rawTypeOf(ir.getTypeOfItems())~")"; } // @suppress(dscanner.style.long_line)
+        override void visit(Asn1IntegerTypeIr ir) { result = ASN1_SHORTHAND~".Asn1Integer"; }
+        override void visit(Asn1UTF8StringTypeIr ir) { result = ASN1_SHORTHAND~".Asn1Utf8String"; }
+        override void visit(Asn1PrintableStringTypeIr ir) { result = ASN1_SHORTHAND~".Asn1PrintableString"; }
+        override void visit(Asn1NumericStringTypeIr ir) { result = ASN1_SHORTHAND~".Asn1NumericString"; }
+        override void visit(Asn1IA5StringTypeIr ir) { result = ASN1_SHORTHAND~".Asn1Ia5String"; }
+        override void visit(Asn1UtcTimeTypeIr ir) { result = ASN1_SHORTHAND~".Asn1UtcTime"; }
 
         // TODO: Handle imported symbols - the IR tree needs to add parent information to handle them properly.
-        override void visit(Asn1TypeReferenceIr ir) { result = ("."~ir.typeRef).idup; }
+        override void visit(Asn1TypeReferenceIr ir) { result = fixName("."~ir.typeRef); }
         override void visit(Asn1TaggedTypeIr ir) => ir.getUnderlyingTypeSkipTags().visitGC(this);
     }
 
@@ -1034,7 +1488,7 @@ private string rawTypeOf(Asn1TypeIr ir)
 private string asCamelCase(string prefix, const(char)[] irName)
 {
     import std.ascii : toUpper;
-    return (prefix ~ irName[0].toUpper ~ irName[1..$]).idup;
+    return fixName(prefix ~ irName[0].toUpper ~ irName[1..$]);
 }
 
 private Asn1Identifier.Class irClassToDecoderClass(Asn1TaggedTypeIr.Class class_)
@@ -1074,4 +1528,27 @@ private void topLevelIrTagAndClass(
 
     tag = typeIr.getUniversalTag();
     class_ = Asn1Identifier.Class.universal;
+}
+
+private string fixName(scope const char[] name)
+{
+    import std.exception : assumeUnique;
+
+    char[] result;
+    result.reserve(name.length);
+
+    for(size_t i = 0; i < name.length; i++)
+    {
+        if(name[i] != '-')
+        {
+            result ~= name[i];
+            continue;
+        }
+
+        i++;
+        result ~= '_';
+        result ~= name[i];
+    }
+
+    return result.assumeUnique;
 }

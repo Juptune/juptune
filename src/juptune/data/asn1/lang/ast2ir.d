@@ -715,47 +715,125 @@ Result asn1AstToIr(
             );
         },
         (Asn1ConstrainedTypeNode type) {
-            return type.match(
-                (Asn1ConstrainedTypeNode.Case1 case1) {
-                    if(auto r = asn1AstToIr(case1.getNode!Asn1TypeNode, ir, context, errors))
+            return asn1AstToIr(type, ir, context, errors);
+        },
+    );
+}
+
+Result asn1AstToIr(
+    scope Asn1ConstrainedTypeNode node,
+    scope out Asn1TypeIr ir,
+    scope ref Asn1ParserContext context,
+    scope Asn1ErrorHandler errors,
+) @nogc nothrow
+{
+    scope handleConstraints = (Asn1ConstraintNode constraintNode) {
+        Asn1ConstraintIr constraintIr, additionalConstraintIr;
+        bool isExtensible;
+        auto result = asn1AstToIrForConstraint(
+            constraintNode,
+            constraintIr, // out
+            isExtensible, // out
+            additionalConstraintIr, // out
+            context, 
+            errors
+        );
+        if(result.isError)
+            return result;
+
+        if(constraintIr !is null)
+        {
+            if(auto r = ir.setMainConstraint(constraintIr, Asn1NullErrorHandler.instance))
+                return r;
+
+            if(isExtensible)
+                ir.markAsConstraintExtensible();
+
+            if(additionalConstraintIr !is null)
+            {
+                if(auto r = ir.setAdditionalConstraint(additionalConstraintIr, Asn1NullErrorHandler.instance)) // @suppress(dscanner.style.long_line)
+                    return r;
+            }
+        }
+        
+        return Result.noError;
+    };
+    return node.match(
+        (Asn1ConstrainedTypeNode.Case1 case1) {
+            if(auto r = asn1AstToIr(case1.getNode!Asn1TypeNode, ir, context, errors))
+                return r;
+
+            return handleConstraints(case1.getNode!Asn1ConstraintNode);
+        },
+        (Asn1TypeWithConstraintNode typeNode) {
+            return typeNode.match(
+                (Asn1TypeWithConstraintNode.SetConstraintType constrainedNode){
+                    Asn1TypeIr typeIr;
+                    if(auto r = asn1AstToIr(constrainedNode.getNode!Asn1TypeNode, typeIr, context, errors))
                         return r;
 
-                    Asn1ConstraintIr constraintIr, additionalConstraintIr;
-                    bool isExtensible;
-                    auto result = asn1AstToIrForConstraint(
-                        case1.getNode!Asn1ConstraintNode,
-                        constraintIr, // out
-                        isExtensible, // out
-                        additionalConstraintIr, // out
-                        context, 
-                        errors
-                    );
-                    if(result.isError)
-                        return result;
-
-                    if(constraintIr !is null)
-                    {
-                        if(auto r = ir.setMainConstraint(constraintIr, Asn1NullErrorHandler.instance))
-                            return r;
-
-                        if(isExtensible)
-                            ir.markAsConstraintExtensible();
-
-                        if(additionalConstraintIr !is null)
-                        {
-                            if(auto r = ir.setAdditionalConstraint(additionalConstraintIr, Asn1NullErrorHandler.instance)) // @suppress(dscanner.style.long_line)
-                                return r;
-                        }
-                    }
+                    ir = context.allocNode!Asn1SetOfTypeIr(typeIr.getRoughLocation(), typeIr);
+                    return handleConstraints(constrainedNode.getNode!Asn1ConstraintNode);
+                },
+                (Asn1TypeWithConstraintNode.SetSizeConstraintType constrainedNode){
+                    assert(false, "Not implemented");
                     return Result.noError;
                 },
-                (Asn1TypeWithConstraintNode typeNode) {
+                (Asn1TypeWithConstraintNode.SequenceConstraintType constrainedNode){
+                    Asn1TypeIr typeIr;
+                    if(auto r = asn1AstToIr(constrainedNode.getNode!Asn1TypeNode, typeIr, context, errors))
+                        return r;
+
+                    ir = context.allocNode!Asn1SequenceOfTypeIr(typeIr.getRoughLocation(), typeIr);
+                    return handleConstraints(constrainedNode.getNode!Asn1ConstraintNode);
+                },
+                (Asn1TypeWithConstraintNode.SequenceSizeConstraintType constrainedNode){
+                    assert(false, "Not implemented");
+                    return Result.noError;
+                },
+                (Asn1TypeWithConstraintNode.SetConstraintNamedType constrainedNode){
+                    assert(false, "Not implemented");
+                    return Result.noError;
+                },
+                (Asn1TypeWithConstraintNode.SetSizeConstraintNamedType constrainedNode){
+                    assert(false, "Not implemented");
+                    return Result.noError;
+                },
+                (Asn1TypeWithConstraintNode.SequenceConstraintNamedType constrainedNode){
+                    assert(false, "Not implemented");
+                    return Result.noError;
+                },
+                (Asn1TypeWithConstraintNode.SequenceSizeConstraintNamedType constrainedNode){
                     assert(false, "Not implemented");
                     return Result.noError;
                 },
             );
         },
     );
+}
+@("asn1AstToIr - Asn1ConstrainedTypeNode > Asn1TypeIr")
+unittest
+{
+    alias Harness = GenericTestHarness!(Asn1TypeIr, (ref parser){
+        Asn1TypeNode node;
+        parser.Type(node).resultAssert;
+        return node.asNode!Asn1ConstrainedTypeNode;
+    });
+    
+    with(Harness) run([
+        "Case - SetConstraintType": T("SET (SIZE (1)) OF INTEGER", (ir){
+            auto setIr = cast(Asn1SetOfTypeIr)ir;
+            assert(setIr !is null);
+            assert(cast(Asn1IntegerTypeIr)setIr.getTypeOfItems() !is null);
+            assert(cast(Asn1SizeConstraintIr)setIr.getMainConstraintOrNull() !is null);
+        }),
+        "Case - SequenceConstraintType": T("SEQUENCE (SIZE (1)) OF INTEGER", (ir){
+            auto seqIr = cast(Asn1SequenceOfTypeIr)ir;
+            assert(seqIr !is null);
+            assert(cast(Asn1IntegerTypeIr)seqIr.getTypeOfItems() !is null);
+            assert(cast(Asn1SizeConstraintIr)seqIr.getMainConstraintOrNull() !is null);
+        }),
+    ]);
 }
 
 Result asn1AstToIr(
@@ -771,7 +849,7 @@ Result asn1AstToIr(
             return Result.noError;
         },
         (Asn1NamedBitListNode list) {
-            assert(list.items.length, "Asn1NamedBitListNode is empty? The parser should've caught this!");
+            assert(list.items.length, "bug: Asn1NamedBitListNode is empty? The parser should've caught this!");
 
             foreach(item; list.items)
             {

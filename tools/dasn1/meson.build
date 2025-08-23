@@ -38,5 +38,6 @@ dasn1_unittest_exe = executable(
 #### Tests ####
 
 subdir('tests/adhoc')
+subdir('tests/x509')
 
 # test('dasn1-unittest', dasn1_unittest_exe)

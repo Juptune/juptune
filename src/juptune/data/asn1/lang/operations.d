@@ -92,6 +92,7 @@ in(errors !is null, "errors is null")
         }
 
         // TODO: If the logic ever needs to grow, just DRY things up a bit - not too worth the effort right now.
+        // TODO: This function might need to also support the usecase where there's nested OBJECT IDENTIFIERs?
         static if(is(IrT == Asn1ObjectIdSequenceValueIr))
         {
             length = objId.getObjectCount();

@@ -1472,6 +1472,8 @@ final class Asn1BitStringTypeIr : Asn1TypeIr
         return Result.noError;
     }
 
+    bool hasNamedBits() => this._namedBits.length > 0;
+
     version(unittest) IrT getByName(IrT : Asn1ValueIr)(const(char)[] name)
     {
         return cast(IrT)this._namedBits[name];
@@ -1864,7 +1866,6 @@ final class Asn1IntegerTypeIr : Asn1TypeIr
 {
     mixin IrBoilerplate;
 
-    @nogc nothrow:
 
     private
     {
@@ -1872,7 +1873,7 @@ final class Asn1IntegerTypeIr : Asn1TypeIr
         HashMap!(const(char)[], ValueT) _namedNumbers;
     }
 
-    this(Asn1Location roughLocation)
+    this(Asn1Location roughLocation) @nogc nothrow
     {
         with(ConstraintBit)
         {
@@ -1884,6 +1885,22 @@ final class Asn1IntegerTypeIr : Asn1TypeIr
             );
         }
     }
+
+    alias foreachNamedNumber = foreachNamedNumberImpl!(Result delegate(const(char)[], Asn1ValueIr) @nogc nothrow);
+    alias foreachNamedNumberGC = foreachNamedNumberImpl!(Result delegate(const(char)[], Asn1ValueIr));
+
+    private Result foreachNamedNumberImpl(HandlerT)(scope HandlerT handler)
+    {
+        foreach(kvp; this._namedNumbers.byKeyValue)
+        {
+            auto result = handler(kvp.key, kvp.value);
+            if(result.isError)
+                return result;
+        }
+        return Result.noError;
+    }
+
+    @nogc nothrow:
 
     Result addNamedNumber(NodeT)(
         const(char)[] name,
@@ -1905,16 +1922,7 @@ final class Asn1IntegerTypeIr : Asn1TypeIr
         return Result.noError;
     }
 
-    Result foreachNamedNumber(scope Result delegate(const(char)[] name, Asn1ValueIr number) @nogc nothrow handler)
-    {
-        foreach(kvp; this._namedNumbers.byKeyValue)
-        {
-            auto result = handler(kvp.key, kvp.value);
-            if(result.isError)
-                return result;
-        }
-        return Result.noError;
-    }
+    bool hasNamedNumbers() => this._namedNumbers.length > 0;
 
     // I'm intentionally preventing access to the underlying data store for user code in order to
     // avoid some potentially dodgy memory access patterns; but it makes some semantic checks awkward as hell,
@@ -2254,7 +2262,8 @@ private final class Asn1SequenceOfTypeBase(string Kind, ubyte UniversalTag) : As
             super(roughLocation,
                 singleValue 
                 | containedSubtype
-                | innerType,
+                | innerType
+                | size,
                 UniversalTag
             );
         }
@@ -2436,11 +2445,16 @@ final class Asn1TaggedTypeIr : Asn1TypeIr
         else if(stageBit == SemanticStageBit.implicitMutations)
         {
             // ITU-T X.680 (02/2021) 31.2.7
-            if(this._encoding == Encoding.unspecified && cast(Asn1ChoiceTypeIr)this.getUnderlyingType() is null)
+            if(this._encoding == Encoding.unspecified)
             {
-                if(info.tagDefault == Asn1ModuleIr.TagDefault.implicit)
-                    this._encoding = Encoding.implicit;
-                else if(info.tagDefault == Asn1ModuleIr.TagDefault.explicit)
+                if(cast(Asn1ChoiceTypeIr)this.getUnderlyingType() is null)
+                {
+                    if(info.tagDefault == Asn1ModuleIr.TagDefault.implicit)
+                        this._encoding = Encoding.implicit;
+                    else if(info.tagDefault == Asn1ModuleIr.TagDefault.explicit)
+                        this._encoding = Encoding.explicit;
+                }
+                else
                     this._encoding = Encoding.explicit;
             }
         }
@@ -2900,26 +2914,22 @@ final class Asn1ValueSequenceIr : Asn1ValueIr
 {
     mixin IrBoilerplate;
 
-    @nogc nothrow:
 
     private
     {
         Array!Asn1ValueIr _values;
     }
 
-    this(Asn1Location roughLocation)
+    this(Asn1Location roughLocation) @nogc nothrow
     {
         super(roughLocation);
     }
 
-    void addSequenceValue(Asn1ValueIr value)
-    in(value !is null, "value is null")
-    {
-        this._values.put(value);
-    }
+    alias foreachSequenceValue = foreachSequenceValueImpl!(Result delegate(Asn1ValueIr) @nogc nothrow);
+    alias foreachSequenceValueGC = foreachSequenceValueImpl!(Result delegate(Asn1ValueIr));
 
-    Result foreachSequenceValue(
-        scope Result delegate(Asn1ValueIr) @nogc nothrow handler,
+    private Result foreachSequenceValueImpl(HandlerT)(
+        scope HandlerT handler,
         scope Asn1ErrorHandler errors
     )
     {
@@ -2931,6 +2941,14 @@ final class Asn1ValueSequenceIr : Asn1ValueIr
         }
 
         return Result.noError;
+    }
+
+    @nogc nothrow:
+
+    void addSequenceValue(Asn1ValueIr value)
+    in(value !is null, "value is null")
+    {
+        this._values.put(value);
     }
 
     size_t getValueCount() => this._values.length;
@@ -2966,7 +2984,6 @@ final class Asn1NamedValueSequenceIr : Asn1ValueIr
 {
     mixin IrBoilerplate;
 
-    @nogc nothrow:
 
     private
     {
@@ -2979,10 +2996,30 @@ final class Asn1NamedValueSequenceIr : Asn1ValueIr
         Array!Item _values;
     }
 
-    this(Asn1Location roughLocation)
+    this(Asn1Location roughLocation) @nogc nothrow
     {
         super(roughLocation);
     }
+
+    alias foreachSequenceNamedValue = foreachSequenceNamedValueImpl!(Result delegate(const(char)[], Asn1ValueIr) @nogc nothrow); // @suppress(dscanner.style.long_line)
+    alias foreachSequenceNamedValueGC = foreachSequenceNamedValueImpl!(Result delegate(const(char)[], Asn1ValueIr));
+
+    private Result foreachSequenceNamedValueImpl(HandlerT)(
+        scope HandlerT handler,
+        scope Asn1ErrorHandler errors
+    )
+    {
+        foreach(value; this._values)
+        {
+            auto result = handler(value.name, value.value);
+            if(result.isError)
+                return result;
+        }
+
+        return Result.noError;
+    }
+
+    @nogc nothrow:
 
     Result addSequenceNamedValue(
         const(char)[] name, 
@@ -3008,21 +3045,6 @@ final class Asn1NamedValueSequenceIr : Asn1ValueIr
         }
 
         this._values.put(Item(name, value));
-        return Result.noError;
-    }
-
-    Result foreachSequenceNamedValue(
-        scope Result delegate(const(char)[], Asn1ValueIr) @nogc nothrow handler,
-        scope Asn1ErrorHandler errors
-    )
-    {
-        foreach(value; this._values)
-        {
-            auto result = handler(value.name, value.value);
-            if(result.isError)
-                return result;
-        }
-
         return Result.noError;
     }
 

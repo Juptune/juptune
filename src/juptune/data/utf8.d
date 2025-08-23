@@ -138,6 +138,21 @@ Result utf8Encode(
     return Result.make(Utf8Error.invalid, "Attempted to encode an invalid UTF-8 codepoint");
 }
 
+Result utf8CountCodePoints(scope const(void)[] input, scope out size_t count)
+{
+    size_t cursor;
+    while(cursor < input.length)
+    {
+        dchar _;
+        auto result = utf8DecodeNext(input, cursor, _);
+        if(result.isError)
+            return result;
+        count++;
+    }
+
+    return Result.noError;
+}
+
 /++++ Algorithms ++++/
 
 /// The default set of UTF-8 algorithms for this platform.

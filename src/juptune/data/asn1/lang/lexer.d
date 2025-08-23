@@ -629,6 +629,7 @@ struct Asn1Lexer
         {
             if(NewLine.isAllowed(this.peekAt(0)))
             {
+                this._debugLine++;
                 this.advance(1);
                 break;
             }
@@ -1076,6 +1077,7 @@ struct Asn1Lexer
         while(!This.eof)
         {
             const ch = This.peekAt(0);
+
             if(IsTarget(ch))
             {
                 range.end = This._cursor;
@@ -1094,9 +1096,9 @@ struct Asn1Lexer
                 );
             }
 
-            This.advance(1);
             if(NewLine.isAllowed(ch))
                 This._debugLine++;
+            This.advance(1);
         }
 
         if(allowEof)
