@@ -162,53 +162,27 @@ struct AttributeType
         return _value;
     }
 
-    private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
-    jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
-        scope ref jbuf.MemoryReader memory,
-        const asn1.Asn1Identifier ident,
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
     ) 
     {
-        auto result = jres.Result.noError;
-        asn1.Asn1ComponentHeader componentHeader;
-        componentHeader.identifier = ident;
-        this = typeof(this).init;
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1ObjectIdentifier, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
 
-        /++ FIELD - _value ++/
-        typeof(_value) temp__value;
-        result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
-        if(result.isError)
-            return result;
-        result = this.set(temp__value);
-        if(result.isError)
-            return result;
-
-        return jres.Result.noError;
-    }
-
-}
-
-struct AttributeValue
-{
-    private
-    {
-        asn1.Asn1OctetString _value;
-        bool _isSet;
-    }
-
-    jres.Result set(
-        asn1.Asn1OctetString newValue,
-    ) @nogc nothrow
-    {
-        _value = newValue;
-        _isSet = true;
-        return jres.Result.noError;
-    }
-
-    asn1.Asn1OctetString get(
-    ) @nogc nothrow
-    {
-        assert(_isSet, "Cannot call get() when no value has been set!");
-        return _value;
     }
 
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
@@ -226,10 +200,10 @@ struct AttributeValue
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -243,7 +217,7 @@ struct AttributeTypeAndValue
         bool _isSet_type;
         .AttributeType _type;
         bool _isSet_value;
-        .AttributeValue _value;
+        asn1.Asn1OctetString _value;
     }
 
     jres.Result setType(
@@ -288,6 +262,45 @@ struct AttributeTypeAndValue
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("type: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_type), "toString"))
+            _type.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("value: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_value), "toString"))
+            _value.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -302,7 +315,7 @@ struct AttributeTypeAndValue
         /+++ TAG FOR FIELD: type +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'type' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE AttributeTypeAndValue when reading top level tag 6 for field 'type' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 6)
@@ -310,37 +323,34 @@ struct AttributeTypeAndValue
         jbuf.MemoryReader memory_type;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_type);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'type' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - type ++/
         typeof(_type) temp_type;
         result = temp_type.fromDecoding!ruleset(memory_type, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'type' in type "~__traits(identifier, typeof(this))~":");
         result = this.setType(temp_type);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'type' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: value +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE AttributeTypeAndValue when reading top level tag 4 for field 'value' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
-        if(componentHeader.identifier.tag != 4)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE AttributeTypeAndValue when reading top level tag 4 for field 'value' the tag's value was expected to be 4", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return result.wrapError("when decoding header of field 'value' in type "~__traits(identifier, typeof(this))~":");
+        // Field is the intrinsic ANY type - any tag is allowed.
         jbuf.MemoryReader memory_value;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_value);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'value' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - value ++/
         typeof(_value) temp_value;
-        result = temp_value.fromDecoding!ruleset(memory_value, componentHeader.identifier);
+        result = typeof(temp_value).fromDecoding!ruleset(memory_value, temp_value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'value' in type "~__traits(identifier, typeof(this))~":");
         result = this.setValue(temp_value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'value' in type "~__traits(identifier, typeof(this))~":");
 
         
         if(memory.bytesLeft != 0)
@@ -357,7 +367,7 @@ struct Attribute
         bool _isSet_type;
         .AttributeType _type;
         bool _isSet_values;
-        asn1.Asn1SetOf!(.AttributeValue) _values;
+        asn1.Asn1SetOf!(asn1.Asn1OctetString) _values;
     }
 
     jres.Result setType(
@@ -402,6 +412,45 @@ struct Attribute
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("type: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_type), "toString"))
+            _type.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("values: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_values), "toString"))
+            _values.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -416,7 +465,7 @@ struct Attribute
         /+++ TAG FOR FIELD: type +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'type' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Attribute when reading top level tag 6 for field 'type' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 6)
@@ -424,21 +473,21 @@ struct Attribute
         jbuf.MemoryReader memory_type;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_type);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'type' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - type ++/
         typeof(_type) temp_type;
         result = temp_type.fromDecoding!ruleset(memory_type, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'type' in type "~__traits(identifier, typeof(this))~":");
         result = this.setType(temp_type);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'type' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: values +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'values' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Attribute when reading top level tag 17 for field 'values' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 17)
@@ -446,19 +495,19 @@ struct Attribute
         jbuf.MemoryReader memory_values;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_values);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'values' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - values ++/
         typeof(_values) temp_values;
         result = typeof(temp_values).fromDecoding!ruleset(memory_values, temp_values, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'values' in type "~__traits(identifier, typeof(this))~":");
         result = this.setValues(temp_values);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'values' in type "~__traits(identifier, typeof(this))~":");
 
         result = this._values.foreachElementAuto((element) => jres.Result.noError);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding subelements of SET OF field 'values' in type "~__traits(identifier, typeof(this))~":");
 
         
         if(memory.bytesLeft != 0)
@@ -639,10 +688,10 @@ struct X520name
             typeof(Value.printableString) temp_printableString;
             result = typeof(temp_printableString).fromDecoding!ruleset(memory, temp_printableString, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'printableString' in type "~__traits(identifier, typeof(this))~":");
             result = this.setPrintableString(temp_printableString);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'printableString' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -653,15 +702,60 @@ struct X520name
             typeof(Value.utf8String) temp_utf8String;
             result = typeof(temp_utf8String).fromDecoding!ruleset(memory, temp_utf8String, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
             result = this.setUtf8String(temp_utf8String);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type X520name the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isPrintableString)
+        {
+            depth++;
+            putIndent();
+            sink("printableString: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getPrintableString()), "toString"))
+                _value.printableString.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isUtf8String)
+        {
+            depth++;
+            putIndent();
+            sink("utf8String: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getUtf8String()), "toString"))
+                _value.utf8String.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -769,10 +863,10 @@ struct X520CommonName
             typeof(Value.printableString) temp_printableString;
             result = typeof(temp_printableString).fromDecoding!ruleset(memory, temp_printableString, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'printableString' in type "~__traits(identifier, typeof(this))~":");
             result = this.setPrintableString(temp_printableString);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'printableString' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -783,15 +877,60 @@ struct X520CommonName
             typeof(Value.utf8String) temp_utf8String;
             result = typeof(temp_utf8String).fromDecoding!ruleset(memory, temp_utf8String, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
             result = this.setUtf8String(temp_utf8String);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type X520CommonName the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isPrintableString)
+        {
+            depth++;
+            putIndent();
+            sink("printableString: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getPrintableString()), "toString"))
+                _value.printableString.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isUtf8String)
+        {
+            depth++;
+            putIndent();
+            sink("utf8String: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getUtf8String()), "toString"))
+                _value.utf8String.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -899,10 +1038,10 @@ struct X520LocalityName
             typeof(Value.printableString) temp_printableString;
             result = typeof(temp_printableString).fromDecoding!ruleset(memory, temp_printableString, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'printableString' in type "~__traits(identifier, typeof(this))~":");
             result = this.setPrintableString(temp_printableString);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'printableString' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -913,15 +1052,60 @@ struct X520LocalityName
             typeof(Value.utf8String) temp_utf8String;
             result = typeof(temp_utf8String).fromDecoding!ruleset(memory, temp_utf8String, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
             result = this.setUtf8String(temp_utf8String);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type X520LocalityName the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isPrintableString)
+        {
+            depth++;
+            putIndent();
+            sink("printableString: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getPrintableString()), "toString"))
+                _value.printableString.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isUtf8String)
+        {
+            depth++;
+            putIndent();
+            sink("utf8String: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getUtf8String()), "toString"))
+                _value.utf8String.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -1029,10 +1213,10 @@ struct X520StateOrProvinceName
             typeof(Value.printableString) temp_printableString;
             result = typeof(temp_printableString).fromDecoding!ruleset(memory, temp_printableString, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'printableString' in type "~__traits(identifier, typeof(this))~":");
             result = this.setPrintableString(temp_printableString);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'printableString' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -1043,15 +1227,60 @@ struct X520StateOrProvinceName
             typeof(Value.utf8String) temp_utf8String;
             result = typeof(temp_utf8String).fromDecoding!ruleset(memory, temp_utf8String, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
             result = this.setUtf8String(temp_utf8String);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type X520StateOrProvinceName the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isPrintableString)
+        {
+            depth++;
+            putIndent();
+            sink("printableString: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getPrintableString()), "toString"))
+                _value.printableString.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isUtf8String)
+        {
+            depth++;
+            putIndent();
+            sink("utf8String: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getUtf8String()), "toString"))
+                _value.utf8String.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -1159,10 +1388,10 @@ struct X520OrganizationName
             typeof(Value.printableString) temp_printableString;
             result = typeof(temp_printableString).fromDecoding!ruleset(memory, temp_printableString, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'printableString' in type "~__traits(identifier, typeof(this))~":");
             result = this.setPrintableString(temp_printableString);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'printableString' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -1173,15 +1402,60 @@ struct X520OrganizationName
             typeof(Value.utf8String) temp_utf8String;
             result = typeof(temp_utf8String).fromDecoding!ruleset(memory, temp_utf8String, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
             result = this.setUtf8String(temp_utf8String);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type X520OrganizationName the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isPrintableString)
+        {
+            depth++;
+            putIndent();
+            sink("printableString: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getPrintableString()), "toString"))
+                _value.printableString.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isUtf8String)
+        {
+            depth++;
+            putIndent();
+            sink("utf8String: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getUtf8String()), "toString"))
+                _value.utf8String.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -1289,10 +1563,10 @@ struct X520OrganizationalUnitName
             typeof(Value.printableString) temp_printableString;
             result = typeof(temp_printableString).fromDecoding!ruleset(memory, temp_printableString, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'printableString' in type "~__traits(identifier, typeof(this))~":");
             result = this.setPrintableString(temp_printableString);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'printableString' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -1303,15 +1577,60 @@ struct X520OrganizationalUnitName
             typeof(Value.utf8String) temp_utf8String;
             result = typeof(temp_utf8String).fromDecoding!ruleset(memory, temp_utf8String, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
             result = this.setUtf8String(temp_utf8String);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type X520OrganizationalUnitName the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isPrintableString)
+        {
+            depth++;
+            putIndent();
+            sink("printableString: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getPrintableString()), "toString"))
+                _value.printableString.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isUtf8String)
+        {
+            depth++;
+            putIndent();
+            sink("utf8String: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getUtf8String()), "toString"))
+                _value.utf8String.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -1419,10 +1738,10 @@ struct X520Title
             typeof(Value.printableString) temp_printableString;
             result = typeof(temp_printableString).fromDecoding!ruleset(memory, temp_printableString, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'printableString' in type "~__traits(identifier, typeof(this))~":");
             result = this.setPrintableString(temp_printableString);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'printableString' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -1433,15 +1752,60 @@ struct X520Title
             typeof(Value.utf8String) temp_utf8String;
             result = typeof(temp_utf8String).fromDecoding!ruleset(memory, temp_utf8String, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
             result = this.setUtf8String(temp_utf8String);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type X520Title the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isPrintableString)
+        {
+            depth++;
+            putIndent();
+            sink("printableString: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getPrintableString()), "toString"))
+                _value.printableString.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isUtf8String)
+        {
+            depth++;
+            putIndent();
+            sink("utf8String: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getUtf8String()), "toString"))
+                _value.utf8String.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -1484,6 +1848,29 @@ struct X520dnQualifier
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1PrintableString, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -1499,10 +1886,10 @@ struct X520dnQualifier
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -1547,6 +1934,29 @@ struct X520countryName
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1PrintableString, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -1562,10 +1972,10 @@ struct X520countryName
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -1610,6 +2020,29 @@ struct X520SerialNumber
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1PrintableString, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -1625,10 +2058,10 @@ struct X520SerialNumber
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -1738,10 +2171,10 @@ struct X520Pseudonym
             typeof(Value.printableString) temp_printableString;
             result = typeof(temp_printableString).fromDecoding!ruleset(memory, temp_printableString, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'printableString' in type "~__traits(identifier, typeof(this))~":");
             result = this.setPrintableString(temp_printableString);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'printableString' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -1752,15 +2185,60 @@ struct X520Pseudonym
             typeof(Value.utf8String) temp_utf8String;
             result = typeof(temp_utf8String).fromDecoding!ruleset(memory, temp_utf8String, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
             result = this.setUtf8String(temp_utf8String);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type X520Pseudonym the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isPrintableString)
+        {
+            depth++;
+            putIndent();
+            sink("printableString: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getPrintableString()), "toString"))
+                _value.printableString.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isUtf8String)
+        {
+            depth++;
+            putIndent();
+            sink("utf8String: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getUtf8String()), "toString"))
+                _value.utf8String.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -1803,6 +2281,29 @@ struct DomainComponent
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1Ia5String, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -1818,10 +2319,10 @@ struct DomainComponent
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -1878,6 +2379,29 @@ struct EmailAddress
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1Ia5String, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -1893,10 +2417,10 @@ struct EmailAddress
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -1965,15 +2489,45 @@ struct Name
             typeof(Value.rdnSequence) temp_rdnSequence;
             result = temp_rdnSequence.fromDecoding!ruleset(memory, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'rdnSequence' in type "~__traits(identifier, typeof(this))~":");
             result = this.setRdnSequence(temp_rdnSequence);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'rdnSequence' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type Name the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isRdnSequence)
+        {
+            depth++;
+            putIndent();
+            sink("rdnSequence: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getRdnSequence()), "toString"))
+                _value.rdnSequence.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -2002,6 +2556,29 @@ struct RDNSequence
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1SequenceOf!(.RelativeDistinguishedName), "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -2017,14 +2594,14 @@ struct RDNSequence
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         result = this._value.foreachElementAuto((element) => jres.Result.noError);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding subelements of SEQEUENCE OF field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -2055,6 +2632,29 @@ struct DistinguishedName
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, .RDNSequence, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -2070,10 +2670,10 @@ struct DistinguishedName
         typeof(_value) temp__value;
         result = temp__value.fromDecoding!ruleset(memory, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -2104,6 +2704,29 @@ struct RelativeDistinguishedName
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1SetOf!(.AttributeTypeAndValue), "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -2119,14 +2742,14 @@ struct RelativeDistinguishedName
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         result = this._value.foreachElementAuto((element) => jres.Result.noError);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding subelements of SET OF field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -2222,10 +2845,10 @@ struct DirectoryString
             typeof(Value.printableString) temp_printableString;
             result = typeof(temp_printableString).fromDecoding!ruleset(memory, temp_printableString, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'printableString' in type "~__traits(identifier, typeof(this))~":");
             result = this.setPrintableString(temp_printableString);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'printableString' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -2236,15 +2859,60 @@ struct DirectoryString
             typeof(Value.utf8String) temp_utf8String;
             result = typeof(temp_utf8String).fromDecoding!ruleset(memory, temp_utf8String, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
             result = this.setUtf8String(temp_utf8String);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'utf8String' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type DirectoryString the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isPrintableString)
+        {
+            depth++;
+            putIndent();
+            sink("printableString: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getPrintableString()), "toString"))
+                _value.printableString.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isUtf8String)
+        {
+            depth++;
+            putIndent();
+            sink("utf8String: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getUtf8String()), "toString"))
+                _value.utf8String.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -2311,6 +2979,45 @@ struct AlgorithmIdentifier
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("algorithm: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_algorithm), "toString"))
+            _algorithm.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("parameters: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_parameters), "toString"))
+            _parameters.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -2325,7 +3032,7 @@ struct AlgorithmIdentifier
         /+++ TAG FOR FIELD: algorithm +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'algorithm' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE AlgorithmIdentifier when reading top level tag 6 for field 'algorithm' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 6)
@@ -2333,40 +3040,39 @@ struct AlgorithmIdentifier
         jbuf.MemoryReader memory_algorithm;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_algorithm);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'algorithm' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - algorithm ++/
         typeof(_algorithm) temp_algorithm;
         result = typeof(temp_algorithm).fromDecoding!ruleset(memory_algorithm, temp_algorithm, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'algorithm' in type "~__traits(identifier, typeof(this))~":");
         result = this.setAlgorithm(temp_algorithm);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'algorithm' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: parameters +++/
         auto backtrack_parameters = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 4)
+        if(memory.bytesLeft != 0)
         {
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
+            if(result.isError)
+                return result.wrapError("when decoding header of field 'parameters' in type "~__traits(identifier, typeof(this))~":");
+            // Field is the intrinsic ANY type - any tag is allowed.
             jbuf.MemoryReader memory_parameters;
             result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_parameters);
             if(result.isError)
-                return result;
+                return result.wrapError("when reading content bytes of field 'parameters' in type "~__traits(identifier, typeof(this))~":");
             /++ FIELD - parameters ++/
             typeof(_parameters) temp_parameters;
             result = typeof(temp_parameters).fromDecoding!ruleset(memory_parameters, temp_parameters, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'parameters' in type "~__traits(identifier, typeof(this))~":");
             result = this.setParameters(temp_parameters);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'parameters' in type "~__traits(identifier, typeof(this))~":");
 
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_parameters.buffer, backtrack_parameters.cursor);
         
         if(memory.bytesLeft != 0)
             return jres.Result.make(asn1.Asn1DecodeError.sequenceHasExtraData, "when decoding non-extensible SEQUENCE AlgorithmIdentifier there were unsused content bytes after attempting to decode all known fields - this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input");
@@ -2399,6 +3105,29 @@ struct CertificateSerialNumber
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1Integer, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -2414,10 +3143,10 @@ struct CertificateSerialNumber
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -2486,15 +3215,45 @@ struct Time
             typeof(Value.utcTime) temp_utcTime;
             result = typeof(temp_utcTime).fromDecoding!ruleset(memory, temp_utcTime, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'utcTime' in type "~__traits(identifier, typeof(this))~":");
             result = this.setUtcTime(temp_utcTime);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'utcTime' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type Time the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isUtcTime)
+        {
+            depth++;
+            putIndent();
+            sink("utcTime: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getUtcTime()), "toString"))
+                _value.utcTime.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -2551,6 +3310,45 @@ struct Validity
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("notBefore: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_notBefore), "toString"))
+            _notBefore.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("notAfter: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_notAfter), "toString"))
+            _notAfter.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -2565,37 +3363,37 @@ struct Validity
         /+++ TAG FOR FIELD: notBefore +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'notBefore' in type "~__traits(identifier, typeof(this))~":");
         jbuf.MemoryReader memory_notBefore;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_notBefore);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'notBefore' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - notBefore ++/
         typeof(_notBefore) temp_notBefore;
         result = temp_notBefore.fromDecoding!ruleset(memory_notBefore, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'notBefore' in type "~__traits(identifier, typeof(this))~":");
         result = this.setNotBefore(temp_notBefore);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'notBefore' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: notAfter +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'notAfter' in type "~__traits(identifier, typeof(this))~":");
         jbuf.MemoryReader memory_notAfter;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_notAfter);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'notAfter' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - notAfter ++/
         typeof(_notAfter) temp_notAfter;
         result = temp_notAfter.fromDecoding!ruleset(memory_notAfter, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'notAfter' in type "~__traits(identifier, typeof(this))~":");
         result = this.setNotAfter(temp_notAfter);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'notAfter' in type "~__traits(identifier, typeof(this))~":");
 
         
         if(memory.bytesLeft != 0)
@@ -2657,6 +3455,45 @@ struct SubjectPublicKeyInfo
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("algorithm: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_algorithm), "toString"))
+            _algorithm.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("subjectPublicKey: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_subjectPublicKey), "toString"))
+            _subjectPublicKey.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -2671,7 +3508,7 @@ struct SubjectPublicKeyInfo
         /+++ TAG FOR FIELD: algorithm +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'algorithm' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE SubjectPublicKeyInfo when reading top level tag 16 for field 'algorithm' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
@@ -2679,21 +3516,21 @@ struct SubjectPublicKeyInfo
         jbuf.MemoryReader memory_algorithm;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_algorithm);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'algorithm' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - algorithm ++/
         typeof(_algorithm) temp_algorithm;
         result = temp_algorithm.fromDecoding!ruleset(memory_algorithm, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'algorithm' in type "~__traits(identifier, typeof(this))~":");
         result = this.setAlgorithm(temp_algorithm);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'algorithm' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: subjectPublicKey +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'subjectPublicKey' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE SubjectPublicKeyInfo when reading top level tag 3 for field 'subjectPublicKey' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 3)
@@ -2701,15 +3538,15 @@ struct SubjectPublicKeyInfo
         jbuf.MemoryReader memory_subjectPublicKey;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_subjectPublicKey);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'subjectPublicKey' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - subjectPublicKey ++/
         typeof(_subjectPublicKey) temp_subjectPublicKey;
         result = typeof(temp_subjectPublicKey).fromDecoding!ruleset(memory_subjectPublicKey, temp_subjectPublicKey, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'subjectPublicKey' in type "~__traits(identifier, typeof(this))~":");
         result = this.setSubjectPublicKey(temp_subjectPublicKey);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'subjectPublicKey' in type "~__traits(identifier, typeof(this))~":");
 
         
         if(memory.bytesLeft != 0)
@@ -2743,6 +3580,29 @@ struct UniqueIdentifier
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1BitString, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -2758,10 +3618,10 @@ struct UniqueIdentifier
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -2846,11 +3706,62 @@ struct Extension
         {
             auto result = this.setCritical(defaultOfCritical());
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'critical' in type "~__traits(identifier, typeof(this))~":");
         }
         if(!_isSet_extnValue)
             return jres.Result.make(asn1.Asn1DecodeError.sequenceMissingField, "for SEQUENCE type Extension non-optional field 'extnValue' has not been given a value - either because its setter wasn't called, or the decoded data stream did not provide the field.");
         return jres.Result.noError;
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("extnID: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_extnID), "toString"))
+            _extnID.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("critical: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_critical), "toString"))
+            _critical.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("extnValue: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_extnValue), "toString"))
+            _extnValue.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
     }
 
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
@@ -2867,7 +3778,7 @@ struct Extension
         /+++ TAG FOR FIELD: extnID +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'extnID' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Extension when reading top level tag 6 for field 'extnID' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 6)
@@ -2875,43 +3786,59 @@ struct Extension
         jbuf.MemoryReader memory_extnID;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_extnID);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'extnID' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - extnID ++/
         typeof(_extnID) temp_extnID;
         result = typeof(temp_extnID).fromDecoding!ruleset(memory_extnID, temp_extnID, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'extnID' in type "~__traits(identifier, typeof(this))~":");
         result = this.setExtnID(temp_extnID);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'extnID' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: critical +++/
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Extension when reading top level tag 1 for field 'critical' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
-        if(componentHeader.identifier.tag != 1)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Extension when reading top level tag 1 for field 'critical' the tag's value was expected to be 1", jstr.String2("tag value was ", componentHeader.identifier.tag));
-        jbuf.MemoryReader memory_critical;
-        result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_critical);
-        if(result.isError)
-            return result;
-        /++ FIELD - critical ++/
-        typeof(_critical) temp_critical;
-        result = typeof(temp_critical).fromDecoding!ruleset(memory_critical, temp_critical, componentHeader.identifier);
-        if(result.isError)
-            return result;
-        result = this.setCritical(temp_critical);
-        if(result.isError)
-            return result;
+        auto backtrack_critical = jbuf.MemoryReader(memory.buffer, memory.cursor);
+        if(memory.bytesLeft != 0)
+        {
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
+            if(result.isError)
+                return result.wrapError("when decoding header of field 'critical' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 1)
+            {
+                jbuf.MemoryReader memory_critical;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_critical);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'critical' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - critical ++/
+                typeof(_critical) temp_critical;
+                result = typeof(temp_critical).fromDecoding!ruleset(memory_critical, temp_critical, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'critical' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setCritical(temp_critical);
+                if(result.isError)
+                    return result.wrapError("when setting field 'critical' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_critical.buffer, backtrack_critical.cursor);
+                result = this.setCritical(defaultOfCritical());
+                if(result.isError)
+                    return result.wrapError("when setting field 'critical' to default value in type "~__traits(identifier, typeof(this))~":");
+            }
+        }
+        else
+        {
+            result = this.setCritical(defaultOfCritical());
+            if(result.isError)
+                return result.wrapError("when setting field 'critical' to default value in type "~__traits(identifier, typeof(this))~":");
+        }
         
         /+++ TAG FOR FIELD: extnValue +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'extnValue' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Extension when reading top level tag 4 for field 'extnValue' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 4)
@@ -2919,15 +3846,15 @@ struct Extension
         jbuf.MemoryReader memory_extnValue;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_extnValue);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'extnValue' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - extnValue ++/
         typeof(_extnValue) temp_extnValue;
         result = typeof(temp_extnValue).fromDecoding!ruleset(memory_extnValue, temp_extnValue, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'extnValue' in type "~__traits(identifier, typeof(this))~":");
         result = this.setExtnValue(temp_extnValue);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'extnValue' in type "~__traits(identifier, typeof(this))~":");
 
         
         if(memory.bytesLeft != 0)
@@ -2961,6 +3888,29 @@ struct Extensions
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1SequenceOf!(.Extension), "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -2976,14 +3926,14 @@ struct Extensions
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         result = this._value.foreachElementAuto((element) => jres.Result.noError);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding subelements of SEQEUENCE OF field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -3020,6 +3970,29 @@ struct Version
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1Integer, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -3035,10 +4008,10 @@ struct Version
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -3092,7 +4065,7 @@ struct TBSCertificate
     {
         .Version mainValue;
             asn1.Asn1Integer mainValue__underlying;
-            static immutable ubyte[] mainValue__underlying__underlying= [
+            static immutable ubyte[] mainValue__underlying__underlying = [
                 /* 0 */ 
             ];
             mainValue__underlying = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying__underlying);
@@ -3288,7 +4261,7 @@ struct TBSCertificate
         {
             auto result = this.setVersion(defaultOfVersion());
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'version' in type "~__traits(identifier, typeof(this))~":");
         }
         if(!_isSet_serialNumber)
             return jres.Result.make(asn1.Asn1DecodeError.sequenceMissingField, "for SEQUENCE type TBSCertificate non-optional field 'serialNumber' has not been given a value - either because its setter wasn't called, or the decoded data stream did not provide the field.");
@@ -3305,6 +4278,141 @@ struct TBSCertificate
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("version: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_version), "toString"))
+            _version.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("serialNumber: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_serialNumber), "toString"))
+            _serialNumber.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("signature: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_signature), "toString"))
+            _signature.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("issuer: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_issuer), "toString"))
+            _issuer.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("validity: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_validity), "toString"))
+            _validity.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("subject: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_subject), "toString"))
+            _subject.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("subjectPublicKeyInfo: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_subjectPublicKeyInfo), "toString"))
+            _subjectPublicKeyInfo.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("issuerUniqueID: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_issuerUniqueID), "toString"))
+            _issuerUniqueID.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("subjectUniqueID: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_subjectUniqueID), "toString"))
+            _subjectUniqueID.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("extensions: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_extensions), "toString"))
+            _extensions.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -3317,45 +4425,61 @@ struct TBSCertificate
         this = typeof(this).init;
 
         /+++ TAG FOR FIELD: version +++/
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertificate when reading top level tag 0 for field 'version' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
-        if(componentHeader.identifier.tag != 0)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE TBSCertificate when reading top level tag 0 for field 'version' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
-        jbuf.MemoryReader memory_version;
-        result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_version);
-        if(result.isError)
-            return result;
-        /++ FIELD - version ++/
-        jbuf.MemoryReader memory_0version;
-            // EXPLICIT TAG - 0
-            if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
-                return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 0 for field version a primitive tag was found when a constructed one was expected");
-            if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 0 for field 'version' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
-            if(componentHeader.identifier.tag != 0)
-                return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 0 for field 'version' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
-            result = asn1.asn1DecodeComponentHeader!ruleset(memory_version, componentHeader);
+        auto backtrack_version = jbuf.MemoryReader(memory.buffer, memory.cursor);
+        if(memory.bytesLeft != 0)
+        {
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            result = asn1.asn1ReadContentBytes(memory_version, componentHeader.length, memory_0version);
-            if(result.isError)
-                return result;
-        typeof(_version) temp_version;
-        result = temp_version.fromDecoding!ruleset(memory_0version, componentHeader.identifier);
-        if(result.isError)
-            return result;
-        result = this.setVersion(temp_version);
-        if(result.isError)
-            return result;
+                return result.wrapError("when decoding header of field 'version' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 0)
+            {
+                jbuf.MemoryReader memory_version;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_version);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'version' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - version ++/
+                jbuf.MemoryReader memory_0version;
+                    // EXPLICIT TAG - 0
+                    if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
+                        return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 0 for field version a primitive tag was found when a constructed one was expected");
+                    if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 0 for field 'version' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                    if(componentHeader.identifier.tag != 0)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 0 for field 'version' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                    result = asn1.asn1DecodeComponentHeader!ruleset(memory_version, componentHeader);
+                    if(result.isError)
+                        return result.wrapError("when decoding header of field 'version' in type "~__traits(identifier, typeof(this))~":");
+                    result = asn1.asn1ReadContentBytes(memory_version, componentHeader.length, memory_0version);
+                    if(result.isError)
+                        return result.wrapError("when reading content bytes of field 'version' in type "~__traits(identifier, typeof(this))~":");
+                typeof(_version) temp_version;
+                result = temp_version.fromDecoding!ruleset(memory_0version, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'version' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setVersion(temp_version);
+                if(result.isError)
+                    return result.wrapError("when setting field 'version' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_version.buffer, backtrack_version.cursor);
+                result = this.setVersion(defaultOfVersion());
+                if(result.isError)
+                    return result.wrapError("when setting field 'version' to default value in type "~__traits(identifier, typeof(this))~":");
+            }
+        }
+        else
+        {
+            result = this.setVersion(defaultOfVersion());
+            if(result.isError)
+                return result.wrapError("when setting field 'version' to default value in type "~__traits(identifier, typeof(this))~":");
+        }
         
         /+++ TAG FOR FIELD: serialNumber +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'serialNumber' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertificate when reading top level tag 2 for field 'serialNumber' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 2)
@@ -3363,21 +4487,21 @@ struct TBSCertificate
         jbuf.MemoryReader memory_serialNumber;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_serialNumber);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'serialNumber' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - serialNumber ++/
         typeof(_serialNumber) temp_serialNumber;
         result = temp_serialNumber.fromDecoding!ruleset(memory_serialNumber, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'serialNumber' in type "~__traits(identifier, typeof(this))~":");
         result = this.setSerialNumber(temp_serialNumber);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'serialNumber' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: signature +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'signature' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'signature' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
@@ -3385,39 +4509,39 @@ struct TBSCertificate
         jbuf.MemoryReader memory_signature;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_signature);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'signature' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - signature ++/
         typeof(_signature) temp_signature;
         result = temp_signature.fromDecoding!ruleset(memory_signature, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'signature' in type "~__traits(identifier, typeof(this))~":");
         result = this.setSignature(temp_signature);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'signature' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: issuer +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'issuer' in type "~__traits(identifier, typeof(this))~":");
         jbuf.MemoryReader memory_issuer;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_issuer);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'issuer' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - issuer ++/
         typeof(_issuer) temp_issuer;
         result = temp_issuer.fromDecoding!ruleset(memory_issuer, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'issuer' in type "~__traits(identifier, typeof(this))~":");
         result = this.setIssuer(temp_issuer);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'issuer' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: validity +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'validity' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'validity' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
@@ -3425,39 +4549,39 @@ struct TBSCertificate
         jbuf.MemoryReader memory_validity;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_validity);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'validity' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - validity ++/
         typeof(_validity) temp_validity;
         result = temp_validity.fromDecoding!ruleset(memory_validity, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'validity' in type "~__traits(identifier, typeof(this))~":");
         result = this.setValidity(temp_validity);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'validity' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: subject +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'subject' in type "~__traits(identifier, typeof(this))~":");
         jbuf.MemoryReader memory_subject;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_subject);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'subject' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - subject ++/
         typeof(_subject) temp_subject;
         result = temp_subject.fromDecoding!ruleset(memory_subject, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'subject' in type "~__traits(identifier, typeof(this))~":");
         result = this.setSubject(temp_subject);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'subject' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: subjectPublicKeyInfo +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'subjectPublicKeyInfo' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'subjectPublicKeyInfo' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
@@ -3465,102 +4589,117 @@ struct TBSCertificate
         jbuf.MemoryReader memory_subjectPublicKeyInfo;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_subjectPublicKeyInfo);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'subjectPublicKeyInfo' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - subjectPublicKeyInfo ++/
         typeof(_subjectPublicKeyInfo) temp_subjectPublicKeyInfo;
         result = temp_subjectPublicKeyInfo.fromDecoding!ruleset(memory_subjectPublicKeyInfo, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'subjectPublicKeyInfo' in type "~__traits(identifier, typeof(this))~":");
         result = this.setSubjectPublicKeyInfo(temp_subjectPublicKeyInfo);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'subjectPublicKeyInfo' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: issuerUniqueID +++/
         auto backtrack_issuerUniqueID = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 1)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_issuerUniqueID;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_issuerUniqueID);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - issuerUniqueID ++/
-            typeof(_issuerUniqueID) temp_issuerUniqueID;
-            result = temp_issuerUniqueID.fromDecoding!ruleset(memory_issuerUniqueID, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setIssuerUniqueID(temp_issuerUniqueID);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'issuerUniqueID' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 1)
+            {
+                jbuf.MemoryReader memory_issuerUniqueID;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_issuerUniqueID);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'issuerUniqueID' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - issuerUniqueID ++/
+                typeof(_issuerUniqueID) temp_issuerUniqueID;
+                result = temp_issuerUniqueID.fromDecoding!ruleset(memory_issuerUniqueID, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'issuerUniqueID' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setIssuerUniqueID(temp_issuerUniqueID);
+                if(result.isError)
+                    return result.wrapError("when setting field 'issuerUniqueID' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_issuerUniqueID.buffer, backtrack_issuerUniqueID.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_issuerUniqueID.buffer, backtrack_issuerUniqueID.cursor);
         
         /+++ TAG FOR FIELD: subjectUniqueID +++/
         auto backtrack_subjectUniqueID = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 2)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_subjectUniqueID;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_subjectUniqueID);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - subjectUniqueID ++/
-            typeof(_subjectUniqueID) temp_subjectUniqueID;
-            result = temp_subjectUniqueID.fromDecoding!ruleset(memory_subjectUniqueID, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setSubjectUniqueID(temp_subjectUniqueID);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'subjectUniqueID' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 2)
+            {
+                jbuf.MemoryReader memory_subjectUniqueID;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_subjectUniqueID);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'subjectUniqueID' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - subjectUniqueID ++/
+                typeof(_subjectUniqueID) temp_subjectUniqueID;
+                result = temp_subjectUniqueID.fromDecoding!ruleset(memory_subjectUniqueID, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'subjectUniqueID' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setSubjectUniqueID(temp_subjectUniqueID);
+                if(result.isError)
+                    return result.wrapError("when setting field 'subjectUniqueID' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_subjectUniqueID.buffer, backtrack_subjectUniqueID.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_subjectUniqueID.buffer, backtrack_subjectUniqueID.cursor);
         
         /+++ TAG FOR FIELD: extensions +++/
         auto backtrack_extensions = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 3)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_extensions;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_extensions);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - extensions ++/
-            jbuf.MemoryReader memory_0extensions;
-                // EXPLICIT TAG - 3
-                if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
-                    return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 3 for field extensions a primitive tag was found when a constructed one was expected");
-                if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 3 for field 'extensions' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
-                if(componentHeader.identifier.tag != 3)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 3 for field 'extensions' the tag's value was expected to be 3", jstr.String2("tag value was ", componentHeader.identifier.tag));
-                result = asn1.asn1DecodeComponentHeader!ruleset(memory_extensions, componentHeader);
+                return result.wrapError("when decoding header of field 'extensions' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 3)
+            {
+                jbuf.MemoryReader memory_extensions;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_extensions);
                 if(result.isError)
-                    return result;
-                result = asn1.asn1ReadContentBytes(memory_extensions, componentHeader.length, memory_0extensions);
+                    return result.wrapError("when reading content bytes of field 'extensions' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - extensions ++/
+                jbuf.MemoryReader memory_0extensions;
+                    // EXPLICIT TAG - 3
+                    if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
+                        return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 3 for field extensions a primitive tag was found when a constructed one was expected");
+                    if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 3 for field 'extensions' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                    if(componentHeader.identifier.tag != 3)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 3 for field 'extensions' the tag's value was expected to be 3", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                    result = asn1.asn1DecodeComponentHeader!ruleset(memory_extensions, componentHeader);
+                    if(result.isError)
+                        return result.wrapError("when decoding header of field 'extensions' in type "~__traits(identifier, typeof(this))~":");
+                    result = asn1.asn1ReadContentBytes(memory_extensions, componentHeader.length, memory_0extensions);
+                    if(result.isError)
+                        return result.wrapError("when reading content bytes of field 'extensions' in type "~__traits(identifier, typeof(this))~":");
+                typeof(_extensions) temp_extensions;
+                result = temp_extensions.fromDecoding!ruleset(memory_0extensions, componentHeader.identifier);
                 if(result.isError)
-                    return result;
-            typeof(_extensions) temp_extensions;
-            result = temp_extensions.fromDecoding!ruleset(memory_0extensions, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setExtensions(temp_extensions);
-            if(result.isError)
-                return result;
+                    return result.wrapError("when decoding field 'extensions' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setExtensions(temp_extensions);
+                if(result.isError)
+                    return result.wrapError("when setting field 'extensions' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_extensions.buffer, backtrack_extensions.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_extensions.buffer, backtrack_extensions.cursor);
         
         if(memory.bytesLeft != 0)
             return jres.Result.make(asn1.Asn1DecodeError.sequenceHasExtraData, "when decoding non-extensible SEQUENCE TBSCertificate there were unsused content bytes after attempting to decode all known fields - this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input");
@@ -3641,6 +4780,57 @@ struct Certificate
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("tbsCertificate: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_tbsCertificate), "toString"))
+            _tbsCertificate.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("signatureAlgorithm: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_signatureAlgorithm), "toString"))
+            _signatureAlgorithm.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("signature: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_signature), "toString"))
+            _signature.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -3655,7 +4845,7 @@ struct Certificate
         /+++ TAG FOR FIELD: tbsCertificate +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'tbsCertificate' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Certificate when reading top level tag 16 for field 'tbsCertificate' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
@@ -3663,21 +4853,21 @@ struct Certificate
         jbuf.MemoryReader memory_tbsCertificate;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_tbsCertificate);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'tbsCertificate' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - tbsCertificate ++/
         typeof(_tbsCertificate) temp_tbsCertificate;
         result = temp_tbsCertificate.fromDecoding!ruleset(memory_tbsCertificate, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'tbsCertificate' in type "~__traits(identifier, typeof(this))~":");
         result = this.setTbsCertificate(temp_tbsCertificate);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'tbsCertificate' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: signatureAlgorithm +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'signatureAlgorithm' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Certificate when reading top level tag 16 for field 'signatureAlgorithm' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
@@ -3685,21 +4875,21 @@ struct Certificate
         jbuf.MemoryReader memory_signatureAlgorithm;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_signatureAlgorithm);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'signatureAlgorithm' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - signatureAlgorithm ++/
         typeof(_signatureAlgorithm) temp_signatureAlgorithm;
         result = temp_signatureAlgorithm.fromDecoding!ruleset(memory_signatureAlgorithm, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'signatureAlgorithm' in type "~__traits(identifier, typeof(this))~":");
         result = this.setSignatureAlgorithm(temp_signatureAlgorithm);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'signatureAlgorithm' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: signature +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'signature' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Certificate when reading top level tag 3 for field 'signature' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 3)
@@ -3707,15 +4897,15 @@ struct Certificate
         jbuf.MemoryReader memory_signature;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_signature);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'signature' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - signature ++/
         typeof(_signature) temp_signature;
         result = typeof(temp_signature).fromDecoding!ruleset(memory_signature, temp_signature, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'signature' in type "~__traits(identifier, typeof(this))~":");
         result = this.setSignature(temp_signature);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'signature' in type "~__traits(identifier, typeof(this))~":");
 
         
         if(memory.bytesLeft != 0)
@@ -3797,6 +4987,57 @@ struct CertificateList
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("tbsCertList: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_tbsCertList), "toString"))
+            _tbsCertList.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("signatureAlgorithm: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_signatureAlgorithm), "toString"))
+            _signatureAlgorithm.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("signature: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_signature), "toString"))
+            _signature.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -3811,7 +5052,7 @@ struct CertificateList
         /+++ TAG FOR FIELD: tbsCertList +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'tbsCertList' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE CertificateList when reading top level tag 16 for field 'tbsCertList' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
@@ -3819,21 +5060,21 @@ struct CertificateList
         jbuf.MemoryReader memory_tbsCertList;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_tbsCertList);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'tbsCertList' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - tbsCertList ++/
         typeof(_tbsCertList) temp_tbsCertList;
         result = temp_tbsCertList.fromDecoding!ruleset(memory_tbsCertList, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'tbsCertList' in type "~__traits(identifier, typeof(this))~":");
         result = this.setTbsCertList(temp_tbsCertList);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'tbsCertList' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: signatureAlgorithm +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'signatureAlgorithm' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE CertificateList when reading top level tag 16 for field 'signatureAlgorithm' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
@@ -3841,21 +5082,21 @@ struct CertificateList
         jbuf.MemoryReader memory_signatureAlgorithm;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_signatureAlgorithm);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'signatureAlgorithm' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - signatureAlgorithm ++/
         typeof(_signatureAlgorithm) temp_signatureAlgorithm;
         result = temp_signatureAlgorithm.fromDecoding!ruleset(memory_signatureAlgorithm, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'signatureAlgorithm' in type "~__traits(identifier, typeof(this))~":");
         result = this.setSignatureAlgorithm(temp_signatureAlgorithm);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'signatureAlgorithm' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: signature +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'signature' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE CertificateList when reading top level tag 3 for field 'signature' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 3)
@@ -3863,15 +5104,15 @@ struct CertificateList
         jbuf.MemoryReader memory_signature;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_signature);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'signature' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - signature ++/
         typeof(_signature) temp_signature;
         result = typeof(temp_signature).fromDecoding!ruleset(memory_signature, temp_signature, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'signature' in type "~__traits(identifier, typeof(this))~":");
         result = this.setSignature(temp_signature);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'signature' in type "~__traits(identifier, typeof(this))~":");
 
         
         if(memory.bytesLeft != 0)
@@ -3963,6 +5204,57 @@ struct TBSCertList_RevokedCertificate
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("userCertificate: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_userCertificate), "toString"))
+            _userCertificate.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("revocationDate: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_revocationDate), "toString"))
+            _revocationDate.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("crlEntryExtensions: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_crlEntryExtensions), "toString"))
+            _crlEntryExtensions.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -3977,7 +5269,7 @@ struct TBSCertList_RevokedCertificate
         /+++ TAG FOR FIELD: userCertificate +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'userCertificate' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertList-RevokedCertificate when reading top level tag 2 for field 'userCertificate' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 2)
@@ -3985,58 +5277,63 @@ struct TBSCertList_RevokedCertificate
         jbuf.MemoryReader memory_userCertificate;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_userCertificate);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'userCertificate' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - userCertificate ++/
         typeof(_userCertificate) temp_userCertificate;
         result = temp_userCertificate.fromDecoding!ruleset(memory_userCertificate, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'userCertificate' in type "~__traits(identifier, typeof(this))~":");
         result = this.setUserCertificate(temp_userCertificate);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'userCertificate' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: revocationDate +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'revocationDate' in type "~__traits(identifier, typeof(this))~":");
         jbuf.MemoryReader memory_revocationDate;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_revocationDate);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'revocationDate' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - revocationDate ++/
         typeof(_revocationDate) temp_revocationDate;
         result = temp_revocationDate.fromDecoding!ruleset(memory_revocationDate, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'revocationDate' in type "~__traits(identifier, typeof(this))~":");
         result = this.setRevocationDate(temp_revocationDate);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'revocationDate' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: crlEntryExtensions +++/
         auto backtrack_crlEntryExtensions = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 16)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_crlEntryExtensions;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_crlEntryExtensions);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - crlEntryExtensions ++/
-            typeof(_crlEntryExtensions) temp_crlEntryExtensions;
-            result = temp_crlEntryExtensions.fromDecoding!ruleset(memory_crlEntryExtensions, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setCrlEntryExtensions(temp_crlEntryExtensions);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'crlEntryExtensions' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 16)
+            {
+                jbuf.MemoryReader memory_crlEntryExtensions;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_crlEntryExtensions);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'crlEntryExtensions' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - crlEntryExtensions ++/
+                typeof(_crlEntryExtensions) temp_crlEntryExtensions;
+                result = temp_crlEntryExtensions.fromDecoding!ruleset(memory_crlEntryExtensions, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'crlEntryExtensions' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setCrlEntryExtensions(temp_crlEntryExtensions);
+                if(result.isError)
+                    return result.wrapError("when setting field 'crlEntryExtensions' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_crlEntryExtensions.buffer, backtrack_crlEntryExtensions.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_crlEntryExtensions.buffer, backtrack_crlEntryExtensions.cursor);
         
         if(memory.bytesLeft != 0)
             return jres.Result.make(asn1.Asn1DecodeError.sequenceHasExtraData, "when decoding non-extensible SEQUENCE TBSCertList-RevokedCertificate there were unsused content bytes after attempting to decode all known fields - this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input");
@@ -4237,6 +5534,105 @@ struct TBSCertList
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("version: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_version), "toString"))
+            _version.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("signature: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_signature), "toString"))
+            _signature.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("issuer: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_issuer), "toString"))
+            _issuer.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("thisUpdate: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_thisUpdate), "toString"))
+            _thisUpdate.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("nextUpdate: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_nextUpdate), "toString"))
+            _nextUpdate.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("revokedCertificates: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_revokedCertificates), "toString"))
+            _revokedCertificates.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("crlExtensions: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_crlExtensions), "toString"))
+            _crlExtensions.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -4250,32 +5646,37 @@ struct TBSCertList
 
         /+++ TAG FOR FIELD: version +++/
         auto backtrack_version = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 2)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_version;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_version);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - version ++/
-            typeof(_version) temp_version;
-            result = temp_version.fromDecoding!ruleset(memory_version, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setVersion(temp_version);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'version' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 2)
+            {
+                jbuf.MemoryReader memory_version;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_version);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'version' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - version ++/
+                typeof(_version) temp_version;
+                result = temp_version.fromDecoding!ruleset(memory_version, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'version' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setVersion(temp_version);
+                if(result.isError)
+                    return result.wrapError("when setting field 'version' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_version.buffer, backtrack_version.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_version.buffer, backtrack_version.cursor);
         
         /+++ TAG FOR FIELD: signature +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'signature' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertList when reading top level tag 16 for field 'signature' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
@@ -4283,144 +5684,157 @@ struct TBSCertList
         jbuf.MemoryReader memory_signature;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_signature);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'signature' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - signature ++/
         typeof(_signature) temp_signature;
         result = temp_signature.fromDecoding!ruleset(memory_signature, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'signature' in type "~__traits(identifier, typeof(this))~":");
         result = this.setSignature(temp_signature);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'signature' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: issuer +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'issuer' in type "~__traits(identifier, typeof(this))~":");
         jbuf.MemoryReader memory_issuer;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_issuer);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'issuer' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - issuer ++/
         typeof(_issuer) temp_issuer;
         result = temp_issuer.fromDecoding!ruleset(memory_issuer, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'issuer' in type "~__traits(identifier, typeof(this))~":");
         result = this.setIssuer(temp_issuer);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'issuer' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: thisUpdate +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'thisUpdate' in type "~__traits(identifier, typeof(this))~":");
         jbuf.MemoryReader memory_thisUpdate;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_thisUpdate);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'thisUpdate' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - thisUpdate ++/
         typeof(_thisUpdate) temp_thisUpdate;
         result = temp_thisUpdate.fromDecoding!ruleset(memory_thisUpdate, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'thisUpdate' in type "~__traits(identifier, typeof(this))~":");
         result = this.setThisUpdate(temp_thisUpdate);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'thisUpdate' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: nextUpdate +++/
         auto backtrack_nextUpdate = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        jbuf.MemoryReader memory_nextUpdate;
-        result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_nextUpdate);
-        if(result.isError)
-            return result;
-        result = (){ // Field is OPTIONAL and has a variable starting tag
-            /++ FIELD - nextUpdate ++/
-            typeof(_nextUpdate) temp_nextUpdate;
-            result = temp_nextUpdate.fromDecoding!ruleset(memory_nextUpdate, componentHeader.identifier);
+        if(memory.bytesLeft != 0)
+        {
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            result = this.setNextUpdate(temp_nextUpdate);
+                return result.wrapError("when decoding header of field 'nextUpdate' in type "~__traits(identifier, typeof(this))~":");
+            jbuf.MemoryReader memory_nextUpdate;
+            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_nextUpdate);
             if(result.isError)
-                return result;
+                return result.wrapError("when reading content bytes of field 'nextUpdate' in type "~__traits(identifier, typeof(this))~":");
+            result = (){ // Field is OPTIONAL and has a variable starting tag
+                /++ FIELD - nextUpdate ++/
+                typeof(_nextUpdate) temp_nextUpdate;
+                result = temp_nextUpdate.fromDecoding!ruleset(memory_nextUpdate, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'nextUpdate' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setNextUpdate(temp_nextUpdate);
+                if(result.isError)
+                    return result.wrapError("when setting field 'nextUpdate' in type "~__traits(identifier, typeof(this))~":");
 
-            return jres.Result.noError;
-        }();
-        if(result.isError(asn1.Asn1DecodeError.choiceHasNoMatch))
-            memory = jbuf.MemoryReader(backtrack_nextUpdate.buffer, backtrack_nextUpdate.cursor);
-        else if(result.isError)
-            return result;
+                return jres.Result.noError;
+            }();
+            if(result.isError(asn1.Asn1DecodeError.choiceHasNoMatch))
+                memory = jbuf.MemoryReader(backtrack_nextUpdate.buffer, backtrack_nextUpdate.cursor);
+            else if(result.isError)
+                return result.wrapError("For "~__traits(identifier, typeof(this))~":");
+        }
         
         /+++ TAG FOR FIELD: revokedCertificates +++/
         auto backtrack_revokedCertificates = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 16)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_revokedCertificates;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_revokedCertificates);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - revokedCertificates ++/
-            typeof(_revokedCertificates) temp_revokedCertificates;
-            result = typeof(temp_revokedCertificates).fromDecoding!ruleset(memory_revokedCertificates, temp_revokedCertificates, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setRevokedCertificates(temp_revokedCertificates);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'revokedCertificates' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 16)
+            {
+                jbuf.MemoryReader memory_revokedCertificates;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_revokedCertificates);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'revokedCertificates' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - revokedCertificates ++/
+                typeof(_revokedCertificates) temp_revokedCertificates;
+                result = typeof(temp_revokedCertificates).fromDecoding!ruleset(memory_revokedCertificates, temp_revokedCertificates, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'revokedCertificates' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setRevokedCertificates(temp_revokedCertificates);
+                if(result.isError)
+                    return result.wrapError("when setting field 'revokedCertificates' in type "~__traits(identifier, typeof(this))~":");
 
-            result = this._revokedCertificates.foreachElementAuto((element) => jres.Result.noError);
-            if(result.isError)
-                return result;
+                result = this._revokedCertificates.foreachElementAuto((element) => jres.Result.noError);
+                if(result.isError)
+                    return result.wrapError("when decoding subelements of SEQEUENCE OF field 'revokedCertificates' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_revokedCertificates.buffer, backtrack_revokedCertificates.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_revokedCertificates.buffer, backtrack_revokedCertificates.cursor);
         
         /+++ TAG FOR FIELD: crlExtensions +++/
         auto backtrack_crlExtensions = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 0)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_crlExtensions;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_crlExtensions);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - crlExtensions ++/
-            jbuf.MemoryReader memory_0crlExtensions;
-                // EXPLICIT TAG - 0
-                if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
-                    return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 0 for field crlExtensions a primitive tag was found when a constructed one was expected");
-                if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 0 for field 'crlExtensions' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
-                if(componentHeader.identifier.tag != 0)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 0 for field 'crlExtensions' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
-                result = asn1.asn1DecodeComponentHeader!ruleset(memory_crlExtensions, componentHeader);
+                return result.wrapError("when decoding header of field 'crlExtensions' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 0)
+            {
+                jbuf.MemoryReader memory_crlExtensions;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_crlExtensions);
                 if(result.isError)
-                    return result;
-                result = asn1.asn1ReadContentBytes(memory_crlExtensions, componentHeader.length, memory_0crlExtensions);
+                    return result.wrapError("when reading content bytes of field 'crlExtensions' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - crlExtensions ++/
+                jbuf.MemoryReader memory_0crlExtensions;
+                    // EXPLICIT TAG - 0
+                    if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
+                        return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 0 for field crlExtensions a primitive tag was found when a constructed one was expected");
+                    if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 0 for field 'crlExtensions' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                    if(componentHeader.identifier.tag != 0)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 0 for field 'crlExtensions' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                    result = asn1.asn1DecodeComponentHeader!ruleset(memory_crlExtensions, componentHeader);
+                    if(result.isError)
+                        return result.wrapError("when decoding header of field 'crlExtensions' in type "~__traits(identifier, typeof(this))~":");
+                    result = asn1.asn1ReadContentBytes(memory_crlExtensions, componentHeader.length, memory_0crlExtensions);
+                    if(result.isError)
+                        return result.wrapError("when reading content bytes of field 'crlExtensions' in type "~__traits(identifier, typeof(this))~":");
+                typeof(_crlExtensions) temp_crlExtensions;
+                result = temp_crlExtensions.fromDecoding!ruleset(memory_0crlExtensions, componentHeader.identifier);
                 if(result.isError)
-                    return result;
-            typeof(_crlExtensions) temp_crlExtensions;
-            result = temp_crlExtensions.fromDecoding!ruleset(memory_0crlExtensions, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setCrlExtensions(temp_crlExtensions);
-            if(result.isError)
-                return result;
+                    return result.wrapError("when decoding field 'crlExtensions' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setCrlExtensions(temp_crlExtensions);
+                if(result.isError)
+                    return result.wrapError("when setting field 'crlExtensions' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_crlExtensions.buffer, backtrack_crlExtensions.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_crlExtensions.buffer, backtrack_crlExtensions.cursor);
         
         if(memory.bytesLeft != 0)
             return jres.Result.make(asn1.Asn1DecodeError.sequenceHasExtraData, "when decoding non-extensible SEQUENCE TBSCertList there were unsused content bytes after attempting to decode all known fields - this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input");
@@ -4518,10 +5932,10 @@ struct CountryName
             typeof(Value.x121_dcc_code) temp_x121_dcc_code;
             result = typeof(temp_x121_dcc_code).fromDecoding!ruleset(memory, temp_x121_dcc_code, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'x121_dcc_code' in type "~__traits(identifier, typeof(this))~":");
             result = this.setX121_dcc_code(temp_x121_dcc_code);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'x121_dcc_code' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -4532,15 +5946,60 @@ struct CountryName
             typeof(Value.iso_3166_alpha2_code) temp_iso_3166_alpha2_code;
             result = typeof(temp_iso_3166_alpha2_code).fromDecoding!ruleset(memory, temp_iso_3166_alpha2_code, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'iso_3166_alpha2_code' in type "~__traits(identifier, typeof(this))~":");
             result = this.setIso_3166_alpha2_code(temp_iso_3166_alpha2_code);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'iso_3166_alpha2_code' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type CountryName the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isX121_dcc_code)
+        {
+            depth++;
+            putIndent();
+            sink("x121-dcc-code: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getX121_dcc_code()), "toString"))
+                _value.x121_dcc_code.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isIso_3166_alpha2_code)
+        {
+            depth++;
+            putIndent();
+            sink("iso-3166-alpha2-code: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getIso_3166_alpha2_code()), "toString"))
+                _value.iso_3166_alpha2_code.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -4634,10 +6093,10 @@ struct AdministrationDomainName
             typeof(Value.numeric) temp_numeric;
             result = typeof(temp_numeric).fromDecoding!ruleset(memory, temp_numeric, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'numeric' in type "~__traits(identifier, typeof(this))~":");
             result = this.setNumeric(temp_numeric);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'numeric' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -4648,15 +6107,60 @@ struct AdministrationDomainName
             typeof(Value.printable) temp_printable;
             result = typeof(temp_printable).fromDecoding!ruleset(memory, temp_printable, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'printable' in type "~__traits(identifier, typeof(this))~":");
             result = this.setPrintable(temp_printable);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'printable' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type AdministrationDomainName the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isNumeric)
+        {
+            depth++;
+            putIndent();
+            sink("numeric: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getNumeric()), "toString"))
+                _value.numeric.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isPrintable)
+        {
+            depth++;
+            putIndent();
+            sink("printable: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getPrintable()), "toString"))
+                _value.printable.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -4685,6 +6189,29 @@ struct NetworkAddress
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, .X121Address, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -4700,10 +6227,10 @@ struct NetworkAddress
         typeof(_value) temp__value;
         result = temp__value.fromDecoding!ruleset(memory, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -4734,6 +6261,29 @@ struct X121Address
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1NumericString, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -4749,10 +6299,10 @@ struct X121Address
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -4783,6 +6333,29 @@ struct TerminalIdentifier
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1PrintableString, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -4798,10 +6371,10 @@ struct TerminalIdentifier
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -4897,10 +6470,10 @@ struct PrivateDomainName
             typeof(Value.numeric) temp_numeric;
             result = typeof(temp_numeric).fromDecoding!ruleset(memory, temp_numeric, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'numeric' in type "~__traits(identifier, typeof(this))~":");
             result = this.setNumeric(temp_numeric);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'numeric' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -4911,15 +6484,60 @@ struct PrivateDomainName
             typeof(Value.printable) temp_printable;
             result = typeof(temp_printable).fromDecoding!ruleset(memory, temp_printable, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'printable' in type "~__traits(identifier, typeof(this))~":");
             result = this.setPrintable(temp_printable);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'printable' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type PrivateDomainName the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isNumeric)
+        {
+            depth++;
+            putIndent();
+            sink("numeric: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getNumeric()), "toString"))
+                _value.numeric.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isPrintable)
+        {
+            depth++;
+            putIndent();
+            sink("printable: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getPrintable()), "toString"))
+                _value.printable.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -4948,6 +6566,29 @@ struct OrganizationName
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1PrintableString, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -4963,10 +6604,10 @@ struct OrganizationName
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -4997,6 +6638,29 @@ struct NumericUserIdentifier
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1NumericString, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -5012,10 +6676,10 @@ struct NumericUserIdentifier
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -5144,6 +6808,69 @@ struct PersonalName
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("surname: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_surname), "toString"))
+            _surname.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("given-name: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_given_name), "toString"))
+            _given_name.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("initials: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_initials), "toString"))
+            _initials.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("generation-qualifier: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_generation_qualifier), "toString"))
+            _generation_qualifier.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -5159,7 +6886,7 @@ struct PersonalName
         /+++ TAG FOR FIELD: surname +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'surname' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE PersonalName when reading top level tag 0 for field 'surname' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 0)
@@ -5167,88 +6894,103 @@ struct PersonalName
         jbuf.MemoryReader memory_surname;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_surname);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'surname' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - surname ++/
         typeof(_surname) temp_surname;
         result = typeof(temp_surname).fromDecoding!ruleset(memory_surname, temp_surname, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'surname' in type "~__traits(identifier, typeof(this))~":");
         result = this.setSurname(temp_surname);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'surname' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: given-name +++/
         auto backtrack_given_name = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 1)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_given_name;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_given_name);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - given-name ++/
-            typeof(_given_name) temp_given_name;
-            result = typeof(temp_given_name).fromDecoding!ruleset(memory_given_name, temp_given_name, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setGiven_name(temp_given_name);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'given-name' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 1)
+            {
+                jbuf.MemoryReader memory_given_name;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_given_name);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'given-name' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - given-name ++/
+                typeof(_given_name) temp_given_name;
+                result = typeof(temp_given_name).fromDecoding!ruleset(memory_given_name, temp_given_name, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'given_name' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setGiven_name(temp_given_name);
+                if(result.isError)
+                    return result.wrapError("when setting field 'given_name' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_given_name.buffer, backtrack_given_name.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_given_name.buffer, backtrack_given_name.cursor);
         
         /+++ TAG FOR FIELD: initials +++/
         auto backtrack_initials = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 2)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_initials;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_initials);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - initials ++/
-            typeof(_initials) temp_initials;
-            result = typeof(temp_initials).fromDecoding!ruleset(memory_initials, temp_initials, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setInitials(temp_initials);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'initials' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 2)
+            {
+                jbuf.MemoryReader memory_initials;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_initials);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'initials' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - initials ++/
+                typeof(_initials) temp_initials;
+                result = typeof(temp_initials).fromDecoding!ruleset(memory_initials, temp_initials, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'initials' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setInitials(temp_initials);
+                if(result.isError)
+                    return result.wrapError("when setting field 'initials' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_initials.buffer, backtrack_initials.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_initials.buffer, backtrack_initials.cursor);
         
         /+++ TAG FOR FIELD: generation-qualifier +++/
         auto backtrack_generation_qualifier = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 3)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_generation_qualifier;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_generation_qualifier);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - generation-qualifier ++/
-            typeof(_generation_qualifier) temp_generation_qualifier;
-            result = typeof(temp_generation_qualifier).fromDecoding!ruleset(memory_generation_qualifier, temp_generation_qualifier, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setGeneration_qualifier(temp_generation_qualifier);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'generation-qualifier' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 3)
+            {
+                jbuf.MemoryReader memory_generation_qualifier;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_generation_qualifier);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'generation-qualifier' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - generation-qualifier ++/
+                typeof(_generation_qualifier) temp_generation_qualifier;
+                result = typeof(temp_generation_qualifier).fromDecoding!ruleset(memory_generation_qualifier, temp_generation_qualifier, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'generation_qualifier' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setGeneration_qualifier(temp_generation_qualifier);
+                if(result.isError)
+                    return result.wrapError("when setting field 'generation_qualifier' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_generation_qualifier.buffer, backtrack_generation_qualifier.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_generation_qualifier.buffer, backtrack_generation_qualifier.cursor);
         
         if(memory.bytesLeft != 0)
             return jres.Result.make(asn1.Asn1DecodeError.setHasExtraData, "when decoding non-extensible SET PersonalName there were unsused content bytes after attempting to decode all known fields - this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input");
@@ -5281,6 +7023,29 @@ struct ExtensionAttributes
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1SetOf!(.ExtensionAttribute), "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -5296,14 +7061,14 @@ struct ExtensionAttributes
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         result = this._value.foreachElementAuto((element) => jres.Result.noError);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding subelements of SET OF field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -5362,6 +7127,45 @@ struct ExtensionAttribute
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("extension-attribute-type: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_extension_attribute_type), "toString"))
+            _extension_attribute_type.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("extension-attribute-value: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_extension_attribute_value), "toString"))
+            _extension_attribute_value.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -5376,7 +7180,7 @@ struct ExtensionAttribute
         /+++ TAG FOR FIELD: extension-attribute-type +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'extension-attribute-type' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE ExtensionAttribute when reading top level tag 0 for field 'extension-attribute-type' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 0)
@@ -5384,21 +7188,21 @@ struct ExtensionAttribute
         jbuf.MemoryReader memory_extension_attribute_type;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_extension_attribute_type);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'extension-attribute-type' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - extension-attribute-type ++/
         typeof(_extension_attribute_type) temp_extension_attribute_type;
         result = typeof(temp_extension_attribute_type).fromDecoding!ruleset(memory_extension_attribute_type, temp_extension_attribute_type, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'extension_attribute_type' in type "~__traits(identifier, typeof(this))~":");
         result = this.setExtension_attribute_type(temp_extension_attribute_type);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'extension_attribute_type' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: extension-attribute-value +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'extension-attribute-value' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE ExtensionAttribute when reading top level tag 1 for field 'extension-attribute-value' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 1)
@@ -5406,7 +7210,7 @@ struct ExtensionAttribute
         jbuf.MemoryReader memory_extension_attribute_value;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_extension_attribute_value);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'extension-attribute-value' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - extension-attribute-value ++/
         jbuf.MemoryReader memory_0extension_attribute_value;
             // EXPLICIT TAG - 1
@@ -5418,17 +7222,17 @@ struct ExtensionAttribute
                 return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 1 for field 'extension_attribute_value' the tag's value was expected to be 1", jstr.String2("tag value was ", componentHeader.identifier.tag));
             result = asn1.asn1DecodeComponentHeader!ruleset(memory_extension_attribute_value, componentHeader);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'extension_attribute_value' in type "~__traits(identifier, typeof(this))~":");
             result = asn1.asn1ReadContentBytes(memory_extension_attribute_value, componentHeader.length, memory_0extension_attribute_value);
             if(result.isError)
-                return result;
+                return result.wrapError("when reading content bytes of field 'extension_attribute_value' in type "~__traits(identifier, typeof(this))~":");
         typeof(_extension_attribute_value) temp_extension_attribute_value;
         result = typeof(temp_extension_attribute_value).fromDecoding!ruleset(memory_0extension_attribute_value, temp_extension_attribute_value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'extension_attribute_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.setExtension_attribute_value(temp_extension_attribute_value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'extension_attribute_value' in type "~__traits(identifier, typeof(this))~":");
 
         
         if(memory.bytesLeft != 0)
@@ -5462,6 +7266,29 @@ struct BuiltInDomainDefinedAttributes
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1SequenceOf!(.BuiltInDomainDefinedAttribute), "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -5477,14 +7304,14 @@ struct BuiltInDomainDefinedAttributes
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         result = this._value.foreachElementAuto((element) => jres.Result.noError);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding subelements of SEQEUENCE OF field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -5545,6 +7372,45 @@ struct BuiltInDomainDefinedAttribute
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("type: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_type), "toString"))
+            _type.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("value: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_value), "toString"))
+            _value.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -5559,7 +7425,7 @@ struct BuiltInDomainDefinedAttribute
         /+++ TAG FOR FIELD: type +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'type' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE BuiltInDomainDefinedAttribute when reading top level tag 19 for field 'type' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 19)
@@ -5567,21 +7433,21 @@ struct BuiltInDomainDefinedAttribute
         jbuf.MemoryReader memory_type;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_type);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'type' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - type ++/
         typeof(_type) temp_type;
         result = typeof(temp_type).fromDecoding!ruleset(memory_type, temp_type, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'type' in type "~__traits(identifier, typeof(this))~":");
         result = this.setType(temp_type);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'type' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: value +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'value' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE BuiltInDomainDefinedAttribute when reading top level tag 19 for field 'value' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 19)
@@ -5589,15 +7455,15 @@ struct BuiltInDomainDefinedAttribute
         jbuf.MemoryReader memory_value;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_value);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'value' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - value ++/
         typeof(_value) temp_value;
         result = typeof(temp_value).fromDecoding!ruleset(memory_value, temp_value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'value' in type "~__traits(identifier, typeof(this))~":");
         result = this.setValue(temp_value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'value' in type "~__traits(identifier, typeof(this))~":");
 
         
         if(memory.bytesLeft != 0)
@@ -5631,6 +7497,29 @@ struct OrganizationalUnitNames
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1SequenceOf!(.OrganizationalUnitName), "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -5646,14 +7535,14 @@ struct OrganizationalUnitNames
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         result = this._value.foreachElementAuto((element) => jres.Result.noError);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding subelements of SEQEUENCE OF field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -5684,6 +7573,29 @@ struct OrganizationalUnitName
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1PrintableString, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -5699,10 +7611,10 @@ struct OrganizationalUnitName
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -5991,6 +7903,129 @@ struct BuiltInStandardAttributes
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("country-name: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_country_name), "toString"))
+            _country_name.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("administration-domain-name: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_administration_domain_name), "toString"))
+            _administration_domain_name.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("network-address: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_network_address), "toString"))
+            _network_address.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("terminal-identifier: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_terminal_identifier), "toString"))
+            _terminal_identifier.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("private-domain-name: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_private_domain_name), "toString"))
+            _private_domain_name.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("organization-name: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_organization_name), "toString"))
+            _organization_name.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("numeric-user-identifier: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_numeric_user_identifier), "toString"))
+            _numeric_user_identifier.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("personal-name: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_personal_name), "toString"))
+            _personal_name.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("organizational-unit-names: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_organizational_unit_names), "toString"))
+            _organizational_unit_names.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -6004,261 +8039,306 @@ struct BuiltInStandardAttributes
 
         /+++ TAG FOR FIELD: country-name +++/
         auto backtrack_country_name = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.application && componentHeader.identifier.tag == 1)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_country_name;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_country_name);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - country-name ++/
-            jbuf.MemoryReader memory_0country_name;
-                // EXPLICIT TAG - 1
-                if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
-                    return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 1 for field country_name a primitive tag was found when a constructed one was expected");
-                if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.application)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 1 for field 'country_name' the tag's class was expected to be application", jstr.String2("class was ", componentHeader.identifier.class_));
-                if(componentHeader.identifier.tag != 1)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 1 for field 'country_name' the tag's value was expected to be 1", jstr.String2("tag value was ", componentHeader.identifier.tag));
-                result = asn1.asn1DecodeComponentHeader!ruleset(memory_country_name, componentHeader);
+                return result.wrapError("when decoding header of field 'country-name' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.application && componentHeader.identifier.tag == 1)
+            {
+                jbuf.MemoryReader memory_country_name;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_country_name);
                 if(result.isError)
-                    return result;
-                result = asn1.asn1ReadContentBytes(memory_country_name, componentHeader.length, memory_0country_name);
+                    return result.wrapError("when reading content bytes of field 'country-name' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - country-name ++/
+                jbuf.MemoryReader memory_0country_name;
+                    // EXPLICIT TAG - 1
+                    if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
+                        return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 1 for field country_name a primitive tag was found when a constructed one was expected");
+                    if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.application)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 1 for field 'country_name' the tag's class was expected to be application", jstr.String2("class was ", componentHeader.identifier.class_));
+                    if(componentHeader.identifier.tag != 1)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 1 for field 'country_name' the tag's value was expected to be 1", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                    result = asn1.asn1DecodeComponentHeader!ruleset(memory_country_name, componentHeader);
+                    if(result.isError)
+                        return result.wrapError("when decoding header of field 'country_name' in type "~__traits(identifier, typeof(this))~":");
+                    result = asn1.asn1ReadContentBytes(memory_country_name, componentHeader.length, memory_0country_name);
+                    if(result.isError)
+                        return result.wrapError("when reading content bytes of field 'country_name' in type "~__traits(identifier, typeof(this))~":");
+                typeof(_country_name) temp_country_name;
+                result = temp_country_name.fromDecoding!ruleset(memory_0country_name, componentHeader.identifier);
                 if(result.isError)
-                    return result;
-            typeof(_country_name) temp_country_name;
-            result = temp_country_name.fromDecoding!ruleset(memory_0country_name, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setCountry_name(temp_country_name);
-            if(result.isError)
-                return result;
+                    return result.wrapError("when decoding field 'country_name' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setCountry_name(temp_country_name);
+                if(result.isError)
+                    return result.wrapError("when setting field 'country_name' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_country_name.buffer, backtrack_country_name.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_country_name.buffer, backtrack_country_name.cursor);
         
         /+++ TAG FOR FIELD: administration-domain-name +++/
         auto backtrack_administration_domain_name = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.application && componentHeader.identifier.tag == 2)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_administration_domain_name;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_administration_domain_name);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - administration-domain-name ++/
-            jbuf.MemoryReader memory_0administration_domain_name;
-                // EXPLICIT TAG - 2
-                if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
-                    return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 2 for field administration_domain_name a primitive tag was found when a constructed one was expected");
-                if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.application)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 2 for field 'administration_domain_name' the tag's class was expected to be application", jstr.String2("class was ", componentHeader.identifier.class_));
-                if(componentHeader.identifier.tag != 2)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 2 for field 'administration_domain_name' the tag's value was expected to be 2", jstr.String2("tag value was ", componentHeader.identifier.tag));
-                result = asn1.asn1DecodeComponentHeader!ruleset(memory_administration_domain_name, componentHeader);
+                return result.wrapError("when decoding header of field 'administration-domain-name' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.application && componentHeader.identifier.tag == 2)
+            {
+                jbuf.MemoryReader memory_administration_domain_name;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_administration_domain_name);
                 if(result.isError)
-                    return result;
-                result = asn1.asn1ReadContentBytes(memory_administration_domain_name, componentHeader.length, memory_0administration_domain_name);
+                    return result.wrapError("when reading content bytes of field 'administration-domain-name' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - administration-domain-name ++/
+                jbuf.MemoryReader memory_0administration_domain_name;
+                    // EXPLICIT TAG - 2
+                    if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
+                        return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 2 for field administration_domain_name a primitive tag was found when a constructed one was expected");
+                    if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.application)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 2 for field 'administration_domain_name' the tag's class was expected to be application", jstr.String2("class was ", componentHeader.identifier.class_));
+                    if(componentHeader.identifier.tag != 2)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 2 for field 'administration_domain_name' the tag's value was expected to be 2", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                    result = asn1.asn1DecodeComponentHeader!ruleset(memory_administration_domain_name, componentHeader);
+                    if(result.isError)
+                        return result.wrapError("when decoding header of field 'administration_domain_name' in type "~__traits(identifier, typeof(this))~":");
+                    result = asn1.asn1ReadContentBytes(memory_administration_domain_name, componentHeader.length, memory_0administration_domain_name);
+                    if(result.isError)
+                        return result.wrapError("when reading content bytes of field 'administration_domain_name' in type "~__traits(identifier, typeof(this))~":");
+                typeof(_administration_domain_name) temp_administration_domain_name;
+                result = temp_administration_domain_name.fromDecoding!ruleset(memory_0administration_domain_name, componentHeader.identifier);
                 if(result.isError)
-                    return result;
-            typeof(_administration_domain_name) temp_administration_domain_name;
-            result = temp_administration_domain_name.fromDecoding!ruleset(memory_0administration_domain_name, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setAdministration_domain_name(temp_administration_domain_name);
-            if(result.isError)
-                return result;
+                    return result.wrapError("when decoding field 'administration_domain_name' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setAdministration_domain_name(temp_administration_domain_name);
+                if(result.isError)
+                    return result.wrapError("when setting field 'administration_domain_name' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_administration_domain_name.buffer, backtrack_administration_domain_name.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_administration_domain_name.buffer, backtrack_administration_domain_name.cursor);
         
         /+++ TAG FOR FIELD: network-address +++/
         auto backtrack_network_address = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 0)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_network_address;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_network_address);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - network-address ++/
-            typeof(_network_address) temp_network_address;
-            result = temp_network_address.fromDecoding!ruleset(memory_network_address, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setNetwork_address(temp_network_address);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'network-address' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 0)
+            {
+                jbuf.MemoryReader memory_network_address;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_network_address);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'network-address' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - network-address ++/
+                typeof(_network_address) temp_network_address;
+                result = temp_network_address.fromDecoding!ruleset(memory_network_address, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'network_address' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setNetwork_address(temp_network_address);
+                if(result.isError)
+                    return result.wrapError("when setting field 'network_address' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_network_address.buffer, backtrack_network_address.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_network_address.buffer, backtrack_network_address.cursor);
         
         /+++ TAG FOR FIELD: terminal-identifier +++/
         auto backtrack_terminal_identifier = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 1)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_terminal_identifier;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_terminal_identifier);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - terminal-identifier ++/
-            typeof(_terminal_identifier) temp_terminal_identifier;
-            result = temp_terminal_identifier.fromDecoding!ruleset(memory_terminal_identifier, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setTerminal_identifier(temp_terminal_identifier);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'terminal-identifier' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 1)
+            {
+                jbuf.MemoryReader memory_terminal_identifier;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_terminal_identifier);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'terminal-identifier' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - terminal-identifier ++/
+                typeof(_terminal_identifier) temp_terminal_identifier;
+                result = temp_terminal_identifier.fromDecoding!ruleset(memory_terminal_identifier, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'terminal_identifier' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setTerminal_identifier(temp_terminal_identifier);
+                if(result.isError)
+                    return result.wrapError("when setting field 'terminal_identifier' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_terminal_identifier.buffer, backtrack_terminal_identifier.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_terminal_identifier.buffer, backtrack_terminal_identifier.cursor);
         
         /+++ TAG FOR FIELD: private-domain-name +++/
         auto backtrack_private_domain_name = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 2)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_private_domain_name;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_private_domain_name);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - private-domain-name ++/
-            jbuf.MemoryReader memory_0private_domain_name;
-                // EXPLICIT TAG - 2
-                if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
-                    return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 2 for field private_domain_name a primitive tag was found when a constructed one was expected");
-                if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 2 for field 'private_domain_name' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
-                if(componentHeader.identifier.tag != 2)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 2 for field 'private_domain_name' the tag's value was expected to be 2", jstr.String2("tag value was ", componentHeader.identifier.tag));
-                result = asn1.asn1DecodeComponentHeader!ruleset(memory_private_domain_name, componentHeader);
+                return result.wrapError("when decoding header of field 'private-domain-name' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 2)
+            {
+                jbuf.MemoryReader memory_private_domain_name;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_private_domain_name);
                 if(result.isError)
-                    return result;
-                result = asn1.asn1ReadContentBytes(memory_private_domain_name, componentHeader.length, memory_0private_domain_name);
+                    return result.wrapError("when reading content bytes of field 'private-domain-name' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - private-domain-name ++/
+                jbuf.MemoryReader memory_0private_domain_name;
+                    // EXPLICIT TAG - 2
+                    if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
+                        return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 2 for field private_domain_name a primitive tag was found when a constructed one was expected");
+                    if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 2 for field 'private_domain_name' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                    if(componentHeader.identifier.tag != 2)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 2 for field 'private_domain_name' the tag's value was expected to be 2", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                    result = asn1.asn1DecodeComponentHeader!ruleset(memory_private_domain_name, componentHeader);
+                    if(result.isError)
+                        return result.wrapError("when decoding header of field 'private_domain_name' in type "~__traits(identifier, typeof(this))~":");
+                    result = asn1.asn1ReadContentBytes(memory_private_domain_name, componentHeader.length, memory_0private_domain_name);
+                    if(result.isError)
+                        return result.wrapError("when reading content bytes of field 'private_domain_name' in type "~__traits(identifier, typeof(this))~":");
+                typeof(_private_domain_name) temp_private_domain_name;
+                result = temp_private_domain_name.fromDecoding!ruleset(memory_0private_domain_name, componentHeader.identifier);
                 if(result.isError)
-                    return result;
-            typeof(_private_domain_name) temp_private_domain_name;
-            result = temp_private_domain_name.fromDecoding!ruleset(memory_0private_domain_name, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setPrivate_domain_name(temp_private_domain_name);
-            if(result.isError)
-                return result;
+                    return result.wrapError("when decoding field 'private_domain_name' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setPrivate_domain_name(temp_private_domain_name);
+                if(result.isError)
+                    return result.wrapError("when setting field 'private_domain_name' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_private_domain_name.buffer, backtrack_private_domain_name.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_private_domain_name.buffer, backtrack_private_domain_name.cursor);
         
         /+++ TAG FOR FIELD: organization-name +++/
         auto backtrack_organization_name = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 3)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_organization_name;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_organization_name);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - organization-name ++/
-            typeof(_organization_name) temp_organization_name;
-            result = temp_organization_name.fromDecoding!ruleset(memory_organization_name, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setOrganization_name(temp_organization_name);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'organization-name' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 3)
+            {
+                jbuf.MemoryReader memory_organization_name;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_organization_name);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'organization-name' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - organization-name ++/
+                typeof(_organization_name) temp_organization_name;
+                result = temp_organization_name.fromDecoding!ruleset(memory_organization_name, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'organization_name' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setOrganization_name(temp_organization_name);
+                if(result.isError)
+                    return result.wrapError("when setting field 'organization_name' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_organization_name.buffer, backtrack_organization_name.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_organization_name.buffer, backtrack_organization_name.cursor);
         
         /+++ TAG FOR FIELD: numeric-user-identifier +++/
         auto backtrack_numeric_user_identifier = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 4)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_numeric_user_identifier;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_numeric_user_identifier);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - numeric-user-identifier ++/
-            typeof(_numeric_user_identifier) temp_numeric_user_identifier;
-            result = temp_numeric_user_identifier.fromDecoding!ruleset(memory_numeric_user_identifier, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setNumeric_user_identifier(temp_numeric_user_identifier);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'numeric-user-identifier' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 4)
+            {
+                jbuf.MemoryReader memory_numeric_user_identifier;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_numeric_user_identifier);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'numeric-user-identifier' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - numeric-user-identifier ++/
+                typeof(_numeric_user_identifier) temp_numeric_user_identifier;
+                result = temp_numeric_user_identifier.fromDecoding!ruleset(memory_numeric_user_identifier, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'numeric_user_identifier' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setNumeric_user_identifier(temp_numeric_user_identifier);
+                if(result.isError)
+                    return result.wrapError("when setting field 'numeric_user_identifier' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_numeric_user_identifier.buffer, backtrack_numeric_user_identifier.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_numeric_user_identifier.buffer, backtrack_numeric_user_identifier.cursor);
         
         /+++ TAG FOR FIELD: personal-name +++/
         auto backtrack_personal_name = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 5)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_personal_name;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_personal_name);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - personal-name ++/
-            typeof(_personal_name) temp_personal_name;
-            result = temp_personal_name.fromDecoding!ruleset(memory_personal_name, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setPersonal_name(temp_personal_name);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'personal-name' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 5)
+            {
+                jbuf.MemoryReader memory_personal_name;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_personal_name);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'personal-name' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - personal-name ++/
+                typeof(_personal_name) temp_personal_name;
+                result = temp_personal_name.fromDecoding!ruleset(memory_personal_name, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'personal_name' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setPersonal_name(temp_personal_name);
+                if(result.isError)
+                    return result.wrapError("when setting field 'personal_name' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_personal_name.buffer, backtrack_personal_name.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_personal_name.buffer, backtrack_personal_name.cursor);
         
         /+++ TAG FOR FIELD: organizational-unit-names +++/
         auto backtrack_organizational_unit_names = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 6)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_organizational_unit_names;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_organizational_unit_names);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - organizational-unit-names ++/
-            typeof(_organizational_unit_names) temp_organizational_unit_names;
-            result = temp_organizational_unit_names.fromDecoding!ruleset(memory_organizational_unit_names, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setOrganizational_unit_names(temp_organizational_unit_names);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'organizational-unit-names' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 6)
+            {
+                jbuf.MemoryReader memory_organizational_unit_names;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_organizational_unit_names);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'organizational-unit-names' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - organizational-unit-names ++/
+                typeof(_organizational_unit_names) temp_organizational_unit_names;
+                result = temp_organizational_unit_names.fromDecoding!ruleset(memory_organizational_unit_names, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'organizational_unit_names' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setOrganizational_unit_names(temp_organizational_unit_names);
+                if(result.isError)
+                    return result.wrapError("when setting field 'organizational_unit_names' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_organizational_unit_names.buffer, backtrack_organizational_unit_names.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_organizational_unit_names.buffer, backtrack_organizational_unit_names.cursor);
         
         if(memory.bytesLeft != 0)
             return jres.Result.make(asn1.Asn1DecodeError.sequenceHasExtraData, "when decoding non-extensible SEQUENCE BuiltInStandardAttributes there were unsused content bytes after attempting to decode all known fields - this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input");
@@ -6359,6 +8439,57 @@ struct ORAddress
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("built-in-standard-attributes: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_built_in_standard_attributes), "toString"))
+            _built_in_standard_attributes.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("built-in-domain-defined-attributes: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_built_in_domain_defined_attributes), "toString"))
+            _built_in_domain_defined_attributes.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("extension-attributes: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_extension_attributes), "toString"))
+            _extension_attributes.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -6373,7 +8504,7 @@ struct ORAddress
         /+++ TAG FOR FIELD: built-in-standard-attributes +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'built-in-standard-attributes' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE ORAddress when reading top level tag 16 for field 'built-in-standard-attributes' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
@@ -6381,64 +8512,74 @@ struct ORAddress
         jbuf.MemoryReader memory_built_in_standard_attributes;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_built_in_standard_attributes);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'built-in-standard-attributes' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - built-in-standard-attributes ++/
         typeof(_built_in_standard_attributes) temp_built_in_standard_attributes;
         result = temp_built_in_standard_attributes.fromDecoding!ruleset(memory_built_in_standard_attributes, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'built_in_standard_attributes' in type "~__traits(identifier, typeof(this))~":");
         result = this.setBuilt_in_standard_attributes(temp_built_in_standard_attributes);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'built_in_standard_attributes' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: built-in-domain-defined-attributes +++/
         auto backtrack_built_in_domain_defined_attributes = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 16)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_built_in_domain_defined_attributes;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_built_in_domain_defined_attributes);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - built-in-domain-defined-attributes ++/
-            typeof(_built_in_domain_defined_attributes) temp_built_in_domain_defined_attributes;
-            result = temp_built_in_domain_defined_attributes.fromDecoding!ruleset(memory_built_in_domain_defined_attributes, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setBuilt_in_domain_defined_attributes(temp_built_in_domain_defined_attributes);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'built-in-domain-defined-attributes' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 16)
+            {
+                jbuf.MemoryReader memory_built_in_domain_defined_attributes;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_built_in_domain_defined_attributes);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'built-in-domain-defined-attributes' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - built-in-domain-defined-attributes ++/
+                typeof(_built_in_domain_defined_attributes) temp_built_in_domain_defined_attributes;
+                result = temp_built_in_domain_defined_attributes.fromDecoding!ruleset(memory_built_in_domain_defined_attributes, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'built_in_domain_defined_attributes' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setBuilt_in_domain_defined_attributes(temp_built_in_domain_defined_attributes);
+                if(result.isError)
+                    return result.wrapError("when setting field 'built_in_domain_defined_attributes' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_built_in_domain_defined_attributes.buffer, backtrack_built_in_domain_defined_attributes.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_built_in_domain_defined_attributes.buffer, backtrack_built_in_domain_defined_attributes.cursor);
         
         /+++ TAG FOR FIELD: extension-attributes +++/
         auto backtrack_extension_attributes = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 17)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_extension_attributes;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_extension_attributes);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - extension-attributes ++/
-            typeof(_extension_attributes) temp_extension_attributes;
-            result = temp_extension_attributes.fromDecoding!ruleset(memory_extension_attributes, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setExtension_attributes(temp_extension_attributes);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'extension-attributes' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 17)
+            {
+                jbuf.MemoryReader memory_extension_attributes;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_extension_attributes);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'extension-attributes' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - extension-attributes ++/
+                typeof(_extension_attributes) temp_extension_attributes;
+                result = temp_extension_attributes.fromDecoding!ruleset(memory_extension_attributes, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'extension_attributes' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setExtension_attributes(temp_extension_attributes);
+                if(result.isError)
+                    return result.wrapError("when setting field 'extension_attributes' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_extension_attributes.buffer, backtrack_extension_attributes.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_extension_attributes.buffer, backtrack_extension_attributes.cursor);
         
         if(memory.bytesLeft != 0)
             return jres.Result.make(asn1.Asn1DecodeError.sequenceHasExtraData, "when decoding non-extensible SEQUENCE ORAddress there were unsused content bytes after attempting to decode all known fields - this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input");
@@ -6451,7 +8592,7 @@ asn1.Asn1Integer common_name(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 1 */ 0x1, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -6483,6 +8624,29 @@ struct CommonName
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1PrintableString, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -6498,10 +8662,10 @@ struct CommonName
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -6512,7 +8676,7 @@ asn1.Asn1Integer teletex_common_name(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 2 */ 0x2, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -6524,7 +8688,7 @@ asn1.Asn1Integer teletex_organization_name(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 3 */ 0x3, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -6536,7 +8700,7 @@ asn1.Asn1Integer teletex_personal_name(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 4 */ 0x4, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -6548,7 +8712,7 @@ asn1.Asn1Integer teletex_organizational_unit_names(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 5 */ 0x5, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -6560,7 +8724,7 @@ asn1.Asn1Integer pds_name(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 7 */ 0x7, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -6592,6 +8756,29 @@ struct PDSName
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1PrintableString, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -6607,10 +8794,10 @@ struct PDSName
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -6621,7 +8808,7 @@ asn1.Asn1Integer physical_delivery_country_name(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 8 */ 0x8, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -6718,10 +8905,10 @@ struct PhysicalDeliveryCountryName
             typeof(Value.x121_dcc_code) temp_x121_dcc_code;
             result = typeof(temp_x121_dcc_code).fromDecoding!ruleset(memory, temp_x121_dcc_code, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'x121_dcc_code' in type "~__traits(identifier, typeof(this))~":");
             result = this.setX121_dcc_code(temp_x121_dcc_code);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'x121_dcc_code' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -6732,15 +8919,60 @@ struct PhysicalDeliveryCountryName
             typeof(Value.iso_3166_alpha2_code) temp_iso_3166_alpha2_code;
             result = typeof(temp_iso_3166_alpha2_code).fromDecoding!ruleset(memory, temp_iso_3166_alpha2_code, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'iso_3166_alpha2_code' in type "~__traits(identifier, typeof(this))~":");
             result = this.setIso_3166_alpha2_code(temp_iso_3166_alpha2_code);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'iso_3166_alpha2_code' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type PhysicalDeliveryCountryName the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isX121_dcc_code)
+        {
+            depth++;
+            putIndent();
+            sink("x121-dcc-code: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getX121_dcc_code()), "toString"))
+                _value.x121_dcc_code.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isIso_3166_alpha2_code)
+        {
+            depth++;
+            putIndent();
+            sink("iso-3166-alpha2-code: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getIso_3166_alpha2_code()), "toString"))
+                _value.iso_3166_alpha2_code.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -6749,7 +8981,7 @@ asn1.Asn1Integer postal_code(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 9 */ 0x9, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -6846,10 +9078,10 @@ struct PostalCode
             typeof(Value.numeric_code) temp_numeric_code;
             result = typeof(temp_numeric_code).fromDecoding!ruleset(memory, temp_numeric_code, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'numeric_code' in type "~__traits(identifier, typeof(this))~":");
             result = this.setNumeric_code(temp_numeric_code);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'numeric_code' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -6860,15 +9092,60 @@ struct PostalCode
             typeof(Value.printable_code) temp_printable_code;
             result = typeof(temp_printable_code).fromDecoding!ruleset(memory, temp_printable_code, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'printable_code' in type "~__traits(identifier, typeof(this))~":");
             result = this.setPrintable_code(temp_printable_code);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'printable_code' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type PostalCode the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isNumeric_code)
+        {
+            depth++;
+            putIndent();
+            sink("numeric-code: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getNumeric_code()), "toString"))
+                _value.numeric_code.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isPrintable_code)
+        {
+            depth++;
+            putIndent();
+            sink("printable-code: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getPrintable_code()), "toString"))
+                _value.printable_code.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -6877,7 +9154,7 @@ asn1.Asn1Integer extended_network_address(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 22 */ 0x16, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -6947,6 +9224,45 @@ struct ExtendedNetworkAddress_e163_4_address
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("number: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_number), "toString"))
+            _number.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("sub-address: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_sub_address), "toString"))
+            _sub_address.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -6961,7 +9277,7 @@ struct ExtendedNetworkAddress_e163_4_address
         /+++ TAG FOR FIELD: number +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'number' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE ExtendedNetworkAddress-e163-4-address when reading top level tag 0 for field 'number' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 0)
@@ -6969,40 +9285,45 @@ struct ExtendedNetworkAddress_e163_4_address
         jbuf.MemoryReader memory_number;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_number);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'number' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - number ++/
         typeof(_number) temp_number;
         result = typeof(temp_number).fromDecoding!ruleset(memory_number, temp_number, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'number' in type "~__traits(identifier, typeof(this))~":");
         result = this.setNumber(temp_number);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'number' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: sub-address +++/
         auto backtrack_sub_address = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 1)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_sub_address;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_sub_address);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - sub-address ++/
-            typeof(_sub_address) temp_sub_address;
-            result = typeof(temp_sub_address).fromDecoding!ruleset(memory_sub_address, temp_sub_address, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setSub_address(temp_sub_address);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'sub-address' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 1)
+            {
+                jbuf.MemoryReader memory_sub_address;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_sub_address);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'sub-address' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - sub-address ++/
+                typeof(_sub_address) temp_sub_address;
+                result = typeof(temp_sub_address).fromDecoding!ruleset(memory_sub_address, temp_sub_address, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'sub_address' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setSub_address(temp_sub_address);
+                if(result.isError)
+                    return result.wrapError("when setting field 'sub_address' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_sub_address.buffer, backtrack_sub_address.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_sub_address.buffer, backtrack_sub_address.cursor);
         
         if(memory.bytesLeft != 0)
             return jres.Result.make(asn1.Asn1DecodeError.sequenceHasExtraData, "when decoding non-extensible SEQUENCE ExtendedNetworkAddress-e163-4-address there were unsused content bytes after attempting to decode all known fields - this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input");
@@ -7098,10 +9419,10 @@ struct ExtendedNetworkAddress
             typeof(Value.e163_4_address) temp_e163_4_address;
             result = temp_e163_4_address.fromDecoding!ruleset(memory, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'e163_4_address' in type "~__traits(identifier, typeof(this))~":");
             result = this.setE163_4_address(temp_e163_4_address);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'e163_4_address' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -7112,15 +9433,60 @@ struct ExtendedNetworkAddress
             typeof(Value.psap_address) temp_psap_address;
             result = temp_psap_address.fromDecoding!ruleset(memory, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'psap_address' in type "~__traits(identifier, typeof(this))~":");
             result = this.setPsap_address(temp_psap_address);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'psap_address' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type ExtendedNetworkAddress the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isE163_4_address)
+        {
+            depth++;
+            putIndent();
+            sink("e163-4-address: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getE163_4_address()), "toString"))
+                _value.e163_4_address.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isPsap_address)
+        {
+            depth++;
+            putIndent();
+            sink("psap-address: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getPsap_address()), "toString"))
+                _value.psap_address.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -7247,6 +9613,69 @@ struct PresentationAddress
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("pSelector: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_pSelector), "toString"))
+            _pSelector.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("sSelector: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_sSelector), "toString"))
+            _sSelector.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("tSelector: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_tSelector), "toString"))
+            _tSelector.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("nAddresses: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_nAddresses), "toString"))
+            _nAddresses.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -7260,122 +9689,137 @@ struct PresentationAddress
 
         /+++ TAG FOR FIELD: pSelector +++/
         auto backtrack_pSelector = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 0)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_pSelector;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_pSelector);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - pSelector ++/
-            jbuf.MemoryReader memory_0pSelector;
-                // EXPLICIT TAG - 0
-                if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
-                    return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 0 for field pSelector a primitive tag was found when a constructed one was expected");
-                if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 0 for field 'pSelector' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
-                if(componentHeader.identifier.tag != 0)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 0 for field 'pSelector' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
-                result = asn1.asn1DecodeComponentHeader!ruleset(memory_pSelector, componentHeader);
+                return result.wrapError("when decoding header of field 'pSelector' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 0)
+            {
+                jbuf.MemoryReader memory_pSelector;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_pSelector);
                 if(result.isError)
-                    return result;
-                result = asn1.asn1ReadContentBytes(memory_pSelector, componentHeader.length, memory_0pSelector);
+                    return result.wrapError("when reading content bytes of field 'pSelector' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - pSelector ++/
+                jbuf.MemoryReader memory_0pSelector;
+                    // EXPLICIT TAG - 0
+                    if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
+                        return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 0 for field pSelector a primitive tag was found when a constructed one was expected");
+                    if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 0 for field 'pSelector' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                    if(componentHeader.identifier.tag != 0)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 0 for field 'pSelector' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                    result = asn1.asn1DecodeComponentHeader!ruleset(memory_pSelector, componentHeader);
+                    if(result.isError)
+                        return result.wrapError("when decoding header of field 'pSelector' in type "~__traits(identifier, typeof(this))~":");
+                    result = asn1.asn1ReadContentBytes(memory_pSelector, componentHeader.length, memory_0pSelector);
+                    if(result.isError)
+                        return result.wrapError("when reading content bytes of field 'pSelector' in type "~__traits(identifier, typeof(this))~":");
+                typeof(_pSelector) temp_pSelector;
+                result = typeof(temp_pSelector).fromDecoding!ruleset(memory_0pSelector, temp_pSelector, componentHeader.identifier);
                 if(result.isError)
-                    return result;
-            typeof(_pSelector) temp_pSelector;
-            result = typeof(temp_pSelector).fromDecoding!ruleset(memory_0pSelector, temp_pSelector, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setPSelector(temp_pSelector);
-            if(result.isError)
-                return result;
+                    return result.wrapError("when decoding field 'pSelector' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setPSelector(temp_pSelector);
+                if(result.isError)
+                    return result.wrapError("when setting field 'pSelector' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_pSelector.buffer, backtrack_pSelector.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_pSelector.buffer, backtrack_pSelector.cursor);
         
         /+++ TAG FOR FIELD: sSelector +++/
         auto backtrack_sSelector = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 1)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_sSelector;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_sSelector);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - sSelector ++/
-            jbuf.MemoryReader memory_0sSelector;
-                // EXPLICIT TAG - 1
-                if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
-                    return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 1 for field sSelector a primitive tag was found when a constructed one was expected");
-                if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 1 for field 'sSelector' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
-                if(componentHeader.identifier.tag != 1)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 1 for field 'sSelector' the tag's value was expected to be 1", jstr.String2("tag value was ", componentHeader.identifier.tag));
-                result = asn1.asn1DecodeComponentHeader!ruleset(memory_sSelector, componentHeader);
+                return result.wrapError("when decoding header of field 'sSelector' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 1)
+            {
+                jbuf.MemoryReader memory_sSelector;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_sSelector);
                 if(result.isError)
-                    return result;
-                result = asn1.asn1ReadContentBytes(memory_sSelector, componentHeader.length, memory_0sSelector);
+                    return result.wrapError("when reading content bytes of field 'sSelector' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - sSelector ++/
+                jbuf.MemoryReader memory_0sSelector;
+                    // EXPLICIT TAG - 1
+                    if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
+                        return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 1 for field sSelector a primitive tag was found when a constructed one was expected");
+                    if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 1 for field 'sSelector' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                    if(componentHeader.identifier.tag != 1)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 1 for field 'sSelector' the tag's value was expected to be 1", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                    result = asn1.asn1DecodeComponentHeader!ruleset(memory_sSelector, componentHeader);
+                    if(result.isError)
+                        return result.wrapError("when decoding header of field 'sSelector' in type "~__traits(identifier, typeof(this))~":");
+                    result = asn1.asn1ReadContentBytes(memory_sSelector, componentHeader.length, memory_0sSelector);
+                    if(result.isError)
+                        return result.wrapError("when reading content bytes of field 'sSelector' in type "~__traits(identifier, typeof(this))~":");
+                typeof(_sSelector) temp_sSelector;
+                result = typeof(temp_sSelector).fromDecoding!ruleset(memory_0sSelector, temp_sSelector, componentHeader.identifier);
                 if(result.isError)
-                    return result;
-            typeof(_sSelector) temp_sSelector;
-            result = typeof(temp_sSelector).fromDecoding!ruleset(memory_0sSelector, temp_sSelector, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setSSelector(temp_sSelector);
-            if(result.isError)
-                return result;
+                    return result.wrapError("when decoding field 'sSelector' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setSSelector(temp_sSelector);
+                if(result.isError)
+                    return result.wrapError("when setting field 'sSelector' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_sSelector.buffer, backtrack_sSelector.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_sSelector.buffer, backtrack_sSelector.cursor);
         
         /+++ TAG FOR FIELD: tSelector +++/
         auto backtrack_tSelector = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 2)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_tSelector;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_tSelector);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - tSelector ++/
-            jbuf.MemoryReader memory_0tSelector;
-                // EXPLICIT TAG - 2
-                if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
-                    return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 2 for field tSelector a primitive tag was found when a constructed one was expected");
-                if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 2 for field 'tSelector' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
-                if(componentHeader.identifier.tag != 2)
-                    return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 2 for field 'tSelector' the tag's value was expected to be 2", jstr.String2("tag value was ", componentHeader.identifier.tag));
-                result = asn1.asn1DecodeComponentHeader!ruleset(memory_tSelector, componentHeader);
+                return result.wrapError("when decoding header of field 'tSelector' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.contextSpecific && componentHeader.identifier.tag == 2)
+            {
+                jbuf.MemoryReader memory_tSelector;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_tSelector);
                 if(result.isError)
-                    return result;
-                result = asn1.asn1ReadContentBytes(memory_tSelector, componentHeader.length, memory_0tSelector);
+                    return result.wrapError("when reading content bytes of field 'tSelector' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - tSelector ++/
+                jbuf.MemoryReader memory_0tSelector;
+                    // EXPLICIT TAG - 2
+                    if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
+                        return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 2 for field tSelector a primitive tag was found when a constructed one was expected");
+                    if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 2 for field 'tSelector' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                    if(componentHeader.identifier.tag != 2)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 2 for field 'tSelector' the tag's value was expected to be 2", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                    result = asn1.asn1DecodeComponentHeader!ruleset(memory_tSelector, componentHeader);
+                    if(result.isError)
+                        return result.wrapError("when decoding header of field 'tSelector' in type "~__traits(identifier, typeof(this))~":");
+                    result = asn1.asn1ReadContentBytes(memory_tSelector, componentHeader.length, memory_0tSelector);
+                    if(result.isError)
+                        return result.wrapError("when reading content bytes of field 'tSelector' in type "~__traits(identifier, typeof(this))~":");
+                typeof(_tSelector) temp_tSelector;
+                result = typeof(temp_tSelector).fromDecoding!ruleset(memory_0tSelector, temp_tSelector, componentHeader.identifier);
                 if(result.isError)
-                    return result;
-            typeof(_tSelector) temp_tSelector;
-            result = typeof(temp_tSelector).fromDecoding!ruleset(memory_0tSelector, temp_tSelector, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setTSelector(temp_tSelector);
-            if(result.isError)
-                return result;
+                    return result.wrapError("when decoding field 'tSelector' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setTSelector(temp_tSelector);
+                if(result.isError)
+                    return result.wrapError("when setting field 'tSelector' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_tSelector.buffer, backtrack_tSelector.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_tSelector.buffer, backtrack_tSelector.cursor);
         
         /+++ TAG FOR FIELD: nAddresses +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'nAddresses' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE PresentationAddress when reading top level tag 3 for field 'nAddresses' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 3)
@@ -7383,7 +9827,7 @@ struct PresentationAddress
         jbuf.MemoryReader memory_nAddresses;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_nAddresses);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'nAddresses' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - nAddresses ++/
         jbuf.MemoryReader memory_0nAddresses;
             // EXPLICIT TAG - 3
@@ -7395,21 +9839,21 @@ struct PresentationAddress
                 return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 3 for field 'nAddresses' the tag's value was expected to be 3", jstr.String2("tag value was ", componentHeader.identifier.tag));
             result = asn1.asn1DecodeComponentHeader!ruleset(memory_nAddresses, componentHeader);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'nAddresses' in type "~__traits(identifier, typeof(this))~":");
             result = asn1.asn1ReadContentBytes(memory_nAddresses, componentHeader.length, memory_0nAddresses);
             if(result.isError)
-                return result;
+                return result.wrapError("when reading content bytes of field 'nAddresses' in type "~__traits(identifier, typeof(this))~":");
         typeof(_nAddresses) temp_nAddresses;
         result = typeof(temp_nAddresses).fromDecoding!ruleset(memory_0nAddresses, temp_nAddresses, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'nAddresses' in type "~__traits(identifier, typeof(this))~":");
         result = this.setNAddresses(temp_nAddresses);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'nAddresses' in type "~__traits(identifier, typeof(this))~":");
 
         result = this._nAddresses.foreachElementAuto((element) => jres.Result.noError);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding subelements of SET OF field 'nAddresses' in type "~__traits(identifier, typeof(this))~":");
 
         
         if(memory.bytesLeft != 0)
@@ -7423,7 +9867,7 @@ asn1.Asn1Integer terminal_type(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 23 */ 0x17, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7463,6 +9907,29 @@ struct TerminalType
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1Integer, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -7478,10 +9945,10 @@ struct TerminalType
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -7492,7 +9959,7 @@ asn1.Asn1Integer teletex_domain_defined_attributes(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 6 */ 0x6, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7504,7 +9971,7 @@ asn1.Asn1Integer ub_name(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 32768 */ 0x80, 0x0, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7516,7 +9983,7 @@ asn1.Asn1Integer ub_common_name(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 64 */ 0x40, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7528,7 +9995,7 @@ asn1.Asn1Integer ub_locality_name(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 128 */ 0x80, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7540,7 +10007,7 @@ asn1.Asn1Integer ub_state_name(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 128 */ 0x80, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7552,7 +10019,7 @@ asn1.Asn1Integer ub_organization_name(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 64 */ 0x40, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7564,7 +10031,7 @@ asn1.Asn1Integer ub_organizational_unit_name(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 64 */ 0x40, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7576,7 +10043,7 @@ asn1.Asn1Integer ub_title(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 64 */ 0x40, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7588,7 +10055,7 @@ asn1.Asn1Integer ub_serial_number(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 64 */ 0x40, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7600,7 +10067,7 @@ asn1.Asn1Integer ub_match(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 128 */ 0x80, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7612,7 +10079,7 @@ asn1.Asn1Integer ub_emailaddress_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 255 */ 0xFF, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7624,7 +10091,7 @@ asn1.Asn1Integer ub_common_name_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 64 */ 0x40, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7636,7 +10103,7 @@ asn1.Asn1Integer ub_country_name_alpha_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 2 */ 0x2, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7648,7 +10115,7 @@ asn1.Asn1Integer ub_country_name_numeric_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 3 */ 0x3, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7660,7 +10127,7 @@ asn1.Asn1Integer ub_domain_defined_attributes(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 4 */ 0x4, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7672,7 +10139,7 @@ asn1.Asn1Integer ub_domain_defined_attribute_type_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 8 */ 0x8, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7684,7 +10151,7 @@ asn1.Asn1Integer ub_domain_defined_attribute_value_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 128 */ 0x80, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7696,7 +10163,7 @@ asn1.Asn1Integer ub_domain_name_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 16 */ 0x10, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7708,7 +10175,7 @@ asn1.Asn1Integer ub_extension_attributes(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 256 */ 0x1, 0x0, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7720,7 +10187,7 @@ asn1.Asn1Integer ub_e163_4_number_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 15 */ 0xF, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7732,7 +10199,7 @@ asn1.Asn1Integer ub_e163_4_sub_address_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 40 */ 0x28, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7744,7 +10211,7 @@ asn1.Asn1Integer ub_generation_qualifier_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 3 */ 0x3, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7756,7 +10223,7 @@ asn1.Asn1Integer ub_given_name_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 16 */ 0x10, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7768,7 +10235,7 @@ asn1.Asn1Integer ub_initials_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 5 */ 0x5, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7780,7 +10247,7 @@ asn1.Asn1Integer ub_integer_options(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 256 */ 0x1, 0x0, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7792,7 +10259,7 @@ asn1.Asn1Integer ub_numeric_user_id_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 32 */ 0x20, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7804,7 +10271,7 @@ asn1.Asn1Integer ub_organization_name_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 64 */ 0x40, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7816,7 +10283,7 @@ asn1.Asn1Integer ub_organizational_unit_name_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 32 */ 0x20, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7828,7 +10295,7 @@ asn1.Asn1Integer ub_organizational_units(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 4 */ 0x4, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7840,7 +10307,7 @@ asn1.Asn1Integer ub_pds_name_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 16 */ 0x10, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7852,7 +10319,7 @@ asn1.Asn1Integer ub_pds_parameter_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 30 */ 0x1E, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7864,7 +10331,7 @@ asn1.Asn1Integer ub_pds_physical_address_lines(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 6 */ 0x6, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7876,7 +10343,7 @@ asn1.Asn1Integer ub_postal_code_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 16 */ 0x10, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7888,7 +10355,7 @@ asn1.Asn1Integer ub_pseudonym(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 128 */ 0x80, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7900,7 +10367,7 @@ asn1.Asn1Integer ub_surname_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 40 */ 0x28, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7912,7 +10379,7 @@ asn1.Asn1Integer ub_terminal_id_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 24 */ 0x18, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7924,7 +10391,7 @@ asn1.Asn1Integer ub_unformatted_address_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 180 */ 0xB4, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
@@ -7936,7 +10403,7 @@ asn1.Asn1Integer ub_x121_address_length(
 ) @nogc nothrow
 {
     asn1.Asn1Integer mainValue;
-    static immutable ubyte[] mainValue__underlying= [
+    static immutable ubyte[] mainValue__underlying = [
         /* 16 */ 0x10, 
     ];
     mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);

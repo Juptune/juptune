@@ -18,6 +18,8 @@ struct Source
     string debugName;
     string code;
     Asn1ModuleIr moduleIr; // May be null if parsing hasn't ran yet.
+    
+    private bool _needsCodeGen = true;
 }
 
 final class CompilerContext
@@ -36,6 +38,8 @@ final class CompilerContext
     {
         this._registry = new Asn1ModuleRegistry();
         this._errors = new Asn1PrintfErrorHandler();
+
+        this.addIntrinsicCode("Dasn1-Intrinsics(dasn1/generator/context.d)", DASN1_INTRINSIC_MODULE);
     }
 
     void addFromInputArgs(string[] args)
@@ -58,6 +62,12 @@ final class CompilerContext
     void addRawCode(string debugName, string code)
     {
         this._sources ~= Source(debugName, code);
+    }
+
+    private void addIntrinsicCode(string debugName, string code)
+    {
+        this._sources ~= Source(debugName, code);
+        this._sources[$-1]._needsCodeGen = false;
     }
 
     void addFile(string path)
@@ -90,5 +100,32 @@ final class CompilerContext
 
     bool wereErrors() => this._errors.wasCalled;
     size_t parserBytesAllocated() => this._context.bytesAllocated;
-    Source[] sources() => this._sources;
+
+    // TODO: Maybe make this better.
+    import std.algorithm : filter;
+    import std.array : array;
+    Source[] sources() => this._sources.filter!(s => s._needsCodeGen).array;
 }
+
+private immutable DASN1_INTRINSIC_MODULE = `
+-- I can't find a single piece of information on what's allowed for custom OBJECT IDENTIFIERS, so I'll
+-- just start everything with 0 0
+Dasn1-Intrinsics { iso(0) custom(0) dasn1(1) intrinsics(0) } DEFINITIONS IMPLICIT TAGS ::=
+BEGIN
+    EXPORTS ALL;
+
+    -- Use of this instrinsic value will cause DASN1 to allow any tag for the field.
+    --
+    -- Currently you should always use this type directly, and never define an alias to it (implementation limitations):
+    --
+    -- '
+    --      /* BAD */
+    --      MyType ::= Dasn1-Any
+    --      MySeq ::= SEQUENCE { yada MyType }
+    --
+    --      /* GOOD */
+    --      MySeq ::= SEQUENCE { yada Dasn1-Any }
+    -- '
+    Dasn1-Any ::= OCTET STRING
+END
+`;

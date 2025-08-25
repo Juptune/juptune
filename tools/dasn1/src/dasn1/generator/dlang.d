@@ -107,10 +107,15 @@ final class DlangCodeBuilder
         );
 
         mod.getImports().foreachImportByModuleGC((moduleRef, moduleVersion, _){
+            import std.algorithm : canFind;
+            const dlangId = getModuleDlangIdentifier(moduleRef, moduleVersion, context.errors);
+            if(dlangId.canFind("Dasn1-Intrinsics")) // Don't import intrinsics
+                return Result.noError;
+            
             putLine(
                 "static import ",
                 context.baseModuleComponents.joiner("."), // TODO: Alow different modules to have different bases, configurable by the user
-                getModuleDlangIdentifier(moduleRef, moduleVersion, context.errors),
+                dlangId,
                 ";"
             );
             return Result.noError;
@@ -166,11 +171,15 @@ final class DlangCodeBuilder
         endLine();
     }
 
-    void putResultCheck()
+    void putResultCheck(scope const(char)[] debugContext)
     {
         putLine("if(result.isError)");
         indent();
-            putLine("return result;");
+            putLine(
+                `return result.wrapError("when `, 
+                debugContext, 
+                ` in type "~__traits(identifier, typeof(this))~":");`
+            );
         dedent();
     }
 
@@ -270,6 +279,8 @@ private immutable GETTER_FUNCTION_PREFIX = "get";
 private immutable CHECKER_FUNCTION_PREFIX = "is";
 private immutable VALIDATE_FUNCTION_PREFIX = "validate";
 private immutable DEFAULT_VALUE_PREFIX = "defaultOf";
+
+private immutable INTRINSIC_ANY_NAME = "Dasn1-Any";
 
 private immutable RETURN_NO_ERROR = "return "~RESULT_TYPE~".noError;";
 
@@ -454,6 +465,9 @@ private void putValueLiteral(
 
         override void visit(Asn1TypeReferenceIr ir)
         {
+            if(isIntrinsicAnyType(ir))
+                assert(false, "TODO: Figure out what to do with this case");
+
             with(code)
             {
                 const underlyingVarName = varName~"__underlying";
@@ -492,7 +506,7 @@ private void putValueLiteral(
                 const underlyingVarName = varName~"__underlying";
                 auto number = Asn1Integer.fromNumberGC(value);
 
-                putLine("static immutable ubyte[] ", underlyingVarName, "= [");
+                putLine("static immutable ubyte[] ", underlyingVarName, " = [");
                 indent();
                 put("/* ", value.to!string, " */ ");
                 foreach(byte_; number.rawBytes)
@@ -748,6 +762,33 @@ private void putRawType(
                     );
                 }, emitFinalReturn: false);
             }
+
+            with(code) this.declareToString((){
+                ir.foreachChoiceGC((name, _, __){
+                    putLine("if(", asCamelCase(CHECKER_FUNCTION_PREFIX, name), ")");
+                    putLine("{");
+                    indent();
+                        putLine("depth++;");
+                        putLine("putIndent();");
+                        putLine(`sink("`, name, `: ");`);
+                        putLine(`sink("\n");`);
+                        putLine("static if(__traits(hasMember, typeof(", asCamelCase(GETTER_FUNCTION_PREFIX, name), "())", `, "toString"))`); // @suppress(dscanner.style.long_line)
+                        indent();
+                            putLine(VALUE_FIELD, ".", fixName(name), ".toString(sink, depth+1);");
+                        dedent();
+                        putLine("else");
+                        indent();
+                        putLine("{");
+                            putLine("putIndent();");
+                            putLine(`sink("<no toString impl>\n");`);
+                        dedent();
+                        putLine("}");
+                        putLine("depth--;");
+                    dedent();
+                    putLine("}");
+                    return Result.noError;
+                }).resultEnforce;
+            });
         }
 
         override void visit(Asn1SequenceTypeIr ir)
@@ -865,6 +906,11 @@ private void putRawType(
             immutable MEMORY_VAR_PREFIX = "memory_";
             immutable BACKTRACK_VAR_PREFIX = "backtrack_";
 
+            auto typeRefIr = cast(Asn1TypeReferenceIr)item.type;
+            const isAnyIntrinsic = (typeRefIr !is null && isIntrinsicAnyType(typeRefIr));
+
+            // Here be dragons... this needs a refactor because fml this is combinatronics hell.
+
             with(code)
             {
                 putLine("/+++ TAG FOR FIELD: ", item.name, " +++/");
@@ -872,7 +918,7 @@ private void putRawType(
                 assert(!item.isComponentsOf, "TODO: Handle COMPONENTS OF");
                 assert(!item.isExtensible, "TODO: Handle extensible fields");
 
-                if(item.isOptional) // Backup the MemoryBuffer and restore it if the field doesn't exist.
+                if(item.isOptional || item.defaultValue !is null) // Backup the MemoryBuffer and restore it if the field doesn't exist.
                 {
                     putLine(
                         "auto ", BACKTRACK_VAR_PREFIX, fixName(item.name), " = ", MEMORY_BUFFER_TYPE, "(",
@@ -882,17 +928,23 @@ private void putRawType(
                     );
                 }
 
+                if(item.isOptional || item.defaultValue !is null)
+                {
+                    putLine("if(", DECODER_PARAM_MEMORY, ".bytesLeft != 0)");
+                    putLine("{");
+                    indent();
+                }
                 putLine(
                     "result = ", ASN1_SHORTHAND, ".asn1DecodeComponentHeader!", DECODER_PARAM_RULESET, "(",
                         DECODER_PARAM_MEMORY, ", ",
                         DECODER_VAR_HEADER,
                     ");"
                 );
-                putResultCheck();
+                putResultCheck("decoding header of field '"~item.name~"'");
                 
-                if(!topLevelTag.isNull)
+                if(!topLevelTag.isNull && !isAnyIntrinsic)
                 {
-                    if(item.isOptional)
+                    if(item.isOptional || item.defaultValue !is null)
                     {
                         putLine(
                             "if(",
@@ -930,6 +982,8 @@ private void putRawType(
                         );
                     }
                 }
+                else if(isAnyIntrinsic)
+                    putLine("// Field is the intrinsic ANY type - any tag is allowed.");
 
                 putLine(MEMORY_BUFFER_TYPE, " ", MEMORY_VAR_PREFIX, fixName(item.name), ";");
                 putLine(
@@ -939,7 +993,7 @@ private void putRawType(
                         MEMORY_VAR_PREFIX, fixName(item.name),
                     ");"
                 );
-                putResultCheck();
+                putResultCheck("reading content bytes of field '"~item.name~"'");
 
                 if(topLevelTag.isNull && item.isOptional)
                 {
@@ -960,11 +1014,12 @@ private void putRawType(
 
                 if(!topLevelTag.isNull)
                 {
-                    if(item.isOptional)
+                    if((item.isOptional || item.defaultValue !is null) && !isAnyIntrinsic)
                     {
                         dedent();
                         putLine("}");
                         putLine("else");
+                        putLine("{");
                         indent();
                             putLine(
                                 DECODER_PARAM_MEMORY, " = ", MEMORY_BUFFER_TYPE, "(",
@@ -972,12 +1027,20 @@ private void putRawType(
                                     BACKTRACK_VAR_PREFIX, fixName(item.name), ".cursor",
                                 ");"
                             );
+                            if(item.defaultValue !is null)
+                            {
+                                putLine("result = this.", asCamelCase(SETTER_FUNCTION_PREFIX, item.name), "(",
+                                    asCamelCase(DEFAULT_VALUE_PREFIX, item.name), "()",
+                                ");");
+                                putResultCheck("setting field '"~item.name~"' to default value");
+                            }
                         dedent();
+                        putLine("}");
                     }
                 }
                 else
                 {
-                    if(item.isOptional)
+                    if(item.isOptional && !isAnyIntrinsic)
                     {
                         putLine("return ", RESULT_TYPE, ".noError;");
                         dedent();
@@ -993,8 +1056,27 @@ private void putRawType(
                         dedent();
                         putLine("else if(result.isError)");
                         indent();
-                            putLine("return result;");
+                            putLine(`return result.wrapError("For "~__traits(identifier, typeof(this))~":");`);
                         dedent();
+                    }
+                }
+
+                if(item.isOptional || item.defaultValue !is null)
+                {
+                    dedent();
+                    putLine("}");
+
+                    if(item.defaultValue !is null)
+                    {
+                        putLine("else");
+                        putLine("{");
+                        indent();
+                            putLine("result = this.", asCamelCase(SETTER_FUNCTION_PREFIX, item.name), "(",
+                                asCamelCase(DEFAULT_VALUE_PREFIX, item.name), "()",
+                            ");");
+                            putResultCheck("setting field '"~item.name~"' to default value");
+                        dedent();
+                        putLine("}");
                     }
                 }
 
@@ -1142,7 +1224,7 @@ private void putRawType(
                                     putLine("auto result = this.", asCamelCase(SETTER_FUNCTION_PREFIX, item.name), "(",
                                         asCamelCase(DEFAULT_VALUE_PREFIX, item.name), "()",
                                     ");");
-                                    putResultCheck();
+                                    putResultCheck("setting field '"~item.name~"'");
                                 dedent();
                                 putLine("}");
                             }
@@ -1170,6 +1252,28 @@ private void putRawType(
                     },
                     funcAttributes: "@nogc nothrow"
                 );
+
+                this.declareToString((){
+                    ir.foreachComponentGC((item){
+                        putLine("putIndent();");
+                        putLine("depth++;");
+                        putLine(`sink("`, item.name, `: ");`);
+                        putLine(`sink("\n");`);
+                        putLine("static if(__traits(hasMember, typeof(_", fixName(item.name), ")", `, "toString"))`);
+                        indent();
+                            putLine("_", fixName(item.name), ".toString(sink, depth+1);");
+                        dedent();
+                        putLine("else");
+                        indent();
+                        putLine("{");
+                            putLine("putIndent();");
+                            putLine(`sink("<no toString impl>\n");`);
+                        dedent();
+                        putLine("}");
+                        putLine("depth--;");
+                        return Result.noError;
+                    }).resultEnforce;
+                });
             }
         }
 
@@ -1202,6 +1306,21 @@ private void putRawType(
                         put("return ", BASIC_FIELD_NAME, ";");
                     }, funcAttributes: "@nogc nothrow"
                 );
+
+                this.declareToString((){
+                    putLine("static if(__traits(hasMember, ", typeName, `, "toString"))`);
+                    indent();
+                        putLine(BASIC_FIELD_NAME, ".toString(sink, depth+1);");
+                    dedent();
+                    putLine("else");
+                    putLine("{");
+                    indent();
+                        putLine("putIndent();");
+                        putLine(`sink("<no toString impl>");`);
+                    dedent();
+                    putLine("}");
+                    putLine(`sink("\n");`);
+                });
             }
 
             this.declareFromDecode((){ 
@@ -1243,6 +1362,29 @@ private void putRawType(
                 });
             }
         }
+
+        private void declareToString(scope void delegate() putBody)
+        {
+            with(code)
+            {
+                putLine("private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);");
+                declareFunction("void", "toString(SinkT)", (next){
+                    put("scope SinkT sink");
+                    next();
+
+                    put("int depth = 0");
+                    next();
+                }, (){
+                    putLine(`void putIndent(){ foreach(i; 0..depth) sink("  "); }`);
+                    putLine();
+                    putLine("putIndent();");
+                    putLine(`sink("["~__traits(identifier, typeof(this))~"]\n");`);
+                    putLine("depth++;");
+                    putBody();
+                    putLine("depth--;");
+                });
+            }
+        }
     }
 
     code.declareType(name, (){
@@ -1279,6 +1421,12 @@ private void putRawDerDecodingForField(
 
         override void visit(Asn1TypeReferenceIr ir)
         {
+            if(isIntrinsicAnyType(ir)) // Since this is masquerading as a primitive, we need to call decodePrimitive.
+            {
+                this.decodePrimitive();
+                return;
+            }
+
             with(code)
             {
                 this.decodeTags(memoryVarOverride);
@@ -1294,9 +1442,9 @@ private void putRawDerDecodingForField(
                         DECODER_VAR_HEADER, ".identifier",
                     ");"
                 );
-                putResultCheck();
+                putResultCheck("decoding field '"~fieldName~"'");
                 putLine("result = this.", setterName, "(temp_", fixName(fieldName), ");");
-                putResultCheck();
+                putResultCheck("setting field '"~fieldName~"'");
                 endLine();
             }
         }
@@ -1312,7 +1460,7 @@ private void putRawDerDecodingForField(
                     "result = this.", typeOfOverride.length > 0 ? typeOfOverride : fieldName, 
                     ".foreachElementAuto((element) => ", RESULT_TYPE, ".noError", ");"
                 );
-                putResultCheck();
+                putResultCheck("decoding subelements of SET OF field '"~fieldName~"'");
                 endLine();
             }
         }
@@ -1328,7 +1476,7 @@ private void putRawDerDecodingForField(
                     "result = this.", typeOfOverride.length > 0 ? typeOfOverride : fieldName, 
                     ".foreachElementAuto((element) => ", RESULT_TYPE, ".noError", ");"
                 );
-                putResultCheck();
+                putResultCheck("decoding subelements of SEQEUENCE OF field '"~fieldName~"'");
                 endLine();
             }
         }
@@ -1354,9 +1502,9 @@ private void putRawDerDecodingForField(
                         DECODER_VAR_HEADER, ".identifier",
                     ");"
                 );
-                putResultCheck();
+                putResultCheck("decoding field '"~fieldName~"'");
                 putLine("result = this.", setterName, "(temp_", fixName(fieldName), ");");
-                putResultCheck();
+                putResultCheck("setting field '"~fieldName~"'");
                 endLine();
             }
         }
@@ -1425,7 +1573,7 @@ private void putRawDerDecodingForField(
                                 DECODER_VAR_HEADER,
                             ");"
                         );
-                        putResultCheck();
+                        putResultCheck("decoding header of field '"~fieldName~"'");
 
                         putLine(
                             "result = ", ASN1_SHORTHAND, ".asn1ReadContentBytes(",
@@ -1434,7 +1582,7 @@ private void putRawDerDecodingForField(
                                 memoryVar,
                             ");"
                         );
-                        putResultCheck();
+                        putResultCheck("reading content bytes of field '"~fieldName~"'");
 
                         initialMemoryVar = memoryVar;
                         depth++;
@@ -1475,7 +1623,13 @@ private string rawTypeOf(Asn1TypeIr ir)
         override void visit(Asn1UtcTimeTypeIr ir) { result = ASN1_SHORTHAND~".Asn1UtcTime"; }
 
         // TODO: Handle imported symbols - the IR tree needs to add parent information to handle them properly.
-        override void visit(Asn1TypeReferenceIr ir) { result = fixName("."~ir.typeRef); }
+        override void visit(Asn1TypeReferenceIr ir)
+        {
+            if(isIntrinsicAnyType(ir))
+                result = ASN1_SHORTHAND~".Asn1OctetString";
+            else
+                result = fixName("."~ir.typeRef);
+        }
         override void visit(Asn1TaggedTypeIr ir) => ir.getUnderlyingTypeSkipTags().visitGC(this);
     }
 
@@ -1551,4 +1705,10 @@ private string fixName(scope const char[] name)
     }
 
     return result.assumeUnique;
+}
+
+private bool isIntrinsicAnyType(Asn1TypeReferenceIr ir)
+{
+    // TODO: Add an extra check to ensure the type is from the intrinsics module - IR tree needs parent info first though (or at least module info).
+    return ir.typeRef == INTRINSIC_ANY_NAME;
 }

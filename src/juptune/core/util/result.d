@@ -169,6 +169,14 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
         this.errorType = typeid(Unqual!T); 
     }
 
+    Result wrapError(string newError) @trusted
+    {
+        Result r = this;
+        r.context = String2(r.error, " ", r.context.sliceMaybeFromStack);
+        r.error = newError;
+        return r;
+    }
+
     // Allows if(auto result = ...) { onError }
     bool opCast(T)() // @suppress(dscanner.suspicious.object_const)
     if (is(T == bool)) => this.isError;

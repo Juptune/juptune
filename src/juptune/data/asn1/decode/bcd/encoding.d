@@ -189,6 +189,15 @@ struct Asn1Bool
         ubyte _value;
     }
 
+    void toString(SinkT)(scope SinkT sink, int depth = 0) // @suppress(dscanner.suspicious.object_const)
+    {
+        void putIndent() { foreach(i; 0..depth) sink("  "); }
+        putIndent();
+        sink("[BOOLEAN]\n");
+        putIndent();
+        sink(this.asBool ? "TRUE\n" : "FALSE\n");
+    }
+
     @safe @nogc nothrow:
 
     this(ubyte value) pure const
@@ -258,6 +267,40 @@ struct Asn1Integer
     private
     {
         const(ubyte)[] _value;
+    }
+
+    void toString(SinkT)(scope SinkT sink, int depth = 0) // @suppress(dscanner.suspicious.object_const)
+    {
+        void putIndent() { foreach(i; 0..depth) sink("  "); }
+        putIndent();
+        sink("[INTEGER]\n");
+        putIndent();
+
+        long value;
+        auto result = this.asInt(value);
+        if(result.isError)
+        {
+            import juptune.core.util.conv : toBase16, IntToHexCharBuffer;
+            IntToHexCharBuffer buffer;
+
+            foreach(i, byte_; this._value)
+            {
+                if(i != 0)
+                    sink(", ");
+                if((i % 16) == 0 && i > 0)
+                {
+                    sink("\n");
+                    putIndent();
+                }
+                sink(toBase16(byte_, buffer));
+            }
+        }
+        else
+        {
+            import juptune.core.util.conv : toBase10, IntToCharBuffer;
+            IntToCharBuffer buffer;
+            sink(toBase10(value, buffer));
+        }
     }
 
     @trusted nothrow: // TODO: Look into why array's dtor is unsafe/untrusted // @suppress(dscanner.trust_too_much)
@@ -378,6 +421,31 @@ struct Asn1BitString
     {
         const(ubyte)[]  _value;
         size_t          _bitCount;
+    }
+
+    void toString(SinkT)(scope SinkT sink, int depth = 0) // @suppress(dscanner.suspicious.object_const)
+    {
+        void putIndent() { foreach(i; 0..depth) sink("  "); }
+        putIndent();
+        sink("[BIT STRING]\n");
+        putIndent();
+
+        foreach(i, byte_; this._value)
+        {
+            import juptune.core.util : IntToHexCharBuffer, toBase16;
+
+            if(i != 0)
+                sink(", ");
+            if((i % 16) == 0 && i > 0)
+            {
+                sink("\n");
+                putIndent();
+            }
+
+            IntToHexCharBuffer buffer;
+            sink(toBase16(byte_, buffer)[$-2..$]);
+        }
+        sink("\n");
     }
 
     @trusted nothrow: // @suppress(dscanner.trust_too_much)
@@ -808,6 +876,31 @@ struct Asn1OctetString
         const(ubyte)[] _data;
     }
 
+    void toString(SinkT)(scope SinkT sink, int depth = 0) // @suppress(dscanner.suspicious.object_const)
+    {
+        void putIndent() { foreach(i; 0..depth) sink("  "); }
+        putIndent();
+        sink("[OCTET STRING]\n");
+        putIndent();
+
+        foreach(i, byte_; this._data)
+        {
+            import juptune.core.util : IntToHexCharBuffer, toBase16;
+
+            if(i != 0)
+                sink(", ");
+            if((i % 16) == 0 && i > 0)
+            {
+                sink("\n");
+                putIndent();
+            }
+
+            IntToHexCharBuffer buffer;
+            sink(toBase16(byte_, buffer)[$-2..$]);
+        }
+        sink("\n");
+    }
+
     @trusted nothrow: // @suppress(dscanner.trust_too_much)
 
     /++ 
@@ -1022,6 +1115,32 @@ struct Asn1ObjectIdentifierImpl(bool IsRelative)
         }
     }
 
+    void toString(SinkT)(scope SinkT sink, int depth = 0) // @suppress(dscanner.suspicious.object_const)
+    {
+        void putIndent() { foreach(i; 0..depth) sink("  "); }
+        putIndent();
+        sink("[OBJECT IDENTIFIER]\n");
+        putIndent();
+
+        size_t i;
+        foreach(component; this.components)
+        {
+            import juptune.core.util : IntToCharBuffer, toBase10;
+
+            if(i++ != 0)
+                sink(" ");
+            if((i % 16) == 0 && i > 0)
+            {
+                sink("\n");
+                putIndent();
+            }
+
+            IntToCharBuffer buffer;
+            sink(toBase10(component.get, buffer));
+        }
+        sink("\n");
+    }
+
     @trusted nothrow: // @suppress(dscanner.trust_too_much)
 
     static if(IsRelative)
@@ -1211,7 +1330,7 @@ alias Asn1RelativeObjectIdentifier = Asn1ObjectIdentifierImpl!true;
 //       awkward issue to deal with.
 // TODO: Also mention that yes, this is a really inefficient design, but allocating memory has some annoying
 //       complications - especially around dasn1's code generation.
-struct Asn1SetOfImpl(ElementT, bool IsSetOf)
+struct Asn1SetOfImpl(ElementT, bool IsSetOf) // @suppress(dscanner.suspicious.incomplete_operator_overloading)
 {
     private
     {
@@ -1305,6 +1424,34 @@ struct Asn1SetOfImpl(ElementT, bool IsSetOf)
                 }
                 return Result.noError;
         }
+    }
+
+    void toString(SinkT)(scope SinkT sink, int depth = 0) // @suppress(dscanner.suspicious.object_const)
+    {
+        import juptune.core.util : resultAssert;
+
+        void putIndent() { foreach(i; 0..depth) sink("  "); }
+        putIndent();
+
+        static if(IsSetOf)
+            sink("[SET OF "~ElementT.stringof~"]\n");
+        else
+            sink("[SEQUENCE OF "~ElementT.stringof~"]\n");
+        
+        depth++;
+        scope handler = (ElementT element){
+            static if(__traits(hasMember, ElementT, "toString"))
+                element.toString(sink, depth);
+            else
+            {
+                putIndent();
+                sink("<no toString impl>");
+            }
+            return Result.noError;
+        };
+        this.foreachElementAutoImpl!(typeof(handler), Asn1Ruleset.der)(handler).resultAssert;
+        depth--;
+        sink("\n");
     }
 
     @trusted @nogc nothrow: // @suppress(dscanner.trust_too_much)
@@ -1462,7 +1609,7 @@ struct Asn1SetOfImpl(ElementT, bool IsSetOf)
 alias Asn1SetOf(ElementT) = Asn1SetOfImpl!(ElementT, true);
 alias Asn1SequenceOf(ElementT) = Asn1SetOfImpl!(ElementT, false);
 
-struct Asn1Utf8String
+struct Asn1Utf8String // @suppress(dscanner.suspicious.incomplete_operator_overloading)
 {
     private
     {
@@ -1482,6 +1629,17 @@ struct Asn1Utf8String
         {
             FromDecoding _fromDecoding;
         }
+    }
+
+    void toString(SinkT)(scope SinkT sink, int depth = 0) // @suppress(dscanner.suspicious.object_const)
+    {
+        import juptune.core.util : resultAssert;
+
+        void putIndent() { foreach(i; 0..depth) sink("  "); }
+        putIndent();
+        sink("[UTF8String]\n");
+        sink(this.asSlice);
+        sink("\n");
     }
 
     @trusted @nogc nothrow: // @suppress(dscanner.trust_too_much)
@@ -1527,7 +1685,7 @@ struct Asn1Utf8String
     }
 }
 
-struct Asn1AsciiAlphabetString(string DebugName, string AlphaChars)
+struct Asn1AsciiAlphabetString(string DebugName, string AlphaChars) // @suppress(dscanner.suspicious.incomplete_operator_overloading)
 {
     import juptune.data.alphabet : AsciiAlphabet;
     alias Alphabet = AsciiAlphabet!AlphaChars;
@@ -1550,6 +1708,17 @@ struct Asn1AsciiAlphabetString(string DebugName, string AlphaChars)
         {
             FromDecoding _fromDecoding;
         }
+    }
+
+    void toString(SinkT)(scope SinkT sink, int depth = 0) // @suppress(dscanner.suspicious.object_const)
+    {
+        import juptune.core.util : resultAssert;
+
+        void putIndent() { foreach(i; 0..depth) sink("  "); }
+        putIndent();
+        sink("["~DebugName~"]\n");
+        sink(this.asSlice);
+        sink("\n");
     }
 
     @trusted @nogc nothrow: // @suppress(dscanner.trust_too_much)
@@ -1627,6 +1796,30 @@ struct Asn1UtcTime
         ubyte _hour;
         ubyte _minute;
         ubyte _second;
+    }
+
+    void toString(SinkT)(scope SinkT sink, int depth = 0) // @suppress(dscanner.suspicious.object_const)
+    {
+        import juptune.core.util : resultAssert, toBase10, IntToCharBuffer;
+
+        void putIndent() { foreach(i; 0..depth) sink("  "); }
+        putIndent();
+        sink("[UTCTime]\n");
+        putIndent();
+
+        IntToCharBuffer buffer;
+        sink(toBase10(this.year, buffer));
+        sink("/");
+        sink(toBase10(this.month, buffer));
+        sink("/");
+        sink(toBase10(this.day, buffer));
+        sink(" ");
+        sink(toBase10(this.hour, buffer));
+        sink(":");
+        sink(toBase10(this.minute, buffer));
+        sink(":");
+        sink(toBase10(this.second, buffer));
+        sink(" (UTC)\n");
     }
 
     @trusted @nogc nothrow: // @suppress(dscanner.trust_too_much)

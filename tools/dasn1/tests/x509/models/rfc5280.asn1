@@ -1,5 +1,5 @@
 -- Changes:
---  ANY DEFINED BY -> OCTET STRING
+--  ANY DEFINED BY -> Dasn1-Any intrinsic
 --  Some string types aren't supported, since they have a non-ASCII or utf8 encoding and I cba to write a converter.
 --  `SET/SEQEUENCE SIZE (123) OF...` is rewritten to `SET/SEQUENCE (SIZE (123)) OF...` since the former isn't able to be parsed yet.
 --  Currently GeneralizedTime isn't supported, but given I have 25 years to implement support for it... it'll be ok.
@@ -10,6 +10,10 @@ PKIX1Explicit88 { iso(1) identified-organization(3) dod(6) internet(1)
 DEFINITIONS EXPLICIT TAGS ::=
 
 BEGIN
+
+IMPORTS
+      Dasn1-Any FROM Dasn1-Intrinsics { iso(0) custom(0) dasn1(1) intrinsics(0) }
+;
 
 -- PKIX specific OIDs
 
@@ -45,15 +49,15 @@ id-ad-caRepository OBJECT IDENTIFIER ::= { id-ad 5 }
 -- attribute data types
 AttributeType           ::= OBJECT IDENTIFIER
 
-AttributeValue          ::= OCTET STRING
+-- AttributeValue          ::= ANY
 
 AttributeTypeAndValue   ::= SEQUENCE {
         type    AttributeType,
-        value   AttributeValue }
+        value   Dasn1-Any }
 
 Attribute               ::= SEQUENCE {
       type             AttributeType,
-      values    SET OF AttributeValue }
+      values    SET OF Dasn1-Any }
             -- at least one value is required
 
 
@@ -271,7 +275,7 @@ DirectoryString ::= CHOICE {
 
 AlgorithmIdentifier  ::=  SEQUENCE  {
      algorithm               OBJECT IDENTIFIER,
-     parameters              OCTET STRING OPTIONAL  }
+     parameters              Dasn1-Any OPTIONAL  }
                                 -- contains a value of the type
                                 -- registered for use with the
                                 -- algorithm object identifier value
@@ -405,7 +409,7 @@ ExtensionAttribute ::=  SEQUENCE {
    extension-attribute-type [0] IMPLICIT INTEGER
                    (0..ub-extension-attributes),
    extension-attribute-value [1]
-                   OCTET STRING }
+                   Dasn1-Any }
 
 -- Built-in Domain-defined Attributes
 
