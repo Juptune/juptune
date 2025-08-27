@@ -63,6 +63,7 @@ data_srcs = files(
     './src/juptune/data/utf8.d',
 
     './src/juptune/data/asn1/decode/bcd/encoding.d',
+    './src/juptune/data/asn1/generated/PKIX1Explicit88_1_3_6_1_5_5_7_0_18.d',
     './src/juptune/data/asn1/lang/ast.d',
     './src/juptune/data/asn1/lang/ast2ir.d',
     './src/juptune/data/asn1/lang/common.d',

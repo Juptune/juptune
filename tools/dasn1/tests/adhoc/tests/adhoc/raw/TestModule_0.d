@@ -30,6 +30,29 @@ struct MyBool
         return _value;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, asn1.Asn1Bool, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -45,10 +68,10 @@ struct MyBool
         typeof(_value) temp__value;
         result = typeof(temp__value).fromDecoding!ruleset(memory, temp__value, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
         result = this.set(temp__value);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
 
         return jres.Result.noError;
     }
@@ -149,10 +172,10 @@ struct MyChoice
                     return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 0 for field 'bitstring' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
                 result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
                 if(result.isError)
-                    return result;
+                    return result.wrapError("when decoding header of field 'bitstring' in type "~__traits(identifier, typeof(this))~":");
                 result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_0bitstring);
                 if(result.isError)
-                    return result;
+                    return result.wrapError("when reading content bytes of field 'bitstring' in type "~__traits(identifier, typeof(this))~":");
             jbuf.MemoryReader memory_1bitstring;
                 // EXPLICIT TAG - 10
                 if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
@@ -163,17 +186,17 @@ struct MyChoice
                     return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 10 for field 'bitstring' the tag's value was expected to be 10", jstr.String2("tag value was ", componentHeader.identifier.tag));
                 result = asn1.asn1DecodeComponentHeader!ruleset(memory_0bitstring, componentHeader);
                 if(result.isError)
-                    return result;
+                    return result.wrapError("when decoding header of field 'bitstring' in type "~__traits(identifier, typeof(this))~":");
                 result = asn1.asn1ReadContentBytes(memory_0bitstring, componentHeader.length, memory_1bitstring);
                 if(result.isError)
-                    return result;
+                    return result.wrapError("when reading content bytes of field 'bitstring' in type "~__traits(identifier, typeof(this))~":");
             typeof(Value.bitstring) temp_bitstring;
             result = typeof(temp_bitstring).fromDecoding!ruleset(memory_1bitstring, temp_bitstring, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'bitstring' in type "~__traits(identifier, typeof(this))~":");
             result = this.setBitstring(temp_bitstring);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'bitstring' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
@@ -184,15 +207,60 @@ struct MyChoice
             typeof(Value.boolean) temp_boolean;
             result = typeof(temp_boolean).fromDecoding!ruleset(memory, temp_boolean, componentHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding field 'boolean' in type "~__traits(identifier, typeof(this))~":");
             result = this.setBoolean(temp_boolean);
             if(result.isError)
-                return result;
+                return result.wrapError("when setting field 'boolean' in type "~__traits(identifier, typeof(this))~":");
 
             return jres.Result.noError;
         }
 
         return jres.Result.make(asn1.Asn1DecodeError.choiceHasNoMatch, "when decoding CHOICE of type MyChoice the identifier tag & class were unable to match any known option");
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        if(isBitstring)
+        {
+            depth++;
+            putIndent();
+            sink("bitstring: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getBitstring()), "toString"))
+                _value.bitstring.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        if(isBoolean)
+        {
+            depth++;
+            putIndent();
+            sink("boolean: ");
+            sink("\n");
+            static if(__traits(hasMember, typeof(getBoolean()), "toString"))
+                _value.boolean.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+            depth--;
+        }
+        depth--;
+
     }
 
 }
@@ -279,6 +347,57 @@ struct MySequence
         return jres.Result.noError;
     }
 
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("a: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_a), "toString"))
+            _a.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("b: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_b), "toString"))
+            _b.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
+        sink("c: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_c), "toString"))
+            _c.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
     private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
     jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
         scope ref jbuf.MemoryReader memory,
@@ -293,7 +412,7 @@ struct MySequence
         /+++ TAG FOR FIELD: a +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'a' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE MySequence when reading top level tag 1 for field 'a' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 1)
@@ -301,45 +420,50 @@ struct MySequence
         jbuf.MemoryReader memory_a;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_a);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'a' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - a ++/
         typeof(_a) temp_a;
         result = typeof(temp_a).fromDecoding!ruleset(memory_a, temp_a, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'a' in type "~__traits(identifier, typeof(this))~":");
         result = this.setA(temp_a);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'a' in type "~__traits(identifier, typeof(this))~":");
 
         
         /+++ TAG FOR FIELD: b +++/
         auto backtrack_b = jbuf.MemoryReader(memory.buffer, memory.cursor);
-        result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
-        if(result.isError)
-            return result;
-        if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 1)
+        if(memory.bytesLeft != 0)
         {
-            jbuf.MemoryReader memory_b;
-            result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_b);
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
             if(result.isError)
-                return result;
-            /++ FIELD - b ++/
-            typeof(_b) temp_b;
-            result = typeof(temp_b).fromDecoding!ruleset(memory_b, temp_b, componentHeader.identifier);
-            if(result.isError)
-                return result;
-            result = this.setB(temp_b);
-            if(result.isError)
-                return result;
+                return result.wrapError("when decoding header of field 'b' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 1)
+            {
+                jbuf.MemoryReader memory_b;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_b);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'b' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - b ++/
+                typeof(_b) temp_b;
+                result = typeof(temp_b).fromDecoding!ruleset(memory_b, temp_b, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'b' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setB(temp_b);
+                if(result.isError)
+                    return result.wrapError("when setting field 'b' in type "~__traits(identifier, typeof(this))~":");
 
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_b.buffer, backtrack_b.cursor);
+            }
         }
-        else
-            memory = jbuf.MemoryReader(backtrack_b.buffer, backtrack_b.cursor);
         
         /+++ TAG FOR FIELD: c +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding header of field 'c' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
             return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE MySequence when reading top level tag 2 for field 'c' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 2)
@@ -347,15 +471,15 @@ struct MySequence
         jbuf.MemoryReader memory_c;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_c);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading content bytes of field 'c' in type "~__traits(identifier, typeof(this))~":");
         /++ FIELD - c ++/
         typeof(_c) temp_c;
         result = typeof(temp_c).fromDecoding!ruleset(memory_c, temp_c, componentHeader.identifier);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding field 'c' in type "~__traits(identifier, typeof(this))~":");
         result = this.setC(temp_c);
         if(result.isError)
-            return result;
+            return result.wrapError("when setting field 'c' in type "~__traits(identifier, typeof(this))~":");
 
         
         if(memory.bytesLeft != 0)

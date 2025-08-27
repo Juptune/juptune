@@ -57,8 +57,4 @@ unittest
 
     Certificate cert;
     cert.fromDecoding!(Asn1Ruleset.der)(content, header.identifier).resultAssert;
-
-    import std.stdio : writeln;
-    writeln(cert);
-    assert(false);
 }

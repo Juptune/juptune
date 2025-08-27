@@ -2168,7 +2168,7 @@ Result asn1ReadContentBytes(
     const Asn1Length length,
     scope out MemoryReader contentReader,
 ) @safe @nogc nothrow
-in(length != Asn1Length.init, "The length must be initialized")
+// in(length != Asn1Length.init, "The length must be initialized") // Annoying: A length of 0 matches Asn1Length.init because the SumType doesn't treat .init as an invalid state... *sigh*
 {
     import std.sumtype : match;
     const(ubyte)[] contentBytes;
