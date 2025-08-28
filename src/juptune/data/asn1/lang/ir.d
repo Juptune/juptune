@@ -130,6 +130,7 @@ abstract class Asn1BaseIr
     {
         Asn1Location _roughLocation;
         SemanticStageBit _stageBits;
+        Asn1BaseIr _parent;
     }
 
     this(Asn1Location roughLocation) @nogc nothrow
@@ -140,6 +141,19 @@ abstract class Asn1BaseIr
     final Asn1Location getRoughLocation() @nogc nothrow
     {
         return this._roughLocation;
+    }
+
+    final void setParent(Asn1BaseIr parent) @nogc nothrow
+    in(parent !is null, "parent is null")
+    in(this._parent is null, "parent has already been set")
+    {
+        this._parent = parent;
+    }
+
+    final Asn1BaseIr getParent() @nogc nothrow
+    in(this._parent !is null, "parent has not been set")
+    {
+        return this._parent;
     }
 
     void dispose() @nogc nothrow {}
@@ -505,6 +519,9 @@ final class Asn1ModuleIr : Asn1BaseIr
         this._tagDefault = tagDefault;
         this._extensibilityImplied = extensibilityImplied;
         this._exports = exports;
+
+        moduleVersion.setParent(this);
+        exports.setParent(this);
     }
 
     override void dispose() @nogc nothrow
@@ -538,6 +555,8 @@ final class Asn1ModuleIr : Asn1BaseIr
         scope Asn1ErrorHandler errors
     )
     {
+        ass.setParent(this);
+
         if(this._symbolsByName.getPtr(ass.getSymbolName()) !is null)
         {
             return Result.make(
@@ -560,6 +579,7 @@ final class Asn1ModuleIr : Asn1BaseIr
     )
     in(imports !is null, "imports is null")
     {
+        imports.setParent(this);
         this._imports = imports;
 
         // TODO: I think Asn1 does technically allow for multiple imports with the same, just from
@@ -684,7 +704,8 @@ final class Asn1ModuleIr : Asn1BaseIr
         if(result.isError)
             return result;
         
-        result = this._imports.doSemanticStage(stageBit, newLookup, context, info, errors);
+        // NOTE: Due to the hack in Asn1ImportIr, we can't pass through newLookup but instead have to pass in only the user lookup.
+        result = this._imports.doSemanticStage(stageBit, lookup, context, info, errors);
         if(result.isError)
             return result;
 
@@ -804,6 +825,9 @@ final class Asn1ExportsIr : Asn1BaseIr
     in(valueRefIr !is null, "valueRefIr is null")
     {
         import std.algorithm : any, map, filter;
+        
+        valueRefIr.setParent(this);
+        
         if(this._items
                 .slice
                 .map!(i => cast(Asn1ValueReferenceIr)i)
@@ -833,6 +857,9 @@ final class Asn1ExportsIr : Asn1BaseIr
     in(typeRefIr !is null, "typeRefIr is null")
     {
         import std.algorithm : any, map, filter;
+
+        typeRefIr.setParent(this);
+
         if(this._items
                 .slice
                 .map!(i => cast(Asn1TypeReferenceIr)i)
@@ -964,11 +991,15 @@ final class Asn1ImportsIr : Asn1BaseIr
         this._importsLock = true;
         scope(exit) this._importsLock = false;
 
+        if(optionalModuleVersion !is null)
+            optionalModuleVersion.setParent(this);
+
         this._imports.put(ImportsFromModule(moduleRef, optionalModuleVersion));
         scope importsPtr = &this._imports[$-1]; // Done this way around so the import array doesn't perform a needless copy
 
         Result addImport(Asn1BaseIr ir)
         {
+            ir.setParent(this);
             importsPtr.imports.put(ItemT(ir));
             return Result.noError;
         }
@@ -1036,17 +1067,27 @@ final class Asn1ImportsIr : Asn1BaseIr
                     return result;
             }
 
+            // This is a hack lol, but I don't have a super great way to deal with it right now.
+            // Always perform semantic passes on dependencies first.
+            Asn1ModuleIr importModIr;
+            auto result = this._registry.getModuleOrNull(item.moduleRef, item.moduleVersion, importModIr, errors);
+            if(result.isError)
+                return result;
+            result = importModIr.doSemanticStage(stageBit, lookup, context, info, errors); // Reminder: `lookup` in this case is the raw user-provided lookup, without the module lookup wrapper.
+            if(result.isError)
+                return result;
+
             foreach(import_; item.imports)
             {
                 if(stageBit != SemanticStageBit.resolveReferences)
                 {
-                    auto result = import_.doSemanticStage(stageBit, lookup, context, info, errors);
+                    result = import_.doSemanticStage(stageBit, lookup, context, info, errors);
                     if(result.isError)
                         return result;
                 }
                 else
                 {
-                    auto result = this.doSemanticImport(item, import_, errors);
+                    result = this.doSemanticImport(item, import_, errors);
                     if(result.isError)
                         return result;
                 }
@@ -1168,6 +1209,9 @@ final class Asn1ValueAssignmentIr : Asn1AssignmentIr
         this._name = name;
         this._type = type;
         this._value = value;
+
+        type.setParent(this);
+        value.setParent(this);
     }
 
     override const(char)[] getSymbolName() => this._name;
@@ -1218,6 +1262,8 @@ final class Asn1TypeAssignmentIr : Asn1AssignmentIr
         super(roughLocation);
         this._name = name;
         this._type = type;
+
+        type.setParent(this);
     }
 
     override const(char)[] getSymbolName() => this._name;
@@ -1283,6 +1329,8 @@ abstract class Asn1TypeIr : Asn1BaseIr
     )
     in(constraint !is null, "constraint is null")
     {
+        constraint.setParent(this);
+
         const bits = constraint.getConstraintBits();
         String2 firstFailure;
         foreach(bit; ALL_CONSTRAINT_BITS)
@@ -1460,6 +1508,8 @@ final class Asn1BitStringTypeIr : Asn1TypeIr
     if(is(NodeT == Asn1IntegerValueIr) || is(NodeT == Asn1ValueReferenceIr))
     in(node !is null, "named bit value is null")
     {
+        node.setParent(this);
+
         if(this._namedBits.getPtr(name) !is null)
         {
             return Result.make(
@@ -1622,6 +1672,8 @@ final class Asn1ChoiceTypeIr : Asn1TypeIr
     {
         import std.algorithm : any;
 
+        type.setParent(this);
+
         if(this._choices.slice.any!(item => item.name == name))
         {
             return Result.make(
@@ -1718,6 +1770,8 @@ final class Asn1EnumeratedTypeIr : Asn1TypeIr
     {
         import std.algorithm : any;
 
+        emptyValue.setParent(this);
+
         if(this._enumerations.slice.any!(item => item.name == name))
         {
             return Result.make(
@@ -1740,6 +1794,8 @@ final class Asn1EnumeratedTypeIr : Asn1TypeIr
     in(enumeration !is null, "enumeration is null")
     {
         import std.algorithm : any;
+
+        enumeration.setParent(this);
 
         if(this._enumerations.slice.any!(item => item.name == name))
         {
@@ -1910,6 +1966,8 @@ final class Asn1IntegerTypeIr : Asn1TypeIr
     if(is(NodeT == Asn1IntegerValueIr) || is(NodeT == Asn1ValueReferenceIr))
     in(node !is null, "named number value is null")
     {
+        node.setParent(this);
+
         if(this._namedNumbers.getPtr(name) !is null)
         {
             return Result.make(
@@ -2112,6 +2170,8 @@ private final class Asn1SequenceTypeBase(string Kind, ubyte UniversalTag) : Asn1
     {
         import std.algorithm : any;
 
+        node.setParent(this);
+
         if(this._components.slice.any!(c => c.name == name))
         {
             return Result.make(
@@ -2142,6 +2202,9 @@ private final class Asn1SequenceTypeBase(string Kind, ubyte UniversalTag) : Asn1
     in(node !is null, "component is null")
     {
         import std.algorithm : any;
+
+        node.setParent(this);
+        value.setParent(this);
 
         if(this._components.slice.any!(c => c.name == name))
         {
@@ -2274,6 +2337,8 @@ private final class Asn1SequenceOfTypeBase(string Kind, ubyte UniversalTag) : As
     {
         this(roughLocation);
         this._type = type;
+
+        type.setParent(this);
     }
 
     this(Asn1Location roughLocation, Asn1TypeIr type, const(char)[] name)
@@ -2283,6 +2348,8 @@ private final class Asn1SequenceOfTypeBase(string Kind, ubyte UniversalTag) : As
         this(roughLocation);
         this._type = type;
         this._name = name;
+
+        type.setParent(this);
     }
 
     Nullable!(const(char)[]) getItemTypeName() => this._name;
@@ -2355,6 +2422,8 @@ final class Asn1TaggedTypeIr : Asn1TypeIr
         this._class = class_;
         this._number = number;
         this._encoding = encoding;
+
+        number.setParent(this);
     }
     Class getClass() => this._class;
     Asn1ValueIr getNumberIr() => this._number; // TODO: Helper function to resolve it to a number
@@ -2364,6 +2433,7 @@ final class Asn1TaggedTypeIr : Asn1TypeIr
     in(type !is null, "type is null")
     {
         this._type = type;
+        type.setParent(this);
     }
     Asn1TypeIr getUnderlyingType()
     out(result; result !is null, "Underlying type hasn't been set yet")
@@ -2672,6 +2742,8 @@ final class Asn1ChoiceValueIr : Asn1ValueIr
         super(roughLocation);
         this._name = name;
         this._value = value;
+
+        value.setParent(this);
     }
 
     const(char)[] getChoiceName() => this._name;
@@ -3031,6 +3103,8 @@ final class Asn1NamedValueSequenceIr : Asn1ValueIr
     {
         import std.algorithm : any;
 
+        value.setParent(this);
+
         // Future: use a hashmap instead if needed - ASN.1 named sequences are very rarely even double digits in length.
         if(this._values.slice.any!(kvp => kvp.name == name))
         {
@@ -3112,6 +3186,7 @@ final class Asn1ObjectIdSequenceValueIr : Asn1ValueIr
     void addObjectId(Asn1ValueIr value)
     in(value !is null, "value is null")
     {
+        value.setParent(this);
         this._values.put(value);
     }
 
@@ -3327,6 +3402,7 @@ final class Asn1UnionConstraintIr : Asn1ConstraintIr
     void addUnionConstraint(Asn1ConstraintIr constraint)
     in(constraint !is null, "constraint is null")
     {
+        constraint.setParent(this);
         this._constraintBit |= constraint.getConstraintBits();
         this._constraints.put(constraint);
     }
@@ -3392,6 +3468,7 @@ final class Asn1IntersectionConstraintIr : Asn1ConstraintIr
     void addIntersectionConstraint(Asn1ConstraintIr constraint)
     in(constraint !is null, "constraint is null")
     {
+        constraint.setParent(this);
         this._constraintBit |= constraint.getConstraintBits();
         this._constraints.put(constraint);
     }
@@ -3457,6 +3534,9 @@ final class Asn1ConstraintWithExclusionsIr : Asn1ConstraintIr
         super(constraint.getRoughLocation());
         this._constraint = constraint;
         this._exclusion = exclusion;
+
+        constraint.setParent(this);
+        exclusion.setParent(this);
     }
 
     override ConstraintBit getConstraintBits() 
@@ -3499,6 +3579,8 @@ final class Asn1SingleValueConstraintIr : Asn1ConstraintIr
     {
         super(value.getRoughLocation());
         this._value = value;
+        
+        value.setParent(this);
     }
 
     Asn1ValueIr getValue() => this._value;
@@ -3538,6 +3620,8 @@ final class Asn1ContainedSubtypeConstraintIr : Asn1ConstraintIr
     {
         super(type.getRoughLocation());
         this._type = type;
+
+        type.setParent(this);
     }
 
     Asn1TypeIr getSubtype() => this._type;
@@ -3585,6 +3669,11 @@ final class Asn1ValueRangeConstraintIr : Asn1ConstraintIr
         super(location);
         this._lower = lower;
         this._upper = upper;
+
+        if(lower.valueIr !is null)
+            lower.valueIr.setParent(this);
+        if(upper.valueIr !is null)
+            upper.valueIr.setParent(this);
     }
 
     Endpoint getLower() => this._lower;
@@ -3640,6 +3729,10 @@ final class Asn1PermittedAlphabetConstraintIr : Asn1ConstraintIr
         this._constraint = constraint;
         this._additionalConstraint = additional;
         this._isExtensible = isExtensible;
+
+        constraint.setParent(this);
+        if(additional !is null)
+            additional.setParent(this);
     }
 
     Asn1ConstraintIr getMainConstraint() => this._constraint;
@@ -3693,6 +3786,10 @@ final class Asn1SizeConstraintIr : Asn1ConstraintIr
         this._constraint = constraint;
         this._additionalConstraint = additional;
         this._isExtensible = isExtensible;
+
+        constraint.setParent(this);
+        if(additional !is null)
+            additional.setParent(this);
     }
 
     Asn1ConstraintIr getMainConstraint() => this._constraint;
@@ -3741,6 +3838,8 @@ final class Asn1PatternConstraintIr : Asn1ConstraintIr
     {
         super(value.getRoughLocation());
         this._value = value;
+
+        value.setParent(this);
     }
 
     Asn1ValueIr getValue() => this._value;
@@ -4058,5 +4157,57 @@ unittest
             barType BarType ::= FALSE
         END
     `, registry, handler).resultAssert;
+    assert(!handler.wasCalled);
+}
+
+@("Asn1ModuleRegistry - edge case where imported type references another type")
+unittest
+{
+    // This test is ensuring that an imported reference for id2 is succesfully having its
+    // semantic pass ran under the lookup context of its original module still, since there used
+    // to be a bug where it'd have the lookup context of ModTwo instead of ModOne.
+
+    import juptune.core.util : resultAssert, resultAssertSameCode;
+    import juptune.data.asn1.lang.operations : asn1AreObjectIdentifiersEqual;
+    import juptune.data.asn1.lang.tooling : asn1ParseWithSemantics, Asn1PrintfErrorHandler;
+
+    Asn1ParserContext context;
+    Asn1ModuleIr modOne, modTwo, modThree;
+    scope registry = new Asn1ModuleRegistry();
+
+    auto handler = new Asn1PrintfErrorHandler();
+    asn1ParseWithSemantics(context, modOne, `
+        ModOne { foo(1) } DEFINITIONS ::= BEGIN
+            EXPORTS ALL;
+
+            id1 OBJECT IDENTIFIER ::= { 1 2 }
+            id2 OBJECT IDENTIFIER ::= { id1 3 4 }
+        END
+    `, registry, handler).resultAssert;
+
+    asn1ParseWithSemantics(context, modTwo, `
+        ModTwo { bar(2) } DEFINITIONS ::= BEGIN
+            IMPORTS id2 FROM ModOne { 1 };
+
+            forward OBJECT IDENTIFIER ::= id2
+        END
+    `, registry, handler).resultAssert;
+
+    Asn1ValueAssignmentIr forwardAss;
+    modTwo.getAssignmentByName("forward", forwardAss).resultAssert;
+
+    auto id2ValueIr = cast(Asn1ObjectIdSequenceValueIr)(
+        cast(Asn1ValueReferenceIr)forwardAss.getSymbolValue()
+    ).getResolvedValueRecurse();
+    assert(id2ValueIr !is null);
+    
+    bool areEqual;
+    asn1AreObjectIdentifiersEqual(
+        cast(Asn1ObjectIdSequenceValueIr)(cast(Asn1ValueReferenceIr)id2ValueIr._values[0]).getResolvedValueRecurse(), 
+        cast(ulong[])[1, 2], 
+        areEqual, handler
+    ).resultAssert;
+    assert(areEqual);
+
     assert(!handler.wasCalled);
 }

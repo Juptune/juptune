@@ -14,7 +14,7 @@ import std.typecons : Nullable;
 
 import juptune.core.util                : Result;
 import juptune.data.asn1.lang.common    : Asn1ErrorHandler;
-import juptune.data.asn1.lang.ir        : Asn1TypeIr, Asn1ValueIr, Asn1TaggedTypeIr;
+import juptune.data.asn1.lang.ir        : Asn1TypeIr, Asn1ValueIr, Asn1TaggedTypeIr, Asn1ModuleIr, Asn1BaseIr;
 
 /++
  + Determines if the two IR nodes are valid OBJECT IDENTIFIER values, and are
@@ -91,37 +91,14 @@ in(errors !is null, "errors is null")
             cursor++;
         }
 
-        // TODO: If the logic ever needs to grow, just DRY things up a bit - not too worth the effort right now.
-        // TODO: This function might need to also support the usecase where there's nested OBJECT IDENTIFIERs?
-        static if(is(IrT == Asn1ObjectIdSequenceValueIr))
+        Result handleValue(string DebugName)(Asn1ValueIr value)
         {
-            length = objId.getObjectCount();
-            auto result = objId.foreachObjectId((value){
-                if(auto casted = cast(Asn1ValueReferenceIr)value)
-                    value = casted.getResolvedValueRecurse();
+            if(auto casted = cast(Asn1ValueReferenceIr)value)
+                value = casted.getResolvedValueRecurse();
 
-                if(auto intIr = cast(Asn1IntegerValueIr)value)
-                {
-                    if(intIr.isNegative)
-                    {
-                        return Result.make(
-                            Asn1SemanticError.typeMismatch,
-                            "value type mismatch",
-                            errors.errorAndString(
-                                value.getRoughLocation(),
-                                "when comparing OBJECT IDENTIFIER values, expected value #", cursor,
-                                " within an ObjectIdSequence to a positive number, instead of -", intIr.getNumberText()
-                            )
-                        );
-                    }
-
-                    ulong number;
-                    auto result = intIr.asUnsigned(number, errors);
-                    if(result.isError)
-                        return result;
-                    put(number);
-                }
-                else
+            if(auto intIr = cast(Asn1IntegerValueIr)value)
+            {
+                if(intIr.isNegative)
                 {
                     return Result.make(
                         Asn1SemanticError.typeMismatch,
@@ -129,11 +106,39 @@ in(errors !is null, "errors is null")
                         errors.errorAndString(
                             value.getRoughLocation(),
                             "when comparing OBJECT IDENTIFIER values, expected value #", cursor,
-                            " within an ObjectIdSequence to be of type INTEGER, not type ", typeid(value).name
+                            " within an ", DebugName, " to a positive number, instead of -", intIr.getNumberText()
                         )
                     );
                 }
-                return Result.noError;
+
+                ulong number;
+                auto result = intIr.asUnsigned(number, errors);
+                if(result.isError)
+                    return result;
+                put(number);
+            }
+            else
+            {
+                return Result.make(
+                    Asn1SemanticError.typeMismatch,
+                    "value type mismatch",
+                    errors.errorAndString(
+                        value.getRoughLocation(),
+                        "when comparing OBJECT IDENTIFIER values, expected value #", cursor,
+                        " within an ", DebugName, " to be of type INTEGER, not type ", typeid(value).name
+                    )
+                );
+            }
+            return Result.noError;
+        }
+
+        // TODO: If the logic ever needs to grow, just DRY things up a bit - not too worth the effort right now.
+        // TODO: This function might need to also support the usecase where there's nested OBJECT IDENTIFIERs?
+        static if(is(IrT == Asn1ObjectIdSequenceValueIr))
+        {
+            length = objId.getObjectCount();
+            auto result = objId.foreachObjectId((value){
+                return handleValue!("ObjectIdSequence")(value);
             }, errors);
             if(result.isError)
                 return result;
@@ -142,43 +147,7 @@ in(errors !is null, "errors is null")
         {
             length = objId.getValueCount();
             auto result = objId.foreachSequenceValue((value){
-                if(auto casted = cast(Asn1ValueReferenceIr)value)
-                    value = casted.getResolvedValueRecurse();
-
-                if(auto intIr = cast(Asn1IntegerValueIr)value)
-                {
-                    if(intIr.isNegative)
-                    {
-                        return Result.make(
-                            Asn1SemanticError.typeMismatch,
-                            "value type mismatch",
-                            errors.errorAndString(
-                                value.getRoughLocation(),
-                                "when comparing OBJECT IDENTIFIER values, expected value #", cursor,
-                                " within a ValueSequence to a positive number, instead of -", intIr.getNumberText()
-                            )
-                        );
-                    }
-
-                    ulong number;
-                    auto result = intIr.asUnsigned(number, errors);
-                    if(result.isError)
-                        return result;
-                    put(number);
-                }
-                else
-                {
-                    return Result.make(
-                        Asn1SemanticError.typeMismatch,
-                        "value type mismatch",
-                        errors.errorAndString(
-                            value.getRoughLocation(),
-                            "when comparing OBJECT IDENTIFIER values, expected value #", cursor,
-                            " within a ValueSequence to be of type INTEGER, not type ", typeid(value).name
-                        )
-                    );
-                }
-                return Result.noError;
+                return handleValue!("ValueSequence")(value);
             }, errors);
             if(result.isError)
                 return result;
@@ -641,4 +610,12 @@ unittest
         catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
             assert(false, "\n["~name~"]:\n"~err.msg);
     }
+}
+
+Asn1ModuleIr asn1GetParentModule(Asn1BaseIr ir) @nogc nothrow
+in(ir !is null, "ir is null")
+{
+    if(auto modIr = cast(Asn1ModuleIr)ir)
+        return modIr;
+    return asn1GetParentModule(ir.getParent());
 }
