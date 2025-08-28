@@ -49,6 +49,8 @@ final class DlangCodeBuilder
         this._currentModule = currentModule;
     }
 
+    Asn1ModuleIr currentModule() => this._currentModule;
+
     void indent()
     {
         this._indent++;
@@ -114,7 +116,10 @@ final class DlangCodeBuilder
             
             putLine(
                 "static import ",
+                dlangId, // TODO: Make this a bit better since this prevents modules with the same name but different versions from being used together.
+                " = ",
                 context.baseModuleComponents.joiner("."), // TODO: Alow different modules to have different bases, configurable by the user
+                ".",
                 dlangId,
                 ";"
             );
@@ -336,7 +341,7 @@ string generateRawDlangModule(Asn1ModuleIr mod, ref DlangGeneratorContext contex
             else if(auto valueAssIr = cast(Asn1ValueAssignmentIr)assIr)
             {
                 declareFunction(
-                    rawTypeOf(valueAssIr.getSymbolType()),
+                    rawTypeOf(valueAssIr.getSymbolType(), mod, context.errors),
                     fixName(valueAssIr.getSymbolName()),
                     (scope next){},
                     (){
@@ -403,13 +408,18 @@ private void putValueLiteral(
                         auto item = code._currentModule.lookup(new Asn1ValueReferenceIr(
                             subValueIr.getRoughLocation(), subValueName
                         ));
-                        assert(!item.isNull, "todo: this needs to be handled in Juptune for a better error message");
+                        assert(!item.isNull, "todo: this needs to be handled in Juptune for a better error message "~subValueName);
                         
-                        auto castedIr = cast(Asn1ValueAssignmentIr)item.get;
-                        assert(castedIr !is null, "todo: this also needs to be handled in Juptune for a better error message");
-
-                        getIds(castedIr.getSymbolValue());                        
-                        getIds(subValueIr);
+                        if(auto castedIr = cast(Asn1ValueAssignmentIr)item.get)
+                        {
+                            getIds(castedIr.getSymbolValue());                        
+                            getIds(subValueIr);
+                        }
+                        else // Last ditch attempt - needs to be made better by putting something into Juptune natively.
+                        {
+                            getIds(cast(Asn1ValueIr)item.get.ir);
+                            getIds(subValueIr);
+                        }
                         return Result.noError;
                     }, context.errors).resultEnforce;
                 }
@@ -456,7 +466,7 @@ private void putValueLiteral(
                 dedent();
                 putLine();
                 putLine("];");
-                put(varName, " = ", rawTypeOf(typeIr), ".fromUnownedBytes(");
+                put(varName, " = ", rawTypeOf(typeIr, code.currentModule, context.errors), ".fromUnownedBytes(");
                     put(ids.length == 0 ? "0" : ids[0].to!string, ", ");
                     put(ids.length == 1 ? "0" : ids[1].to!string, ", ");
                 putLine(valueName, ");");
@@ -537,7 +547,7 @@ private void putValueLiteral(
     if(auto valueRefIr = cast(Asn1ValueReferenceIr)valueIr)
         valueIr = valueRefIr.getResolvedValueRecurse();
 
-    code.putLine(rawTypeOf(typeIr), " ", varName, ";");
+    code.putLine(rawTypeOf(typeIr, code.currentModule, context.errors), " ", varName, ";");
 
     scope visitor = new TypeVisitor();
     typeIr.visitGC(visitor);
@@ -555,17 +565,17 @@ private void putRawType(
         static immutable BASIC_FIELD_NAME = "_value";
 
         override void visit(Asn1TaggedTypeIr ir) => ir.getUnderlyingTypeSkipTags().visitGC(this);
-        override void visit(Asn1BooleanTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
-        override void visit(Asn1ObjectIdentifierTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
-        override void visit(Asn1OctetStringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
-        override void visit(Asn1SetOfTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
-        override void visit(Asn1SequenceOfTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
-        override void visit(Asn1UTF8StringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
-        override void visit(Asn1PrintableStringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
-        override void visit(Asn1NumericStringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
-        override void visit(Asn1IA5StringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
-        override void visit(Asn1TypeReferenceIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
-        override void visit(Asn1UtcTimeTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir));
+        override void visit(Asn1BooleanTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir, code.currentModule, context.errors));
+        override void visit(Asn1ObjectIdentifierTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir, code.currentModule, context.errors));
+        override void visit(Asn1OctetStringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir, code.currentModule, context.errors));
+        override void visit(Asn1SetOfTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir, code.currentModule, context.errors));
+        override void visit(Asn1SequenceOfTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir, code.currentModule, context.errors));
+        override void visit(Asn1UTF8StringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir, code.currentModule, context.errors));
+        override void visit(Asn1PrintableStringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir, code.currentModule, context.errors));
+        override void visit(Asn1NumericStringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir, code.currentModule, context.errors));
+        override void visit(Asn1IA5StringTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir, code.currentModule, context.errors));
+        override void visit(Asn1TypeReferenceIr ir) => this.wrapAroundBasicType(rawTypeOf(ir, code.currentModule, context.errors));
+        override void visit(Asn1UtcTimeTypeIr ir) => this.wrapAroundBasicType(rawTypeOf(ir, code.currentModule, context.errors));
 
         override void visit(Asn1BitStringTypeIr ir)
         {
@@ -588,7 +598,7 @@ private void putRawType(
                 putLine('}');
             }
 
-            this.wrapAroundBasicType(rawTypeOf(ir));
+            this.wrapAroundBasicType(rawTypeOf(ir, code.currentModule, context.errors));
         }
         
         override void visit(Asn1IntegerTypeIr ir)
@@ -612,7 +622,7 @@ private void putRawType(
                 putLine('}');
             }
 
-            this.wrapAroundBasicType(rawTypeOf(ir));
+            this.wrapAroundBasicType(rawTypeOf(ir, code.currentModule, context.errors));
         }
 
         override void visit(Asn1ChoiceTypeIr ir)
@@ -638,7 +648,7 @@ private void putRawType(
 
                 declareType(VALUE_UNION, (){
                     ir.foreachChoiceGC((name, typeIr, _){
-                        putLine(rawTypeOf(typeIr), ' ', fixName(name), ";");
+                        putLine(rawTypeOf(typeIr, code.currentModule, context.errors), ' ', fixName(name), ";");
                         return Result.noError;
                     }).resultEnforce;
                 }, type: "union");
@@ -646,7 +656,7 @@ private void putRawType(
                 putLine("// Sanity check: Ensuring that no types have a proper dtor, as they won't be called.");
                 putLine("import std.traits : hasElaborateDestructor;");
                 ir.foreachChoiceGC((name, typeIr, __){
-                    putLine("static assert(!hasElaborateDestructor!(", rawTypeOf(typeIr), `), "Report a bug if you see this.");`); // @suppress(dscanner.style.long_line)
+                    putLine("static assert(!hasElaborateDestructor!(", rawTypeOf(typeIr, code.currentModule, context.errors), `), "Report a bug if you see this.");`); // @suppress(dscanner.style.long_line)
                     return Result.noError;
                 }).resultEnforce;
                 endLine();
@@ -1102,7 +1112,7 @@ private void putRawType(
                         // I don't want to use Nullable since it makes some of the other code gen logic
                         // kind of clunky, especially where `typeof()` is currently used.
                         putLine("bool ", IS_SET_PREFIX, fixName(item.name), ";");
-                        putLine(rawTypeOf(item.type), " _", fixName(item.name), ";");
+                        putLine(rawTypeOf(item.type, code.currentModule, context.errors), " _", fixName(item.name), ";");
 
                         return Result.noError;
                     }).resultEnforce;
@@ -1110,7 +1120,7 @@ private void putRawType(
 
                 ir.foreachComponentGC((item){
                     const itemTypeName = (item.isOptional)
-                        ? (NULLABLE_TYPE~"!("~rawTypeOf(item.type)~")")
+                        ? (NULLABLE_TYPE~"!("~rawTypeOf(item.type, code.currentModule, context.errors)~")")
                         : ("typeof(_"~fixName(item.name)~")").idup;
 
                     declareFunction(
@@ -1603,7 +1613,7 @@ private void putRawDerDecodingForField(
     fieldType.visitGC(visitor);
 }
 
-private string rawTypeOf(Asn1TypeIr ir)
+private string rawTypeOf(Asn1TypeIr ir, Asn1ModuleIr currentModule, Asn1ErrorHandler errors)
 {
     string result;
 
@@ -1613,8 +1623,8 @@ private string rawTypeOf(Asn1TypeIr ir)
         override void visit(Asn1BitStringTypeIr ir) { result = ASN1_SHORTHAND~".Asn1BitString"; }
         override void visit(Asn1ObjectIdentifierTypeIr ir) { result = ASN1_SHORTHAND~".Asn1ObjectIdentifier"; }
         override void visit(Asn1OctetStringTypeIr ir) { result = ASN1_SHORTHAND~".Asn1OctetString"; }
-        override void visit(Asn1SetOfTypeIr ir) { result = ASN1_SHORTHAND~".Asn1SetOf!("~rawTypeOf(ir.getTypeOfItems())~")"; } // @suppress(dscanner.style.long_line)
-        override void visit(Asn1SequenceOfTypeIr ir) { result = ASN1_SHORTHAND~".Asn1SequenceOf!("~rawTypeOf(ir.getTypeOfItems())~")"; } // @suppress(dscanner.style.long_line)
+        override void visit(Asn1SetOfTypeIr ir) { result = ASN1_SHORTHAND~".Asn1SetOf!("~rawTypeOf(ir.getTypeOfItems(), currentModule, errors)~")"; } // @suppress(dscanner.style.long_line)
+        override void visit(Asn1SequenceOfTypeIr ir) { result = ASN1_SHORTHAND~".Asn1SequenceOf!("~rawTypeOf(ir.getTypeOfItems(), currentModule, errors)~")"; } // @suppress(dscanner.style.long_line)
         override void visit(Asn1IntegerTypeIr ir) { result = ASN1_SHORTHAND~".Asn1Integer"; }
         override void visit(Asn1UTF8StringTypeIr ir) { result = ASN1_SHORTHAND~".Asn1Utf8String"; }
         override void visit(Asn1PrintableStringTypeIr ir) { result = ASN1_SHORTHAND~".Asn1PrintableString"; }
@@ -1622,13 +1632,24 @@ private string rawTypeOf(Asn1TypeIr ir)
         override void visit(Asn1IA5StringTypeIr ir) { result = ASN1_SHORTHAND~".Asn1Ia5String"; }
         override void visit(Asn1UtcTimeTypeIr ir) { result = ASN1_SHORTHAND~".Asn1UtcTime"; }
 
-        // TODO: Handle imported symbols - the IR tree needs to add parent information to handle them properly.
         override void visit(Asn1TypeReferenceIr ir)
         {
+            import juptune.data.asn1.lang.operations : asn1GetParentModule;
+
+            auto parentModIr = asn1GetParentModule(ir.getResolvedType());
+
             if(isIntrinsicAnyType(ir))
                 result = ASN1_SHORTHAND~".Asn1OctetString";
-            else
+            else if (parentModIr is currentModule)
                 result = fixName("."~ir.typeRef);
+            else
+            {
+                result = fixName(
+                    getModuleDlangIdentifier(parentModIr.getModuleName(), parentModIr.getModuleVersion(), errors)
+                    ~ "."
+                    ~ ir.typeRef
+                );
+            }
         }
         override void visit(Asn1TaggedTypeIr ir) => ir.getUnderlyingTypeSkipTags().visitGC(this);
     }

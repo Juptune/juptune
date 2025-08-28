@@ -132,7 +132,6 @@ in(errors !is null, "errors is null")
             return Result.noError;
         }
 
-        // TODO: If the logic ever needs to grow, just DRY things up a bit - not too worth the effort right now.
         // TODO: This function might need to also support the usecase where there's nested OBJECT IDENTIFIERs?
         static if(is(IrT == Asn1ObjectIdSequenceValueIr))
         {
@@ -614,6 +613,7 @@ unittest
 
 Asn1ModuleIr asn1GetParentModule(Asn1BaseIr ir) @nogc nothrow
 in(ir !is null, "ir is null")
+out(mod; mod !is null, "bug: parent module not found")
 {
     if(auto modIr = cast(Asn1ModuleIr)ir)
         return modIr;

@@ -4172,7 +4172,7 @@ unittest
     import juptune.data.asn1.lang.tooling : asn1ParseWithSemantics, Asn1PrintfErrorHandler;
 
     Asn1ParserContext context;
-    Asn1ModuleIr modOne, modTwo, modThree;
+    Asn1ModuleIr modOne, modTwo;
     scope registry = new Asn1ModuleRegistry();
 
     auto handler = new Asn1PrintfErrorHandler();
@@ -4203,8 +4203,8 @@ unittest
     
     bool areEqual;
     asn1AreObjectIdentifiersEqual(
-        cast(Asn1ObjectIdSequenceValueIr)(cast(Asn1ValueReferenceIr)id2ValueIr._values[0]).getResolvedValueRecurse(), 
-        cast(ulong[])[1, 2], 
+        cast(Asn1ObjectIdSequenceValueIr)(cast(Asn1ValueReferenceIr)id2ValueIr._values[0]).getResolvedValueRecurse(),
+        cast(ulong[])[1, 2],
         areEqual, handler
     ).resultAssert;
     assert(areEqual);
