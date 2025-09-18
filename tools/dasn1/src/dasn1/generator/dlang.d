@@ -269,6 +269,7 @@ private immutable ASN1_SHORTHAND = "asn1";
 private immutable BUFFER_SHORTHAND = "jbuf";
 private immutable STRING_SHORTHAND = "jstr";
 private immutable TYPE_CON_SHORTHAND = "tcon";
+private immutable UTF8_SHORTHAND = "utf8";
 
 private immutable RESULT_TYPE = RESULT_SHORTHAND~".Result";
 private immutable MEMORY_BUFFER_TYPE = BUFFER_SHORTHAND~".MemoryReader";
@@ -333,6 +334,7 @@ string generateRawDlangModule(Asn1ModuleIr mod, ref DlangGeneratorContext contex
         putLine("static import ", RESULT_SHORTHAND, " = juptune.core.util.result;");
         putLine("static import ", BUFFER_SHORTHAND, " = juptune.data.buffer;");
         putLine("static import ", STRING_SHORTHAND, " = juptune.core.ds.string2;");
+        putLine("static import ", UTF8_SHORTHAND, " = juptune.data.utf8;");
         endLine();
 
         mod.foreachAssignmentGC((assIr){
@@ -405,7 +407,7 @@ private void putValueLiteral(
                     namedSeqIr.foreachSequenceNamedValueGC((subValueName, subValueIr){
                         // TEMP: Again, something like this really needs to be handled inside of Juptune itself...
                         //       I just have 0 idea on what the best way to handle this is.
-                        auto item = code._currentModule.lookup(new Asn1ValueReferenceIr(
+                        auto item = code.currentModule.lookup(new Asn1ValueReferenceIr(
                             subValueIr.getRoughLocation(), subValueName
                         ));
                         assert(!item.isNull, "todo: this needs to be handled in Juptune for a better error message "~subValueName);
@@ -587,7 +589,7 @@ private void putRawType(
                 ir.foreachNamedBitGC((name, value){
                     if(auto valueRefIr = cast(Asn1ValueReferenceIr)value)
                         value = valueRefIr.getResolvedValueRecurse();
-                    
+
                     auto intValueIr = cast(Asn1IntegerValueIr)value;
                     assert(intValueIr !is null, "bug: Value's not an integer, why didn't the type checker catch this?");
 
@@ -674,8 +676,8 @@ private void putRawType(
                             put("typeof(", VALUE_UNION, '.', fixName(name), ") ", SETTER_PARAM_VALUE);
                             next();
                         }, (){
-                            if(typeIr.getMainConstraintOrNull() !is null)
-                                putLine("// TODO: Warning - type has a constraint but it's not being handled yet!");
+                            putLine(RESULT_TYPE, " result = ", RESULT_TYPE, ".noError;");
+                            putSetterConstraintChecksForField(typeIr, name.idup, SETTER_PARAM_VALUE, code, context); // @suppress(dscanner.style.long_line)
 
                             putLine(VALUE_FIELD, '.', fixName(name), " = ", SETTER_PARAM_VALUE, ";");
                             putLine(CHOICE_FIELD, " = ", CHOICE_ENUM, '.', fixName(name), ";");
@@ -1130,8 +1132,8 @@ private void putRawType(
                             put("typeof(_", fixName(item.name), ") ", SETTER_PARAM_VALUE);
                             next();
                         }, (){
-                            if(item.type.getMainConstraintOrNull() !is null)
-                                putLine("// TODO: Warning - type has a constraint but it's not being handled yet!");
+                            putLine(RESULT_TYPE, " result = ", RESULT_TYPE, ".noError;");
+                            putSetterConstraintChecksForField(item.type, item.name.idup, SETTER_PARAM_VALUE, code, context); // @suppress(dscanner.style.long_line)
                             
                             putLine(IS_SET_PREFIX, fixName(item.name), " = true;");
                             putLine('_', fixName(item.name), " = ", SETTER_PARAM_VALUE, ";");
@@ -1149,17 +1151,19 @@ private void putRawType(
                                 put(itemTypeName, " ", SETTER_PARAM_VALUE);
                                 next();
                             }, (){
-                                if(item.type.getMainConstraintOrNull() !is null)
-                                    putLine("// TODO: Warning - type has a constraint but it's not being handled yet!");
+                                putLine(RESULT_TYPE, " result = ", RESULT_TYPE, ".noError;");
                                 
                                 putLine("if(!", SETTER_PARAM_VALUE, ".isNull)");
+                                putLine("{");
                                 indent();
+                                    putSetterConstraintChecksForField(item.type, item.name.idup, SETTER_PARAM_VALUE~".get", code, context); // @suppress(dscanner.style.long_line)
                                     putLine(
                                         "return ", asCamelCase(SETTER_FUNCTION_PREFIX, item.name), "(",
                                             SETTER_PARAM_VALUE, ".get()",
                                         ");"
                                     );
                                 dedent();
+                                putLine("}");
                                 putLine("else");
                                 indent();
                                     putLine(IS_SET_PREFIX, fixName(item.name), " = false;");
@@ -1303,6 +1307,9 @@ private void putRawType(
                     put(typeName, " ", SETTER_PARAM_NAME);
                     next();
                 }, (){
+                    putLine(RESULT_TYPE, " result = ", RESULT_TYPE, ".noError;");
+                    putSetterConstraintChecksForField(typeIr, "value", SETTER_PARAM_NAME, code, context);
+
                     putLine(BASIC_FIELD_NAME, " = ", SETTER_PARAM_NAME, ";");
                     putLine(IS_SET_VAR, " = true;");
 
@@ -1401,6 +1408,392 @@ private void putRawType(
         scope visitor = new ModelVisitor();
         typeIr.visitGC(visitor);
     });
+}
+
+private void putSetterConstraintChecksForField(
+    Asn1TypeIr fieldTypeIr,
+    string fieldName,
+    string fieldVarName,
+    DlangCodeBuilder code,
+    ref DlangGeneratorContext context
+)
+{
+    final class ConstraintVisitor : Asn1IrVisitorGC
+    {
+        override void visit(Asn1BooleanTypeIr ir)
+        {
+            with(code) this.putStandardSetup((mainSuccessFlag, counter){
+                this.foreachConstraintSmart(ir.getMainConstraintOrNull(), counter, mainSuccessFlag,
+                );
+            });
+        }
+
+        override void visit(Asn1IntegerTypeIr ir)
+        {
+            with(code) this.putStandardSetup((mainSuccessFlag, counter){
+                this.foreachConstraintSmart(ir.getMainConstraintOrNull(), counter, mainSuccessFlag,
+                    valueRange: (valueRangeConstraintIr, subSuccessFlag) {
+                        import std.conv : to;
+
+                        void handleEndpoint(
+                            Asn1ValueRangeConstraintIr.Endpoint endpoint, 
+                            out ulong value, 
+                            ulong maxOrMin
+                        )
+                        {
+                            if(endpoint.valueIr is null)
+                            {
+                                value = maxOrMin;
+                                return;
+                            }
+
+                            auto valueIr = endpoint.valueIr;
+                            if(auto valueRefIr = cast(Asn1ValueReferenceIr)valueIr)
+                                valueIr = valueRefIr.getResolvedValueRecurse();
+
+                            auto intValueIr = cast(Asn1IntegerValueIr)valueIr;
+                            assert(intValueIr !is null, "bug: Why didn't the type checker catch this?");
+
+                            intValueIr.asUnsigned(value, context.errors).resultEnforce;
+                        }
+
+                        ulong lower, upper;
+                        handleEndpoint(valueRangeConstraintIr.getLower(), lower, ulong.min);
+                        handleEndpoint(valueRangeConstraintIr.getUpper(), upper, ulong.max);
+
+                        putLine("{");
+                        indent();
+                            const VALUE_VAR = "_integer__value";
+                            putLine("long ", VALUE_VAR, ";");
+                            putLine("result = ", fieldVarName, ".asInt!long(", VALUE_VAR, ");");
+                            putResultCheck("converting ASN.1 integer into native integer");
+                            putLine(subSuccessFlag, " = ", 
+                                VALUE_VAR, " >= ", lower.to!string,
+                                " && ",
+                                VALUE_VAR, " <= ", upper.to!string,
+                            ";");
+                        dedent();
+                        putLine("}");
+                    },
+                );
+            });
+        }
+
+        override void visit(Asn1ObjectIdentifierTypeIr ir)
+        {
+            with(code) this.putStandardSetup((mainSuccessFlag, counter){
+                this.foreachConstraintSmart(ir.getMainConstraintOrNull(), counter, mainSuccessFlag,
+                );
+            });
+        }
+
+        override void visit(Asn1OctetStringTypeIr ir)
+        {
+            with(code) this.putStandardSetup((mainSuccessFlag, counter){
+                this.foreachConstraintSmart(ir.getMainConstraintOrNull(), counter, mainSuccessFlag,
+                );
+            });
+        }
+
+        override void visit(Asn1SetOfTypeIr ir)
+        {
+            with(code) this.putStandardSetup((mainSuccessFlag, counter){
+                this.foreachConstraintSmart(ir.getMainConstraintOrNull(), counter, mainSuccessFlag,
+                    size: (sizeConstraintIr, subSuccessFlag) {
+                        this.putSizeConstraint(
+                            sizeConstraintIr, 
+                            subSuccessFlag,
+                            fieldVarName~".elementCount",
+                        );
+                    }
+                );
+            });
+        }
+
+        override void visit(Asn1SequenceOfTypeIr ir)
+        {
+            with(code) this.putStandardSetup((mainSuccessFlag, counter){
+                this.foreachConstraintSmart(ir.getMainConstraintOrNull(), counter, mainSuccessFlag,
+                    size: (sizeConstraintIr, subSuccessFlag) {
+                        this.putSizeConstraint(
+                            sizeConstraintIr, 
+                            subSuccessFlag,
+                            fieldVarName~".elementCount",
+                        );
+                    }
+                );
+            });
+        }
+
+        override void visit(Asn1UTF8StringTypeIr ir)
+        {
+            with(code) this.putStandardSetup((mainSuccessFlag, counter){
+                this.foreachConstraintSmart(ir.getMainConstraintOrNull(), counter, mainSuccessFlag,
+                    size: (sizeConstraintIr, subSuccessFlag) {
+                        const lengthVar = "_utf8string__length";
+                        putLine("{");
+                        indent();
+                            putLine("size_t ", lengthVar, ";");
+                            putLine("result = ", UTF8_SHORTHAND, ".utf8Length(",
+                                fieldVarName, ".asSlice",
+                                ", ", lengthVar,
+                            ");");
+                            putResultCheck("counting length of utf8 string");
+
+                            this.putSizeConstraint(
+                                sizeConstraintIr, 
+                                subSuccessFlag,
+                                lengthVar,
+                            );
+                        dedent();
+                        putLine("}");
+                    }
+                );
+            });
+        }
+
+        override void visit(Asn1PrintableStringTypeIr ir)
+        {
+            with(code) this.putStandardSetup((mainSuccessFlag, counter){
+                this.foreachConstraintSmart(ir.getMainConstraintOrNull(), counter, mainSuccessFlag,
+                    size: (sizeConstraintIr, subSuccessFlag) {
+                        this.putSizeConstraint(
+                            sizeConstraintIr, 
+                            subSuccessFlag,
+                            fieldVarName~".asSlice.length",
+                        );
+                    }
+                );
+            });
+        }
+
+        override void visit(Asn1NumericStringTypeIr ir)
+        {
+            with(code) this.putStandardSetup((mainSuccessFlag, counter){
+                this.foreachConstraintSmart(ir.getMainConstraintOrNull(), counter, mainSuccessFlag,
+                    size: (sizeConstraintIr, subSuccessFlag) {
+                        this.putSizeConstraint(
+                            sizeConstraintIr, 
+                            subSuccessFlag,
+                            fieldVarName~".asSlice.length",
+                        );
+                    }
+                );
+            });
+        }
+
+        override void visit(Asn1IA5StringTypeIr ir)
+        {
+            with(code) this.putStandardSetup((mainSuccessFlag, counter){
+                this.foreachConstraintSmart(ir.getMainConstraintOrNull(), counter, mainSuccessFlag,
+                    size: (sizeConstraintIr, subSuccessFlag) {
+                        this.putSizeConstraint(
+                            sizeConstraintIr, 
+                            subSuccessFlag,
+                            fieldVarName~".asSlice.length",
+                        );
+                    }
+                );
+            });
+        }
+
+        override void visit(Asn1TypeReferenceIr ir)
+        {
+            with(code) this.putStandardSetup((mainSuccessFlag, counter){
+                this.foreachConstraintSmart(ir.getMainConstraintOrNull(), counter, mainSuccessFlag,
+                );
+            });
+        }
+
+        override void visit(Asn1UtcTimeTypeIr ir)
+        {
+            with(code) this.putStandardSetup((mainSuccessFlag, counter){
+                this.foreachConstraintSmart(ir.getMainConstraintOrNull(), counter, mainSuccessFlag,
+                );
+            });
+        }
+
+        private void putStandardSetup(
+            scope void delegate(string successFlagVar, ref size_t counter) putConstraints
+        )
+        {
+            const SUCCESS_FLAG_VAR = "_successFlag";
+
+            size_t counter;
+            with(code)
+            {
+                putLine("bool ", SUCCESS_FLAG_VAR, ";");
+                putConstraints(SUCCESS_FLAG_VAR, counter);
+                putLine("if(!", SUCCESS_FLAG_VAR, ")");
+                indent();
+                    putLine("return ", RESULT_TYPE, ".make(", 
+                        ASN1_SHORTHAND, ".Asn1DecodeError.constraintFailed, ",
+                        `"Value failed to match against type's constraint (TODO: A much more specific error message)"`,
+                    ");");
+                dedent();
+            }
+        }
+
+        private void putSizeConstraint(
+            Asn1SizeConstraintIr sizeConstraintIr, 
+            string subSuccessFlag, 
+            string lengthField
+        )
+        {
+            import std.conv : to;
+
+            with(code)
+            {
+                if(auto singleValueIr = cast(Asn1SingleValueConstraintIr)sizeConstraintIr.getMainConstraint())
+                {
+                    auto valueIr = singleValueIr.getValue();
+                    if(auto valueRefIr = cast(Asn1ValueReferenceIr)valueIr)
+                        valueIr = valueRefIr.getResolvedValueRecurse();
+
+                    auto intValueIr = cast(Asn1IntegerValueIr)valueIr;
+                    assert(intValueIr !is null, "bug: Why didn't the type checker catch this?");
+
+                    ulong value;
+                    intValueIr.asUnsigned(value, context.errors).resultEnforce;
+                    putLine(subSuccessFlag, " = ", lengthField, " == ", value.to!string, ";");
+                }
+                else if(auto valueRangeIr = cast(Asn1ValueRangeConstraintIr)sizeConstraintIr.getMainConstraint())
+                {
+                    void handleEndpoint(Asn1ValueRangeConstraintIr.Endpoint endpoint, out ulong value, ulong maxOrMin)
+                    {
+                        if(endpoint.valueIr is null)
+                        {
+                            value = maxOrMin;
+                            return;
+                        }
+
+                        auto valueIr = endpoint.valueIr;
+                        if(auto valueRefIr = cast(Asn1ValueReferenceIr)valueIr)
+                            valueIr = valueRefIr.getResolvedValueRecurse();
+
+                        auto intValueIr = cast(Asn1IntegerValueIr)valueIr;
+                        assert(intValueIr !is null, "bug: Why didn't the type checker catch this?");
+
+                        intValueIr.asUnsigned(value, context.errors).resultEnforce;
+                    }
+
+                    ulong lower, upper;
+                    handleEndpoint(valueRangeIr.getLower(), lower, ulong.min);
+                    handleEndpoint(valueRangeIr.getUpper(), upper, ulong.max);
+
+                    putLine(subSuccessFlag, " = ", 
+                        lengthField, " >= ", lower.to!string,
+                        " && ",
+                        lengthField, " <= ", upper.to!string,
+                        ";"
+                    );
+                }
+                else
+                    assert(false, "bug: unhandled constraint case for SizeConstraint");
+            }
+        }
+
+        private void foreachConstraintSmart(
+            Asn1ConstraintIr ir,
+            scope ref size_t counter,
+            string successFlagVar,
+            scope void delegate(Asn1SingleValueConstraintIr constraintIr, string successFlagVar) singleValue = null,
+            scope void delegate(Asn1SizeConstraintIr constraintIr, string successFlagVar) size = null,
+            scope void delegate(Asn1ValueRangeConstraintIr constraintIr, string successFlagVar) valueRange = null,
+        )
+        {
+            this.foreachConstraint(ir, (constraintIr, subSuccessFlag){
+                import std.meta : AliasSeq;
+
+                // I could technically use Parameters!() instead of manually specifying the IR type, but for some reason
+                // I just don't want to. #thuglifechoseme
+                alias TypeAndHandler = AliasSeq!(
+                    Asn1SingleValueConstraintIr,    singleValue,
+                    Asn1SizeConstraintIr,           size,
+                    Asn1ValueRangeConstraintIr,     valueRange,
+                );
+
+                static foreach(i; 0..TypeAndHandler.length / 2)
+                if(auto castedIr = cast(TypeAndHandler[i*2])constraintIr)
+                {
+                    // if(TypeAndHandler[(i*2)+1] !is null) {
+                    assert(
+                        TypeAndHandler[(i*2)+1] !is null, 
+                        "bug: Field "~fieldName~" of type "~typeid(fieldTypeIr).name~" has a constraint"
+                        ~" of type "~typeid(constraintIr).name~" attached to it, but has a null handler."
+                    );
+                    TypeAndHandler[(i*2)+1](castedIr, subSuccessFlag);
+                    // }
+                    return;
+                }
+
+                import juptune.data.asn1.lang.tooling : asn1ToStringGC;
+                assert(false, 
+                    "bug: Unhandled constraint IR type: "
+                    ~typeid(constraintIr).name
+                    ~" -> "
+                    ~asn1ToStringGC(constraintIr)
+                );
+            }, counter, successFlagVar);
+        }
+
+        private void foreachConstraint(
+            Asn1ConstraintIr constraintIr,
+            scope void delegate(Asn1ConstraintIr constraintIr, string successFlagVar) onConstraint,
+            scope ref size_t counter,
+            string successFlagVar,
+        )
+        {
+            import std.format : format;
+
+            if(constraintIr is null)
+                return;
+
+            if(auto unionIr = cast(Asn1UnionConstraintIr)constraintIr)
+            {
+                with(code)
+                {
+                    string[] subSuccessFlags;
+                    unionIr.foreachUnionConstraintGC((childIr){
+                        indent();
+                        scope(exit) dedent();
+
+                        putLine("// subconstraint of type ", typeid(childIr).name);
+
+                        const subSuccessFlag = format!"_successFlag%s"(counter++);
+                        subSuccessFlags ~= subSuccessFlag;
+                        putLine("bool ", subSuccessFlag, ";");
+                        
+                        this.foreachConstraint(childIr, onConstraint, counter, subSuccessFlag);
+                        return Result.noError;
+                    }).resultEnforce;
+
+                    putLine(successFlagVar, " = ");
+                    indent();
+                    foreach(i, flagName; subSuccessFlags)
+                    {
+                        if(i != 0)
+                            put("|| ");
+                        putLine(flagName);
+                    }
+                    dedent();
+                    putLine(";");
+                }
+            }
+            else if(auto intersectionIr = cast(Asn1IntersectionConstraintIr)constraintIr)
+            {
+                assert(false, "TODO: Intersection constraint");
+            }
+
+            onConstraint(constraintIr, successFlagVar);
+        }
+    }
+
+    if(fieldTypeIr.getMainConstraintOrNull() is null)
+        return;
+
+    scope visitor = new ConstraintVisitor();
+    fieldTypeIr.visitGC(visitor);
 }
 
 private void putRawDerDecodingForField(

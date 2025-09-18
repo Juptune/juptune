@@ -6,6 +6,7 @@ static import asn1 = juptune.data.asn1.decode.bcd.encoding;
 static import jres = juptune.core.util.result;
 static import jbuf = juptune.data.buffer;
 static import jstr = juptune.core.ds.string2;
+static import utf8 = juptune.data.utf8;
 
 asn1.Asn1ObjectIdentifier id_ce(
 ) @nogc nothrow
@@ -47,6 +48,7 @@ struct AuthorityKeyIdentifier
         typeof(_keyIdentifier) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_keyIdentifier = true;
         _keyIdentifier = value;
         return jres.Result.noError;
@@ -56,8 +58,11 @@ struct AuthorityKeyIdentifier
         tcon.Nullable!(.KeyIdentifier) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setKeyIdentifier(value.get());
+        }
         else
             _isSet_keyIdentifier = false;
         return jres.Result.noError;
@@ -75,6 +80,7 @@ struct AuthorityKeyIdentifier
         typeof(_authorityCertIssuer) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_authorityCertIssuer = true;
         _authorityCertIssuer = value;
         return jres.Result.noError;
@@ -84,8 +90,11 @@ struct AuthorityKeyIdentifier
         tcon.Nullable!(.GeneralNames) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setAuthorityCertIssuer(value.get());
+        }
         else
             _isSet_authorityCertIssuer = false;
         return jres.Result.noError;
@@ -103,6 +112,7 @@ struct AuthorityKeyIdentifier
         typeof(_authorityCertSerialNumber) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_authorityCertSerialNumber = true;
         _authorityCertSerialNumber = value;
         return jres.Result.noError;
@@ -112,8 +122,11 @@ struct AuthorityKeyIdentifier
         tcon.Nullable!(PKIX1Explicit88_1_3_6_1_5_5_7_0_18.CertificateSerialNumber) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setAuthorityCertSerialNumber(value.get());
+        }
         else
             _isSet_authorityCertSerialNumber = false;
         return jres.Result.noError;
@@ -301,6 +314,7 @@ struct KeyIdentifier
         asn1.Asn1OctetString newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -385,6 +399,7 @@ struct SubjectKeyIdentifier
         .KeyIdentifier newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -480,6 +495,7 @@ struct KeyUsage
         asn1.Asn1BitString newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -576,6 +592,11 @@ struct CertificatePolicies
         asn1.Asn1SequenceOf!(.PolicyInformation) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.elementCount >= 1 && newValue.elementCount <= 18446744073709551615;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -654,6 +675,7 @@ struct PolicyInformation
         typeof(_policyIdentifier) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_policyIdentifier = true;
         _policyIdentifier = value;
         return jres.Result.noError;
@@ -670,7 +692,11 @@ struct PolicyInformation
         typeof(_policyQualifiers) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.elementCount >= 1 && value.elementCount <= 18446744073709551615;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _isSet_policyQualifiers = true;
         _policyQualifiers = value;
         return jres.Result.noError;
@@ -680,9 +706,15 @@ struct PolicyInformation
         tcon.Nullable!(asn1.Asn1SequenceOf!(.PolicyQualifierInfo)) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
+            bool _successFlag;
+            _successFlag = value.get.elementCount >= 1 && value.get.elementCount <= 18446744073709551615;
+            if(!_successFlag)
+                return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
             return setPolicyQualifiers(value.get());
+        }
         else
             _isSet_policyQualifiers = false;
         return jres.Result.noError;
@@ -828,6 +860,7 @@ struct CertPolicyId
         asn1.Asn1ObjectIdentifier newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -902,6 +935,7 @@ struct PolicyQualifierInfo
         typeof(_policyQualifierId) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_policyQualifierId = true;
         _policyQualifierId = value;
         return jres.Result.noError;
@@ -918,6 +952,7 @@ struct PolicyQualifierInfo
         typeof(_qualifier) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_qualifier = true;
         _qualifier = value;
         return jres.Result.noError;
@@ -1050,6 +1085,7 @@ struct PolicyQualifierId
         asn1.Asn1ObjectIdentifier newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -1122,6 +1158,7 @@ struct CPSuri
         asn1.Asn1Ia5String newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -1196,6 +1233,7 @@ struct UserNotice
         typeof(_noticeRef) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_noticeRef = true;
         _noticeRef = value;
         return jres.Result.noError;
@@ -1205,8 +1243,11 @@ struct UserNotice
         tcon.Nullable!(.NoticeReference) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setNoticeRef(value.get());
+        }
         else
             _isSet_noticeRef = false;
         return jres.Result.noError;
@@ -1224,6 +1265,7 @@ struct UserNotice
         typeof(_explicitText) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_explicitText = true;
         _explicitText = value;
         return jres.Result.noError;
@@ -1233,8 +1275,11 @@ struct UserNotice
         tcon.Nullable!(.DisplayText) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setExplicitText(value.get());
+        }
         else
             _isSet_explicitText = false;
         return jres.Result.noError;
@@ -1383,6 +1428,7 @@ struct NoticeReference
         typeof(_organization) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_organization = true;
         _organization = value;
         return jres.Result.noError;
@@ -1399,6 +1445,7 @@ struct NoticeReference
         typeof(_noticeNumbers) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_noticeNumbers = true;
         _noticeNumbers = value;
         return jres.Result.noError;
@@ -1552,7 +1599,11 @@ struct DisplayText
         typeof(Value.ia5String) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 200;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.ia5String = value;
         _choice = Choice.ia5String;
         return jres.Result.noError;
@@ -1575,7 +1626,17 @@ struct DisplayText
         typeof(Value.utf8String) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            size_t _utf8string__length;
+            result = utf8.utf8Length(value.asSlice, _utf8string__length);
+            if(result.isError)
+                return result.wrapError("when counting length of utf8 string in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _utf8string__length >= 1 && _utf8string__length <= 200;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.utf8String = value;
         _choice = Choice.utf8String;
         return jres.Result.noError;
@@ -1709,6 +1770,7 @@ struct PolicyMappingItem
         typeof(_issuerDomainPolicy) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_issuerDomainPolicy = true;
         _issuerDomainPolicy = value;
         return jres.Result.noError;
@@ -1725,6 +1787,7 @@ struct PolicyMappingItem
         typeof(_subjectDomainPolicy) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_subjectDomainPolicy = true;
         _subjectDomainPolicy = value;
         return jres.Result.noError;
@@ -1860,6 +1923,11 @@ struct PolicyMappings
         asn1.Asn1SequenceOf!(.PolicyMappingItem) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.elementCount >= 1 && newValue.elementCount <= 18446744073709551615;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -1948,6 +2016,7 @@ struct SubjectAltName
         .GeneralNames newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -2020,6 +2089,11 @@ struct GeneralNames
         asn1.Asn1SequenceOf!(.GeneralName) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.elementCount >= 1 && newValue.elementCount <= 18446744073709551615;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -2135,6 +2209,7 @@ struct GeneralName
         typeof(Value.otherName) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.otherName = value;
         _choice = Choice.otherName;
         return jres.Result.noError;
@@ -2157,6 +2232,7 @@ struct GeneralName
         typeof(Value.rfc822Name) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.rfc822Name = value;
         _choice = Choice.rfc822Name;
         return jres.Result.noError;
@@ -2179,6 +2255,7 @@ struct GeneralName
         typeof(Value.dNSName) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.dNSName = value;
         _choice = Choice.dNSName;
         return jres.Result.noError;
@@ -2201,6 +2278,7 @@ struct GeneralName
         typeof(Value.x400Address) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.x400Address = value;
         _choice = Choice.x400Address;
         return jres.Result.noError;
@@ -2223,6 +2301,7 @@ struct GeneralName
         typeof(Value.directoryName) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.directoryName = value;
         _choice = Choice.directoryName;
         return jres.Result.noError;
@@ -2245,6 +2324,7 @@ struct GeneralName
         typeof(Value.ediPartyName) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.ediPartyName = value;
         _choice = Choice.ediPartyName;
         return jres.Result.noError;
@@ -2267,6 +2347,7 @@ struct GeneralName
         typeof(Value.uniformResourceIdentifier) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.uniformResourceIdentifier = value;
         _choice = Choice.uniformResourceIdentifier;
         return jres.Result.noError;
@@ -2289,6 +2370,7 @@ struct GeneralName
         typeof(Value.iPAddress) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.iPAddress = value;
         _choice = Choice.iPAddress;
         return jres.Result.noError;
@@ -2311,6 +2393,7 @@ struct GeneralName
         typeof(Value.registeredID) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.registeredID = value;
         _choice = Choice.registeredID;
         return jres.Result.noError;
@@ -2635,6 +2718,7 @@ struct AnotherName
         typeof(_type_id) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_type_id = true;
         _type_id = value;
         return jres.Result.noError;
@@ -2651,6 +2735,7 @@ struct AnotherName
         typeof(_value) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_value = true;
         _value = value;
         return jres.Result.noError;
@@ -2802,6 +2887,7 @@ struct EDIPartyName
         typeof(_nameAssigner) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_nameAssigner = true;
         _nameAssigner = value;
         return jres.Result.noError;
@@ -2811,8 +2897,11 @@ struct EDIPartyName
         tcon.Nullable!(PKIX1Explicit88_1_3_6_1_5_5_7_0_18.DirectoryString) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setNameAssigner(value.get());
+        }
         else
             _isSet_nameAssigner = false;
         return jres.Result.noError;
@@ -2830,6 +2919,7 @@ struct EDIPartyName
         typeof(_partyName) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_partyName = true;
         _partyName = value;
         return jres.Result.noError;
@@ -2982,6 +3072,7 @@ struct IssuerAltName
         .GeneralNames newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -3066,6 +3157,11 @@ struct SubjectDirectoryAttributes
         asn1.Asn1SequenceOf!(PKIX1Explicit88_1_3_6_1_5_5_7_0_18.Attribute) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.elementCount >= 1 && newValue.elementCount <= 18446744073709551615;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -3156,6 +3252,7 @@ struct BasicConstraints
         typeof(_cA) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_cA = true;
         _cA = value;
         return jres.Result.noError;
@@ -3181,7 +3278,17 @@ struct BasicConstraints
         typeof(_pathLenConstraint) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            long _integer__value;
+            result = value.asInt!long(_integer__value);
+            if(result.isError)
+                return result.wrapError("when converting ASN.1 integer into native integer in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _integer__value >= 0 && _integer__value <= 18446744073709551615;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _isSet_pathLenConstraint = true;
         _pathLenConstraint = value;
         return jres.Result.noError;
@@ -3191,9 +3298,21 @@ struct BasicConstraints
         tcon.Nullable!(asn1.Asn1Integer) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
+            bool _successFlag;
+            {
+                long _integer__value;
+                result = value.get.asInt!long(_integer__value);
+                if(result.isError)
+                    return result.wrapError("when converting ASN.1 integer into native integer in type "~__traits(identifier, typeof(this))~":");
+                _successFlag = _integer__value >= 0 && _integer__value <= 18446744073709551615;
+            }
+            if(!_successFlag)
+                return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
             return setPathLenConstraint(value.get());
+        }
         else
             _isSet_pathLenConstraint = false;
         return jres.Result.noError;
@@ -3369,6 +3488,7 @@ struct NameConstraints
         typeof(_permittedSubtrees) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_permittedSubtrees = true;
         _permittedSubtrees = value;
         return jres.Result.noError;
@@ -3378,8 +3498,11 @@ struct NameConstraints
         tcon.Nullable!(.GeneralSubtrees) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setPermittedSubtrees(value.get());
+        }
         else
             _isSet_permittedSubtrees = false;
         return jres.Result.noError;
@@ -3397,6 +3520,7 @@ struct NameConstraints
         typeof(_excludedSubtrees) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_excludedSubtrees = true;
         _excludedSubtrees = value;
         return jres.Result.noError;
@@ -3406,8 +3530,11 @@ struct NameConstraints
         tcon.Nullable!(.GeneralSubtrees) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setExcludedSubtrees(value.get());
+        }
         else
             _isSet_excludedSubtrees = false;
         return jres.Result.noError;
@@ -3554,6 +3681,11 @@ struct GeneralSubtrees
         asn1.Asn1SequenceOf!(.GeneralSubtree) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.elementCount >= 1 && newValue.elementCount <= 18446744073709551615;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -3634,6 +3766,7 @@ struct GeneralSubtree
         typeof(_base) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_base = true;
         _base = value;
         return jres.Result.noError;
@@ -3650,6 +3783,7 @@ struct GeneralSubtree
         typeof(_minimum) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_minimum = true;
         _minimum = value;
         return jres.Result.noError;
@@ -3680,6 +3814,7 @@ struct GeneralSubtree
         typeof(_maximum) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_maximum = true;
         _maximum = value;
         return jres.Result.noError;
@@ -3689,8 +3824,11 @@ struct GeneralSubtree
         tcon.Nullable!(.BaseDistance) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setMaximum(value.get());
+        }
         else
             _isSet_maximum = false;
         return jres.Result.noError;
@@ -3884,6 +4022,17 @@ struct BaseDistance
         asn1.Asn1Integer newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            long _integer__value;
+            result = newValue.asInt!long(_integer__value);
+            if(result.isError)
+                return result.wrapError("when converting ASN.1 integer into native integer in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _integer__value >= 0 && _integer__value <= 18446744073709551615;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -3970,6 +4119,7 @@ struct PolicyConstraints
         typeof(_requireExplicitPolicy) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_requireExplicitPolicy = true;
         _requireExplicitPolicy = value;
         return jres.Result.noError;
@@ -3979,8 +4129,11 @@ struct PolicyConstraints
         tcon.Nullable!(.SkipCerts) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setRequireExplicitPolicy(value.get());
+        }
         else
             _isSet_requireExplicitPolicy = false;
         return jres.Result.noError;
@@ -3998,6 +4151,7 @@ struct PolicyConstraints
         typeof(_inhibitPolicyMapping) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_inhibitPolicyMapping = true;
         _inhibitPolicyMapping = value;
         return jres.Result.noError;
@@ -4007,8 +4161,11 @@ struct PolicyConstraints
         tcon.Nullable!(.SkipCerts) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setInhibitPolicyMapping(value.get());
+        }
         else
             _isSet_inhibitPolicyMapping = false;
         return jres.Result.noError;
@@ -4155,6 +4312,17 @@ struct SkipCerts
         asn1.Asn1Integer newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            long _integer__value;
+            result = newValue.asInt!long(_integer__value);
+            if(result.isError)
+                return result.wrapError("when converting ASN.1 integer into native integer in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _integer__value >= 0 && _integer__value <= 18446744073709551615;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -4239,6 +4407,11 @@ struct CRLDistributionPoints
         asn1.Asn1SequenceOf!(.DistributionPoint) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.elementCount >= 1 && newValue.elementCount <= 18446744073709551615;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -4319,6 +4492,7 @@ struct DistributionPoint
         typeof(_distributionPoint) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_distributionPoint = true;
         _distributionPoint = value;
         return jres.Result.noError;
@@ -4328,8 +4502,11 @@ struct DistributionPoint
         tcon.Nullable!(.DistributionPointName) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setDistributionPoint(value.get());
+        }
         else
             _isSet_distributionPoint = false;
         return jres.Result.noError;
@@ -4347,6 +4524,7 @@ struct DistributionPoint
         typeof(_reasons) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_reasons = true;
         _reasons = value;
         return jres.Result.noError;
@@ -4356,8 +4534,11 @@ struct DistributionPoint
         tcon.Nullable!(.ReasonFlags) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setReasons(value.get());
+        }
         else
             _isSet_reasons = false;
         return jres.Result.noError;
@@ -4375,6 +4556,7 @@ struct DistributionPoint
         typeof(_cRLIssuer) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_cRLIssuer = true;
         _cRLIssuer = value;
         return jres.Result.noError;
@@ -4384,8 +4566,11 @@ struct DistributionPoint
         tcon.Nullable!(.GeneralNames) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setCRLIssuer(value.get());
+        }
         else
             _isSet_cRLIssuer = false;
         return jres.Result.noError;
@@ -4591,6 +4776,7 @@ struct DistributionPointName
         typeof(Value.fullName) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.fullName = value;
         _choice = Choice.fullName;
         return jres.Result.noError;
@@ -4613,6 +4799,7 @@ struct DistributionPointName
         typeof(Value.nameRelativeToCRLIssuer) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.nameRelativeToCRLIssuer = value;
         _choice = Choice.nameRelativeToCRLIssuer;
         return jres.Result.noError;
@@ -4743,6 +4930,7 @@ struct ReasonFlags
         asn1.Asn1BitString newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -4827,6 +5015,11 @@ struct ExtKeyUsageSyntax
         asn1.Asn1SequenceOf!(.KeyPurposeId) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.elementCount >= 1 && newValue.elementCount <= 18446744073709551615;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -4903,6 +5096,7 @@ struct KeyPurposeId
         asn1.Asn1ObjectIdentifier newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -5071,6 +5265,7 @@ struct InhibitAnyPolicy
         .SkipCerts newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -5155,6 +5350,7 @@ struct FreshestCRL
         .CRLDistributionPoints newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -5239,6 +5435,11 @@ struct AuthorityInfoAccessSyntax
         asn1.Asn1SequenceOf!(.AccessDescription) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.elementCount >= 1 && newValue.elementCount <= 18446744073709551615;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -5317,6 +5518,7 @@ struct AccessDescription
         typeof(_accessMethod) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_accessMethod = true;
         _accessMethod = value;
         return jres.Result.noError;
@@ -5333,6 +5535,7 @@ struct AccessDescription
         typeof(_accessLocation) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_accessLocation = true;
         _accessLocation = value;
         return jres.Result.noError;
@@ -5476,6 +5679,11 @@ struct SubjectInfoAccessSyntax
         asn1.Asn1SequenceOf!(.AccessDescription) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.elementCount >= 1 && newValue.elementCount <= 18446744073709551615;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -5564,6 +5772,17 @@ struct CRLNumber
         asn1.Asn1Integer newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            long _integer__value;
+            result = newValue.asInt!long(_integer__value);
+            if(result.isError)
+                return result.wrapError("when converting ASN.1 integer into native integer in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _integer__value >= 0 && _integer__value <= 18446744073709551615;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -5658,6 +5877,7 @@ struct IssuingDistributionPoint
         typeof(_distributionPoint) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_distributionPoint = true;
         _distributionPoint = value;
         return jres.Result.noError;
@@ -5667,8 +5887,11 @@ struct IssuingDistributionPoint
         tcon.Nullable!(.DistributionPointName) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setDistributionPoint(value.get());
+        }
         else
             _isSet_distributionPoint = false;
         return jres.Result.noError;
@@ -5686,6 +5909,7 @@ struct IssuingDistributionPoint
         typeof(_onlyContainsUserCerts) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_onlyContainsUserCerts = true;
         _onlyContainsUserCerts = value;
         return jres.Result.noError;
@@ -5711,6 +5935,7 @@ struct IssuingDistributionPoint
         typeof(_onlyContainsCACerts) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_onlyContainsCACerts = true;
         _onlyContainsCACerts = value;
         return jres.Result.noError;
@@ -5736,6 +5961,7 @@ struct IssuingDistributionPoint
         typeof(_onlySomeReasons) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_onlySomeReasons = true;
         _onlySomeReasons = value;
         return jres.Result.noError;
@@ -5745,8 +5971,11 @@ struct IssuingDistributionPoint
         tcon.Nullable!(.ReasonFlags) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setOnlySomeReasons(value.get());
+        }
         else
             _isSet_onlySomeReasons = false;
         return jres.Result.noError;
@@ -5764,6 +5993,7 @@ struct IssuingDistributionPoint
         typeof(_indirectCRL) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_indirectCRL = true;
         _indirectCRL = value;
         return jres.Result.noError;
@@ -5789,6 +6019,7 @@ struct IssuingDistributionPoint
         typeof(_onlyContainsAttributeCerts) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_onlyContainsAttributeCerts = true;
         _onlyContainsAttributeCerts = value;
         return jres.Result.noError;
@@ -6179,6 +6410,7 @@ struct BaseCRLNumber
         .CRLNumber newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -6275,6 +6507,7 @@ struct CertificateIssuer
         .GeneralNames newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -6359,6 +6592,7 @@ struct HoldInstructionCode
         asn1.Asn1ObjectIdentifier newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;

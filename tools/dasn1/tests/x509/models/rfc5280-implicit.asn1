@@ -1,3 +1,9 @@
+-- Changes:
+--  ANY DEFINED BY -> Dasn1-Any intrinsic
+--  Some string types aren't supported, since they have a non-ASCII or utf8 encoding and I cba to write a converter.
+--  `SET/SEQEUENCE SIZE (123) OF...` is rewritten to `SET/SEQUENCE (SIZE (123)) OF...` since the former isn't able to be parsed yet.
+--  Currently GeneralizedTime isn't supported, but given I have 25 years to implement support for it... it'll be ok.
+
 PKIX1Implicit88 { iso(1) identified-organization(3) dod(6) internet(1)
   security(5) mechanisms(5) pkix(7) id-mod(0) id-pkix1-implicit(19) }
 

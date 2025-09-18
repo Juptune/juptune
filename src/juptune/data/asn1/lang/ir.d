@@ -3386,7 +3386,6 @@ final class Asn1UnionConstraintIr : Asn1ConstraintIr
 {
     mixin IrBoilerplate;
 
-    @nogc nothrow:
 
     private
     {
@@ -3394,22 +3393,15 @@ final class Asn1UnionConstraintIr : Asn1ConstraintIr
         ConstraintBit _constraintBit;
     }
 
-    this(Asn1Location roughLocation)
+    this(Asn1Location roughLocation) @nogc nothrow
     {
         super(roughLocation);
     }
 
-    void addUnionConstraint(Asn1ConstraintIr constraint)
-    in(constraint !is null, "constraint is null")
-    {
-        constraint.setParent(this);
-        this._constraintBit |= constraint.getConstraintBits();
-        this._constraints.put(constraint);
-    }
+    alias foreachUnionConstraint = foreachUnionConstraintImpl!(Result delegate(Asn1ConstraintIr) @nogc nothrow);
+    alias foreachUnionConstraintGC = foreachUnionConstraintImpl!(Result delegate(Asn1ConstraintIr));
 
-    Result foreachUnionConstraint(
-        scope Result delegate(Asn1ConstraintIr) @nogc nothrow handler,
-    )
+    private Result foreachUnionConstraintImpl(HandlerT)(scope HandlerT handler)
     {
         foreach(item; this._constraints)
         {
@@ -3419,6 +3411,16 @@ final class Asn1UnionConstraintIr : Asn1ConstraintIr
         }
 
         return Result.noError;
+    }
+
+    @nogc nothrow:
+
+    void addUnionConstraint(Asn1ConstraintIr constraint)
+    in(constraint !is null, "constraint is null")
+    {
+        constraint.setParent(this);
+        this._constraintBit |= constraint.getConstraintBits();
+        this._constraints.put(constraint);
     }
 
     override void dispose()

@@ -77,6 +77,41 @@ Result utf8DecodeNext(alias AlgorithmT = Utf8DefaultAlgorithm)(
 }
 
 /++
+ + Helper function to easily count the amount of codepoints within the given UTF-8 input.
+ +
+ + Notes:
+ +  This function uses `utf8DecodeNext` under the hood, so validation is also performed.
+ +
+ + Params:
+ +  AlgorithmT = The particular algorithm to use to perform validation & decoding.
+ +  input      = The input to validate and count the length of.
+ +  length     = The amount of codepoints found within `input`.
+ +
+ + Throws:
+ +  Anything that `utf8DecodeNext` throws.
+ +
+ + Returns:
+ +  A non-errorful `Result` if `input` is a valid UTF-8 string, otherwise a `Result` roughly specifying why `input` is invalid.
+ + ++/
+Result utf8Length(alias AlgorithmT = Utf8DefaultAlgorithm)(
+    scope const(void)[] input,
+    scope out size_t length,
+) @nogc nothrow @safe
+{
+    size_t cursor = 0;
+    while(cursor < input.length)
+    {
+        dchar _;
+        auto result = utf8DecodeNext!AlgorithmT(input, cursor, _);
+        if(result.isError)
+            return result;
+        length++;
+    }
+
+    return Result.noError;
+}
+
+/++
  + Encodes (but does not validate) the given Unicode codepoint into UTF-8 codeunits.
  +
  + Notes:
@@ -546,6 +581,39 @@ unittest
             assert(usedBuffer == testCase.expected);
 
             utf8Validate(usedBuffer).resultAssert;
+        }
+        catch(Error ex) // @suppress(dscanner.suspicious.catch_em_all)
+        {
+            assert(false, "["~testName~"] "~ex.msg);
+        }
+    }
+}
+
+@("utf8Length - General success")
+unittest
+{
+    import juptune.core.util : resultAssert;
+    import std.typecons : Nullable;
+
+    static struct T
+    {
+        string input;
+        size_t expected;
+    }
+
+    T[string] cases = [
+        "ASCII": T("Hello, World!", "Hello, World!".length),
+        "Japanese": T("こんにちわ世界!", 8),
+    ];
+
+    static foreach(AlgorithmT; AllAlgorithms)
+    foreach(testName, testCase; cases)
+    {
+        try
+        {
+            size_t length;
+            utf8Length(testCase.input, length).resultAssert;
+            assert(length == testCase.expected);
         }
         catch(Error ex) // @suppress(dscanner.suspicious.catch_em_all)
         {
