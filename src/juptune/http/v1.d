@@ -9,7 +9,7 @@ module juptune.http.v1;
 import juptune.core.ds   : MemoryBlockPoolAllocator, MemoryBlockAllocation;
 import juptune.core.util : Result, StateMachineTypes;
 import juptune.event.io  : TcpSocket, IoError;
-import juptune.http.uri  : ScopeUri, uriParseNoCopy, UriParseHints, UriParseRules;
+import juptune.http.uri  : Uri, uriParseNoCopy, UriParseHints, UriParseRules;
 
 private 
 {
@@ -159,17 +159,17 @@ struct Http1RequestLine
     private Http1PinnedSlice entireLine;
     Http1Version httpVersion; /// The http version of the request line
     private const(char)[] method;
-    private ScopeUri path;
+    private Uri path;
 
     /// Accesses the request line data.
-    void access(scope void delegate(scope const char[] method, scope ScopeUri path) @safe nothrow func) @safe nothrow
+    void access(scope void delegate(scope const char[] method, scope Uri path) @safe nothrow func) @safe nothrow
     in(this.entireLine._pinned !is null, "entireLine must be pinned")
     {
         func(this.method, this.path);
     }
 
     /// ditto.
-    void access(scope void delegate(scope const char[] method, scope ScopeUri path) @safe @nogc nothrow func) @safe @nogc nothrow // @suppress(dscanner.style.long_line)
+    void access(scope void delegate(scope const char[] method, scope Uri path) @safe @nogc nothrow func) @safe @nogc nothrow // @suppress(dscanner.style.long_line)
     in(this.entireLine._pinned !is null, "entireLine must be pinned")
     {
         func(this.method, this.path);
@@ -2275,7 +2275,7 @@ bool http1IsPathValidForMethod(
     bool isProxyRequest = false
 ) @safe @nogc nothrow
 {
-    ScopeUri uri;
+    Uri uri;
     return http1IsPathValidForMethod(method, path, uri, isProxyRequest);
 }
 
@@ -2283,7 +2283,7 @@ bool http1IsPathValidForMethod(
 bool http1IsPathValidForMethod(
     scope const char[] method, 
     const char[] path,
-    scope out ScopeUri uri,
+    scope out Uri uri,
     bool isProxyRequest = false
 ) @safe @nogc nothrow
 {
@@ -2336,11 +2336,11 @@ bool http1IsPathValidForMethod(scope const char[] method, UriParseHints hints, b
 
 /**** Unit tests ****/
 
-version(unittest) private ScopeUri makePath(string path, string query, string fragment)
+version(unittest) private Uri makePath(string path, string query, string fragment)
 {
     import juptune.event.io : IpAddress;
     import std.typecons : Nullable;
-    return ScopeUri(
+    return Uri(
         null, null, null, Nullable!IpAddress.init, Nullable!ushort.init,
         path, query, fragment
     );
@@ -2391,7 +2391,7 @@ unittest
     {
         string request;
         string expectedMethod;
-        ScopeUri expectedPath;
+        Uri expectedPath;
         Http1Version expectedVersion;
     }
 
@@ -2807,7 +2807,7 @@ unittest
     {
         string request;
         string expectedMethod;
-        ScopeUri expectedPath;
+        Uri expectedPath;
         Http1Version expectedVersion;
         H[] expectedHeaders;
         string expectedBody;

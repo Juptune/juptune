@@ -602,7 +602,7 @@ private void putRawType(
 
             this.wrapAroundBasicType(rawTypeOf(ir, code.currentModule, context.errors));
         }
-        
+
         override void visit(Asn1IntegerTypeIr ir)
         {
             with(code) if(ir.hasNamedNumbers())

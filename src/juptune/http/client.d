@@ -139,7 +139,7 @@ struct HttpClient
     import juptune.core.ds      : Array, String2;
     import juptune.event.io     : TcpSocket, IpAddress;
     import juptune.http.common  : HttpRequest, HttpResponse;
-    import juptune.http.uri     : ScopeUri;
+    import juptune.http.uri     : Uri;
 
     /// A function provided by `HttpClient` which can be used to push data into the request body.
     alias PutBodyFunc = Result delegate(scope const ubyte[] bodyChunk) @nogc nothrow;
