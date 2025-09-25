@@ -110,11 +110,13 @@ final class CompilerContext
 private immutable DASN1_INTRINSIC_MODULE = `
 -- I can't find a single piece of information on what's allowed for custom OBJECT IDENTIFIERS, so I'll
 -- just start everything with 0 0
+--
+-- NOTE: Most of these intrinsics are super hacky, so please don't expect a good debugging experience using them (for now at least).
 Dasn1-Intrinsics { iso(0) custom(0) dasn1(1) intrinsics(0) } DEFINITIONS IMPLICIT TAGS ::=
 BEGIN
     EXPORTS ALL;
 
-    -- Use of this instrinsic value will cause DASN1 to allow any tag for the field.
+    -- Use of this instrinsic value will cause dasn1 to allow any tag for the field.
     --
     -- Currently you should always use this type directly, and never define an alias to it (implementation limitations):
     --
@@ -127,5 +129,19 @@ BEGIN
     --      MySeq ::= SEQUENCE { yada Dasn1-Any }
     -- '
     Dasn1-Any ::= OCTET STRING
+
+    -- Use of this instrinsic value will cause dasn1 to stuff the entire raw byte slice for a SEQUENCE/SET type into
+    -- a special field.
+    --
+    -- This is useful if the raw encoding bytes are meaningful, e.g. x.509 uses part of the DER encoding to calculate
+    -- the certificate's signature, so these bytes also need to be easily available to the code.
+    --
+    -- This should only ever be used inside of SEQUENCE and SET types; should always be the first field, and MUST always be defined as:
+    -- '
+    --      dasn1-RawBytes Dasn1-RawBytes OPTIONAL
+    -- '
+    --
+    -- This is to simplify the extremely hacky implementation of this feature.
+    Dasn1-RawBytes ::= OCTET STRING
 END
 `;

@@ -4200,6 +4200,8 @@ struct TBSCertificate
 {
     private
     {
+        bool _isSet_dasn1_RawBytes;
+        asn1.Asn1OctetString _dasn1_RawBytes;
         bool _isSet_version;
         .Version _version;
         bool _isSet_serialNumber;
@@ -4220,6 +4222,38 @@ struct TBSCertificate
         .UniqueIdentifier _subjectUniqueID;
         bool _isSet_extensions;
         .Extensions _extensions;
+    }
+
+    jres.Result setDasn1_RawBytes(
+        typeof(_dasn1_RawBytes) value,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        _isSet_dasn1_RawBytes = true;
+        _dasn1_RawBytes = value;
+        return jres.Result.noError;
+    }
+
+    jres.Result setDasn1_RawBytes(
+        tcon.Nullable!(asn1.Asn1OctetString) value,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        if(!value.isNull)
+        {
+            return setDasn1_RawBytes(value.get());
+        }
+        else
+            _isSet_dasn1_RawBytes = false;
+        return jres.Result.noError;
+    }
+
+    tcon.Nullable!(asn1.Asn1OctetString) getDasn1_RawBytes(
+    ) @nogc nothrow
+    {
+        if(_isSet_dasn1_RawBytes)
+            return typeof(return)(_dasn1_RawBytes);
+        return typeof(return).init;
     }
 
     jres.Result setVersion(
@@ -4488,6 +4522,18 @@ struct TBSCertificate
         depth++;
         putIndent();
         depth++;
+        sink("dasn1-RawBytes: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_dasn1_RawBytes), "toString"))
+            _dasn1_RawBytes.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        putIndent();
+        depth++;
         sink("version: ");
         sink("\n");
         static if(__traits(hasMember, typeof(_version), "toString"))
@@ -4621,6 +4667,7 @@ struct TBSCertificate
         componentHeader.identifier = ident;
         this = typeof(this).init;
 
+        // -- Suppressed putRawType for RawBytes special case --
         /+++ TAG FOR FIELD: version +++/
         auto backtrack_version = jbuf.MemoryReader(memory.buffer, memory.cursor);
         if(memory.bytesLeft != 0)
@@ -5042,6 +5089,8 @@ struct Certificate
         componentHeader.identifier = ident;
         this = typeof(this).init;
 
+        // -- RawBytes special case, preserving DER bytes --
+        auto rawBytes_tbsCertificate = memory.cursor;
         /+++ TAG FOR FIELD: tbsCertificate +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
@@ -5063,6 +5112,10 @@ struct Certificate
         if(result.isError)
             return result.wrapError("when setting field 'tbsCertificate' in type "~__traits(identifier, typeof(this))~":");
 
+        // -- RawBytes special case, setting raw DER bytes --
+        result = this._tbsCertificate.setDasn1_RawBytes(asn1.Asn1OctetString.fromUnownedBytes(memory.buffer[rawBytes_tbsCertificate..memory.cursor]));
+        if(result.isError)
+            return result.wrapError("when handling RawBytes special case in type "~__traits(identifier, typeof(this))~":");
         
         /+++ TAG FOR FIELD: signatureAlgorithm +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
@@ -9533,6 +9586,560 @@ struct PostalCode
         }
         depth--;
 
+    }
+
+}
+
+asn1.Asn1Integer street_address(
+) @nogc nothrow
+{
+    asn1.Asn1Integer mainValue;
+    static immutable ubyte[] mainValue__underlying = [
+        /* 17 */ 0x11, 
+    ];
+    mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
+    return mainValue;
+
+}
+
+struct StreetAddress
+{
+    private
+    {
+        .PDSParameter _value;
+        bool _isSet;
+    }
+
+    jres.Result set(
+        .PDSParameter newValue,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        _value = newValue;
+        _isSet = true;
+        return jres.Result.noError;
+    }
+
+    .PDSParameter get(
+    ) @nogc nothrow
+    {
+        assert(_isSet, "Cannot call get() when no value has been set!");
+        return _value;
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, .PDSParameter, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
+    private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
+    jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
+        scope ref jbuf.MemoryReader memory,
+        const asn1.Asn1Identifier ident,
+    ) 
+    {
+        auto result = jres.Result.noError;
+        asn1.Asn1ComponentHeader componentHeader;
+        componentHeader.identifier = ident;
+        this = typeof(this).init;
+
+        /++ FIELD - _value ++/
+        typeof(_value) temp__value;
+        result = temp__value.fromDecoding!ruleset(memory, componentHeader.identifier);
+        if(result.isError)
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
+        result = this.set(temp__value);
+        if(result.isError)
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
+
+        return jres.Result.noError;
+    }
+
+}
+
+asn1.Asn1Integer post_office_box_address(
+) @nogc nothrow
+{
+    asn1.Asn1Integer mainValue;
+    static immutable ubyte[] mainValue__underlying = [
+        /* 18 */ 0x12, 
+    ];
+    mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
+    return mainValue;
+
+}
+
+struct PostOfficeBoxAddress
+{
+    private
+    {
+        .PDSParameter _value;
+        bool _isSet;
+    }
+
+    jres.Result set(
+        .PDSParameter newValue,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        _value = newValue;
+        _isSet = true;
+        return jres.Result.noError;
+    }
+
+    .PDSParameter get(
+    ) @nogc nothrow
+    {
+        assert(_isSet, "Cannot call get() when no value has been set!");
+        return _value;
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, .PDSParameter, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
+    private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
+    jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
+        scope ref jbuf.MemoryReader memory,
+        const asn1.Asn1Identifier ident,
+    ) 
+    {
+        auto result = jres.Result.noError;
+        asn1.Asn1ComponentHeader componentHeader;
+        componentHeader.identifier = ident;
+        this = typeof(this).init;
+
+        /++ FIELD - _value ++/
+        typeof(_value) temp__value;
+        result = temp__value.fromDecoding!ruleset(memory, componentHeader.identifier);
+        if(result.isError)
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
+        result = this.set(temp__value);
+        if(result.isError)
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
+
+        return jres.Result.noError;
+    }
+
+}
+
+asn1.Asn1Integer poste_restante_address(
+) @nogc nothrow
+{
+    asn1.Asn1Integer mainValue;
+    static immutable ubyte[] mainValue__underlying = [
+        /* 19 */ 0x13, 
+    ];
+    mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
+    return mainValue;
+
+}
+
+struct PosteRestanteAddress
+{
+    private
+    {
+        .PDSParameter _value;
+        bool _isSet;
+    }
+
+    jres.Result set(
+        .PDSParameter newValue,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        _value = newValue;
+        _isSet = true;
+        return jres.Result.noError;
+    }
+
+    .PDSParameter get(
+    ) @nogc nothrow
+    {
+        assert(_isSet, "Cannot call get() when no value has been set!");
+        return _value;
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, .PDSParameter, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
+    private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
+    jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
+        scope ref jbuf.MemoryReader memory,
+        const asn1.Asn1Identifier ident,
+    ) 
+    {
+        auto result = jres.Result.noError;
+        asn1.Asn1ComponentHeader componentHeader;
+        componentHeader.identifier = ident;
+        this = typeof(this).init;
+
+        /++ FIELD - _value ++/
+        typeof(_value) temp__value;
+        result = temp__value.fromDecoding!ruleset(memory, componentHeader.identifier);
+        if(result.isError)
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
+        result = this.set(temp__value);
+        if(result.isError)
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
+
+        return jres.Result.noError;
+    }
+
+}
+
+asn1.Asn1Integer unique_postal_name(
+) @nogc nothrow
+{
+    asn1.Asn1Integer mainValue;
+    static immutable ubyte[] mainValue__underlying = [
+        /* 20 */ 0x14, 
+    ];
+    mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
+    return mainValue;
+
+}
+
+struct UniquePostalName
+{
+    private
+    {
+        .PDSParameter _value;
+        bool _isSet;
+    }
+
+    jres.Result set(
+        .PDSParameter newValue,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        _value = newValue;
+        _isSet = true;
+        return jres.Result.noError;
+    }
+
+    .PDSParameter get(
+    ) @nogc nothrow
+    {
+        assert(_isSet, "Cannot call get() when no value has been set!");
+        return _value;
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, .PDSParameter, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
+    private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
+    jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
+        scope ref jbuf.MemoryReader memory,
+        const asn1.Asn1Identifier ident,
+    ) 
+    {
+        auto result = jres.Result.noError;
+        asn1.Asn1ComponentHeader componentHeader;
+        componentHeader.identifier = ident;
+        this = typeof(this).init;
+
+        /++ FIELD - _value ++/
+        typeof(_value) temp__value;
+        result = temp__value.fromDecoding!ruleset(memory, componentHeader.identifier);
+        if(result.isError)
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
+        result = this.set(temp__value);
+        if(result.isError)
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
+
+        return jres.Result.noError;
+    }
+
+}
+
+asn1.Asn1Integer local_postal_attributes(
+) @nogc nothrow
+{
+    asn1.Asn1Integer mainValue;
+    static immutable ubyte[] mainValue__underlying = [
+        /* 21 */ 0x15, 
+    ];
+    mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
+    return mainValue;
+
+}
+
+struct LocalPostalAttributes
+{
+    private
+    {
+        .PDSParameter _value;
+        bool _isSet;
+    }
+
+    jres.Result set(
+        .PDSParameter newValue,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        _value = newValue;
+        _isSet = true;
+        return jres.Result.noError;
+    }
+
+    .PDSParameter get(
+    ) @nogc nothrow
+    {
+        assert(_isSet, "Cannot call get() when no value has been set!");
+        return _value;
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, .PDSParameter, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
+    private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
+    jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
+        scope ref jbuf.MemoryReader memory,
+        const asn1.Asn1Identifier ident,
+    ) 
+    {
+        auto result = jres.Result.noError;
+        asn1.Asn1ComponentHeader componentHeader;
+        componentHeader.identifier = ident;
+        this = typeof(this).init;
+
+        /++ FIELD - _value ++/
+        typeof(_value) temp__value;
+        result = temp__value.fromDecoding!ruleset(memory, componentHeader.identifier);
+        if(result.isError)
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
+        result = this.set(temp__value);
+        if(result.isError)
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
+
+        return jres.Result.noError;
+    }
+
+}
+
+struct PDSParameter
+{
+    private
+    {
+        bool _isSet_printable_string;
+        asn1.Asn1PrintableString _printable_string;
+    }
+
+    jres.Result setPrintable_string(
+        typeof(_printable_string) value,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 30;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
+        _isSet_printable_string = true;
+        _printable_string = value;
+        return jres.Result.noError;
+    }
+
+    jres.Result setPrintable_string(
+        tcon.Nullable!(asn1.Asn1PrintableString) value,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        if(!value.isNull)
+        {
+            bool _successFlag;
+            _successFlag = value.get.asSlice.length >= 1 && value.get.asSlice.length <= 30;
+            if(!_successFlag)
+                return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
+            return setPrintable_string(value.get());
+        }
+        else
+            _isSet_printable_string = false;
+        return jres.Result.noError;
+    }
+
+    tcon.Nullable!(asn1.Asn1PrintableString) getPrintable_string(
+    ) @nogc nothrow
+    {
+        if(_isSet_printable_string)
+            return typeof(return)(_printable_string);
+        return typeof(return).init;
+    }
+
+    jres.Result validate(
+    ) @nogc nothrow
+    {
+        return jres.Result.noError;
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("printable-string: ");
+        sink("\n");
+        static if(__traits(hasMember, typeof(_printable_string), "toString"))
+            _printable_string.toString(sink, depth+1);
+        else
+            {
+            putIndent();
+            sink("<no toString impl>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
+    private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
+    jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
+        scope ref jbuf.MemoryReader memory,
+        const asn1.Asn1Identifier ident,
+    ) 
+    {
+        auto result = jres.Result.noError;
+        asn1.Asn1ComponentHeader componentHeader;
+        componentHeader.identifier = ident;
+        this = typeof(this).init;
+
+        static assert(ruleset == asn1.Asn1Ruleset.der, "TODO: Support non-DER SET encodings");
+        /+++ TAG FOR FIELD: printable-string +++/
+        auto backtrack_printable_string = jbuf.MemoryReader(memory.buffer, memory.cursor);
+        if(memory.bytesLeft != 0)
+        {
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
+            if(result.isError)
+                return result.wrapError("when decoding header of field 'printable-string' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 19)
+            {
+                jbuf.MemoryReader memory_printable_string;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_printable_string);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'printable-string' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - printable-string ++/
+                typeof(_printable_string) temp_printable_string;
+                result = typeof(temp_printable_string).fromDecoding!ruleset(memory_printable_string, temp_printable_string, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'printable_string' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setPrintable_string(temp_printable_string);
+                if(result.isError)
+                    return result.wrapError("when setting field 'printable_string' in type "~__traits(identifier, typeof(this))~":");
+
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_printable_string.buffer, backtrack_printable_string.cursor);
+            }
+        }
+        
+        if(memory.bytesLeft != 0)
+            return jres.Result.make(asn1.Asn1DecodeError.setHasExtraData, "when decoding non-extensible SET PDSParameter there were unsused content bytes after attempting to decode all known fields - this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input");
+        return this.validate();
     }
 
 }

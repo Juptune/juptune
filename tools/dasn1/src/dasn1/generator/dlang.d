@@ -4,6 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
+
+/// NOTE: I won't even pretend this code is good - have fun!
 module dasn1.generator.dlang;
 
 import std.typecons : Nullable;
@@ -286,7 +288,10 @@ private immutable CHECKER_FUNCTION_PREFIX = "is";
 private immutable VALIDATE_FUNCTION_PREFIX = "validate";
 private immutable DEFAULT_VALUE_PREFIX = "defaultOf";
 
+private immutable INTRINSIC_MODULE_NAME = "Dasn1-Intrinsics";
 private immutable INTRINSIC_ANY_NAME = "Dasn1-Any";
+private immutable INTRINSIC_RAWBYTES_NAME = "Dasn1-RawBytes";
+private immutable INTRINSIC_RAWBYTES_FIELD_NAME = "dasn1-RawBytes";
 
 private immutable RETURN_NO_ERROR = "return "~RESULT_TYPE~".noError;";
 
@@ -477,7 +482,7 @@ private void putValueLiteral(
 
         override void visit(Asn1TypeReferenceIr ir)
         {
-            if(isIntrinsicAnyType(ir))
+            if(isIntrinsicAnyType(ir) || isIntrinsicRawBytesType(ir))
                 assert(false, "TODO: Figure out what to do with this case");
 
             with(code)
@@ -917,14 +922,43 @@ private void putRawType(
 
             immutable MEMORY_VAR_PREFIX = "memory_";
             immutable BACKTRACK_VAR_PREFIX = "backtrack_";
+            immutable RAW_VAR_PREFIX = "rawBytes_";
 
             auto typeRefIr = cast(Asn1TypeReferenceIr)item.type;
             const isAnyIntrinsic = (typeRefIr !is null && isIntrinsicAnyType(typeRefIr));
+            const isRawBytesIntrinsic = (typeRefIr !is null && isIntrinsicRawBytesType(typeRefIr));
+
+            bool isNestedWithRawBytesIntrinsic = false;
+            if(typeRefIr !is null)
+            {
+                auto resolvedTypeIr = typeRefIr.getResolvedTypeRecurse();
+                if(auto sequenceTypeIr = cast(Asn1SequenceTypeIr)resolvedTypeIr)
+                {
+                    const rawBytesItem = sequenceTypeIr.getByNameOrNull(INTRINSIC_RAWBYTES_FIELD_NAME);
+                    isNestedWithRawBytesIntrinsic = (
+                        !rawBytesItem.isNull
+                        && (cast(Asn1TypeReferenceIr)rawBytesItem.get.type) !is null
+                        && isIntrinsicRawBytesType(cast(Asn1TypeReferenceIr)rawBytesItem.get.type)
+                    );
+                }
+            }
 
             // Here be dragons... this needs a refactor because fml this is combinatronics hell.
 
             with(code)
             {
+                if(isRawBytesIntrinsic)
+                {
+                    putLine("// -- Suppressed putRawType for RawBytes special case --");
+                    return Result.noError;
+                }
+
+                if(isNestedWithRawBytesIntrinsic)
+                {
+                    putLine("// -- RawBytes special case, preserving DER bytes --");
+                    putLine("auto ", RAW_VAR_PREFIX, fixName(item.name), " = ", DECODER_PARAM_MEMORY, ".cursor;");
+                }
+
                 putLine("/+++ TAG FOR FIELD: ", item.name, " +++/");
 
                 assert(!item.isComponentsOf, "TODO: Handle COMPONENTS OF");
@@ -1023,6 +1057,23 @@ private void putRawType(
                     typeOfOverride: ('_'~item.name).idup,
                     memoryVarOverride: (MEMORY_VAR_PREFIX~item.name).idup
                 );
+
+                if(isNestedWithRawBytesIntrinsic)
+                {
+                    putLine("// -- RawBytes special case, setting raw DER bytes --");
+                    putLine("result = this._", fixName(item.name), 
+                        ".", asCamelCase(SETTER_FUNCTION_PREFIX, INTRINSIC_RAWBYTES_FIELD_NAME), "(",
+                            ASN1_SHORTHAND, ".Asn1OctetString.fromUnownedBytes(",
+                                DECODER_PARAM_MEMORY, ".buffer[",
+                                    RAW_VAR_PREFIX, fixName(item.name),
+                                    "..",
+                                    DECODER_PARAM_MEMORY, ".cursor",
+                                "]",
+                            ")",
+                        ")",
+                    ";");
+                    putResultCheck("handling RawBytes special case");
+                }
 
                 if(!topLevelTag.isNull)
                 {
@@ -1829,6 +1880,11 @@ private void putRawDerDecodingForField(
                 this.decodePrimitive();
                 return;
             }
+            else if(isIntrinsicRawBytesType(ir)) // This should never be directly decoded - it is special cased.
+            {
+                code.putLine("// -- Suppressed putRawDerDecodingForField for RawBytes special case --");
+                return;
+            }
 
             with(code)
             {
@@ -2031,7 +2087,7 @@ private string rawTypeOf(Asn1TypeIr ir, Asn1ModuleIr currentModule, Asn1ErrorHan
 
             auto parentModIr = asn1GetParentModule(ir.getResolvedType());
 
-            if(isIntrinsicAnyType(ir))
+            if(isIntrinsicAnyType(ir) || isIntrinsicRawBytesType(ir))
                 result = ASN1_SHORTHAND~".Asn1OctetString";
             else if (parentModIr is currentModule)
                 result = fixName("."~ir.typeRef);
@@ -2123,6 +2179,10 @@ private string fixName(scope const char[] name)
 
 private bool isIntrinsicAnyType(Asn1TypeReferenceIr ir)
 {
-    // TODO: Add an extra check to ensure the type is from the intrinsics module - IR tree needs parent info first though (or at least module info).
-    return ir.typeRef == INTRINSIC_ANY_NAME;
+    return ir.typeRef == INTRINSIC_ANY_NAME && asn1GetParentModule(ir.getResolvedType()).getModuleName() == INTRINSIC_MODULE_NAME; // @suppress(dscanner.style.long_line)
+}
+
+private bool isIntrinsicRawBytesType(Asn1TypeReferenceIr ir)
+{
+    return ir.typeRef == INTRINSIC_RAWBYTES_NAME && asn1GetParentModule(ir.getResolvedType()).getModuleName() == INTRINSIC_MODULE_NAME; // @suppress(dscanner.style.long_line)
 }

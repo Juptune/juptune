@@ -12,7 +12,7 @@ DEFINITIONS EXPLICIT TAGS ::=
 BEGIN
 
 IMPORTS
-      Dasn1-Any FROM Dasn1-Intrinsics { iso(0) custom(0) dasn1(1) intrinsics(0) }
+      Dasn1-Any, Dasn1-RawBytes FROM Dasn1-Intrinsics { iso(0) custom(0) dasn1(1) intrinsics(0) }
 ;
 
 -- PKIX specific OIDs
@@ -311,6 +311,8 @@ Extensions  ::=  SEQUENCE (SIZE (1..MAX)) OF Extension
 Version  ::=  INTEGER  {  v1(0), v2(1), v3(2)  }
 
 TBSCertificate  ::=  SEQUENCE  {
+     dasn1-RawBytes Dasn1-RawBytes OPTIONAL,
+
      version         [0]  Version DEFAULT v1,
      serialNumber         CertificateSerialNumber,
      signature            AlgorithmIdentifier,
@@ -323,7 +325,8 @@ TBSCertificate  ::=  SEQUENCE  {
      subjectUniqueID [2]  IMPLICIT UniqueIdentifier OPTIONAL,
                           -- If present, version MUST be v2 or v3
      extensions      [3]  Extensions OPTIONAL
-                          -- If present, version MUST be v3 --  }
+                          -- If present, version MUST be v3 --
+}
 
 Certificate  ::=  SEQUENCE  {
      tbsCertificate       TBSCertificate,
@@ -542,32 +545,32 @@ PostalCode ::= CHOICE {
 --   teletex-string TeletexString
 --        (SIZE (1..ub-unformatted-address-length)) OPTIONAL }
 --
---street-address INTEGER ::= 17
---
---StreetAddress ::= PDSParameter
---
---post-office-box-address INTEGER ::= 18
---
---PostOfficeBoxAddress ::= PDSParameter
---
---poste-restante-address INTEGER ::= 19
---
---PosteRestanteAddress ::= PDSParameter
---
---unique-postal-name INTEGER ::= 20
---
---UniquePostalName ::= PDSParameter
---
---local-postal-attributes INTEGER ::= 21
---
---LocalPostalAttributes ::= PDSParameter
---
---PDSParameter ::= SET {
---   printable-string PrintableString
---                (SIZE(1..ub-pds-parameter-length)) OPTIONAL,
---   teletex-string TeletexString
---                (SIZE(1..ub-pds-parameter-length)) OPTIONAL 
---}
+street-address INTEGER ::= 17
+
+StreetAddress ::= PDSParameter
+
+post-office-box-address INTEGER ::= 18
+
+PostOfficeBoxAddress ::= PDSParameter
+
+poste-restante-address INTEGER ::= 19
+
+PosteRestanteAddress ::= PDSParameter
+
+unique-postal-name INTEGER ::= 20
+
+UniquePostalName ::= PDSParameter
+
+local-postal-attributes INTEGER ::= 21
+
+LocalPostalAttributes ::= PDSParameter
+
+PDSParameter ::= SET {
+   printable-string PrintableString
+                (SIZE(1..ub-pds-parameter-length)) OPTIONAL
+   --teletex-string TeletexString
+   --             (SIZE(1..ub-pds-parameter-length)) OPTIONAL 
+}
 
 extended-network-address INTEGER ::= 22
 

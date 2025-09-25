@@ -5,6 +5,7 @@ static import asn1 = juptune.data.asn1.decode.bcd.encoding;
 static import jres = juptune.core.util.result;
 static import jbuf = juptune.data.buffer;
 static import jstr = juptune.core.ds.string2;
+static import utf8 = juptune.data.utf8;
 
 struct MyBool
 {
@@ -18,6 +19,7 @@ struct MyBool
         asn1.Asn1Bool newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -108,6 +110,7 @@ struct MyChoice
         typeof(Value.bitstring) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.bitstring = value;
         _choice = Choice.bitstring;
         return jres.Result.noError;
@@ -130,6 +133,7 @@ struct MyChoice
         typeof(Value.boolean) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.boolean = value;
         _choice = Choice.boolean;
         return jres.Result.noError;
@@ -281,6 +285,7 @@ struct MySequence
         typeof(_a) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_a = true;
         _a = value;
         return jres.Result.noError;
@@ -297,6 +302,7 @@ struct MySequence
         typeof(_b) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_b = true;
         _b = value;
         return jres.Result.noError;
@@ -306,8 +312,11 @@ struct MySequence
         tcon.Nullable!(asn1.Asn1Bool) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setB(value.get());
+        }
         else
             _isSet_b = false;
         return jres.Result.noError;
@@ -325,6 +334,7 @@ struct MySequence
         typeof(_c) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_c = true;
         _c = value;
         return jres.Result.noError;

@@ -57,4 +57,7 @@ unittest
 
     Certificate cert;
     cert.fromDecoding!(Asn1Ruleset.der)(content, header.identifier).resultAssert;
+
+    import std.format : format;
+    assert(false, format("%s", cert.getTbsCertificate().getDasn1_RawBytes()));
 }
