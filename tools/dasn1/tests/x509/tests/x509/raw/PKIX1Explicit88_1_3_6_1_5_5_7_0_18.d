@@ -631,6 +631,19 @@ struct X520name
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520name!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
@@ -818,6 +831,19 @@ struct X520CommonName
     {
         Choice _choice;
         Value _value;
+    }
+
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520CommonName!");
+
     }
 
     jres.Result setPrintableString(
@@ -1009,6 +1035,19 @@ struct X520LocalityName
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520LocalityName!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
@@ -1196,6 +1235,19 @@ struct X520StateOrProvinceName
     {
         Choice _choice;
         Value _value;
+    }
+
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520StateOrProvinceName!");
+
     }
 
     jres.Result setPrintableString(
@@ -1387,6 +1439,19 @@ struct X520OrganizationName
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520OrganizationName!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
@@ -1576,6 +1641,19 @@ struct X520OrganizationalUnitName
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520OrganizationalUnitName!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
@@ -1763,6 +1841,19 @@ struct X520Title
     {
         Choice _choice;
         Value _value;
+    }
+
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520Title!");
+
     }
 
     jres.Result setPrintableString(
@@ -2223,6 +2314,19 @@ struct X520Pseudonym
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520Pseudonym!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
@@ -2585,6 +2689,16 @@ struct Name
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.rdnSequence)) @nogc nothrow handle_rdnSequence,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.rdnSequence)
+            return handle_rdnSequence(_value.rdnSequence);
+        assert(false, "attempted to use an uninitialised Name!");
+
+    }
+
     jres.Result setRdnSequence(
         typeof(Value.rdnSequence) value,
     ) @nogc nothrow
@@ -2925,6 +3039,19 @@ struct DirectoryString
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised DirectoryString!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
@@ -3168,13 +3295,18 @@ struct AlgorithmIdentifier
         depth++;
         sink("parameters: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_parameters), "toString"))
-            _parameters.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_parameters)
+        {
+            static if(__traits(hasMember, typeof(_parameters), "toString"))
+                _parameters.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -3337,6 +3469,16 @@ struct Time
     {
         Choice _choice;
         Value _value;
+    }
+
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.utcTime)) @nogc nothrow handle_utcTime,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.utcTime)
+            return handle_utcTime(_value.utcTime);
+        assert(false, "attempted to use an uninitialised Time!");
+
     }
 
     jres.Result setUtcTime(
@@ -4524,13 +4666,18 @@ struct TBSCertificate
         depth++;
         sink("dasn1-RawBytes: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_dasn1_RawBytes), "toString"))
-            _dasn1_RawBytes.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_dasn1_RawBytes)
+        {
+            static if(__traits(hasMember, typeof(_dasn1_RawBytes), "toString"))
+                _dasn1_RawBytes.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
@@ -4620,37 +4767,52 @@ struct TBSCertificate
         depth++;
         sink("issuerUniqueID: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_issuerUniqueID), "toString"))
-            _issuerUniqueID.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_issuerUniqueID)
+        {
+            static if(__traits(hasMember, typeof(_issuerUniqueID), "toString"))
+                _issuerUniqueID.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("subjectUniqueID: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_subjectUniqueID), "toString"))
-            _subjectUniqueID.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_subjectUniqueID)
+        {
+            static if(__traits(hasMember, typeof(_subjectUniqueID), "toString"))
+                _subjectUniqueID.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("extensions: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_extensions), "toString"))
-            _extensions.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_extensions)
+        {
+            static if(__traits(hasMember, typeof(_extensions), "toString"))
+                _extensions.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -5505,13 +5667,18 @@ struct TBSCertList_RevokedCertificate
         depth++;
         sink("crlEntryExtensions: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_crlEntryExtensions), "toString"))
-            _crlEntryExtensions.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_crlEntryExtensions)
+        {
+            static if(__traits(hasMember, typeof(_crlEntryExtensions), "toString"))
+                _crlEntryExtensions.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -5830,13 +5997,18 @@ struct TBSCertList
         depth++;
         sink("version: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_version), "toString"))
-            _version.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_version)
+        {
+            static if(__traits(hasMember, typeof(_version), "toString"))
+                _version.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
@@ -5878,37 +6050,52 @@ struct TBSCertList
         depth++;
         sink("nextUpdate: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_nextUpdate), "toString"))
-            _nextUpdate.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_nextUpdate)
+        {
+            static if(__traits(hasMember, typeof(_nextUpdate), "toString"))
+                _nextUpdate.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("revokedCertificates: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_revokedCertificates), "toString"))
-            _revokedCertificates.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_revokedCertificates)
+        {
+            static if(__traits(hasMember, typeof(_revokedCertificates), "toString"))
+                _revokedCertificates.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("crlExtensions: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_crlExtensions), "toString"))
-            _crlExtensions.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_crlExtensions)
+        {
+            static if(__traits(hasMember, typeof(_crlExtensions), "toString"))
+                _crlExtensions.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -6150,6 +6337,19 @@ struct CountryName
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.x121_dcc_code)) @nogc nothrow handle_x121_dcc_code,
+        scope jres.Result delegate(typeof(Value.iso_3166_alpha2_code)) @nogc nothrow handle_iso_3166_alpha2_code,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.x121_dcc_code)
+            return handle_x121_dcc_code(_value.x121_dcc_code);
+        if(_choice == Choice.iso_3166_alpha2_code)
+            return handle_iso_3166_alpha2_code(_value.iso_3166_alpha2_code);
+        assert(false, "attempted to use an uninitialised CountryName!");
+
+    }
+
     jres.Result setX121_dcc_code(
         typeof(Value.x121_dcc_code) value,
     ) @nogc nothrow
@@ -6317,6 +6517,19 @@ struct AdministrationDomainName
     {
         Choice _choice;
         Value _value;
+    }
+
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.numeric)) @nogc nothrow handle_numeric,
+        scope jres.Result delegate(typeof(Value.printable)) @nogc nothrow handle_printable,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.numeric)
+            return handle_numeric(_value.numeric);
+        if(_choice == Choice.printable)
+            return handle_printable(_value.printable);
+        assert(false, "attempted to use an uninitialised AdministrationDomainName!");
+
     }
 
     jres.Result setNumeric(
@@ -6713,6 +6926,19 @@ struct PrivateDomainName
     {
         Choice _choice;
         Value _value;
+    }
+
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.numeric)) @nogc nothrow handle_numeric,
+        scope jres.Result delegate(typeof(Value.printable)) @nogc nothrow handle_printable,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.numeric)
+            return handle_numeric(_value.numeric);
+        if(_choice == Choice.printable)
+            return handle_printable(_value.printable);
+        assert(false, "attempted to use an uninitialised PrivateDomainName!");
+
     }
 
     jres.Result setNumeric(
@@ -7174,37 +7400,52 @@ struct PersonalName
         depth++;
         sink("given-name: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_given_name), "toString"))
-            _given_name.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_given_name)
+        {
+            static if(__traits(hasMember, typeof(_given_name), "toString"))
+                _given_name.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("initials: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_initials), "toString"))
-            _initials.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_initials)
+        {
+            static if(__traits(hasMember, typeof(_initials), "toString"))
+                _initials.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("generation-qualifier: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_generation_qualifier), "toString"))
-            _generation_qualifier.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_generation_qualifier)
+        {
+            static if(__traits(hasMember, typeof(_generation_qualifier), "toString"))
+                _generation_qualifier.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -8323,109 +8564,154 @@ struct BuiltInStandardAttributes
         depth++;
         sink("country-name: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_country_name), "toString"))
-            _country_name.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_country_name)
+        {
+            static if(__traits(hasMember, typeof(_country_name), "toString"))
+                _country_name.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("administration-domain-name: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_administration_domain_name), "toString"))
-            _administration_domain_name.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_administration_domain_name)
+        {
+            static if(__traits(hasMember, typeof(_administration_domain_name), "toString"))
+                _administration_domain_name.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("network-address: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_network_address), "toString"))
-            _network_address.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_network_address)
+        {
+            static if(__traits(hasMember, typeof(_network_address), "toString"))
+                _network_address.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("terminal-identifier: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_terminal_identifier), "toString"))
-            _terminal_identifier.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_terminal_identifier)
+        {
+            static if(__traits(hasMember, typeof(_terminal_identifier), "toString"))
+                _terminal_identifier.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("private-domain-name: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_private_domain_name), "toString"))
-            _private_domain_name.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_private_domain_name)
+        {
+            static if(__traits(hasMember, typeof(_private_domain_name), "toString"))
+                _private_domain_name.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("organization-name: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_organization_name), "toString"))
-            _organization_name.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_organization_name)
+        {
+            static if(__traits(hasMember, typeof(_organization_name), "toString"))
+                _organization_name.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("numeric-user-identifier: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_numeric_user_identifier), "toString"))
-            _numeric_user_identifier.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_numeric_user_identifier)
+        {
+            static if(__traits(hasMember, typeof(_numeric_user_identifier), "toString"))
+                _numeric_user_identifier.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("personal-name: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_personal_name), "toString"))
-            _personal_name.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_personal_name)
+        {
+            static if(__traits(hasMember, typeof(_personal_name), "toString"))
+                _personal_name.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("organizational-unit-names: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_organizational_unit_names), "toString"))
-            _organizational_unit_names.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_organizational_unit_names)
+        {
+            static if(__traits(hasMember, typeof(_organizational_unit_names), "toString"))
+                _organizational_unit_names.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -8880,25 +9166,35 @@ struct ORAddress
         depth++;
         sink("built-in-domain-defined-attributes: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_built_in_domain_defined_attributes), "toString"))
-            _built_in_domain_defined_attributes.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_built_in_domain_defined_attributes)
+        {
+            static if(__traits(hasMember, typeof(_built_in_domain_defined_attributes), "toString"))
+                _built_in_domain_defined_attributes.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("extension-attributes: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_extension_attributes), "toString"))
-            _extension_attributes.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_extension_attributes)
+        {
+            static if(__traits(hasMember, typeof(_extension_attributes), "toString"))
+                _extension_attributes.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -9266,6 +9562,19 @@ struct PhysicalDeliveryCountryName
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.x121_dcc_code)) @nogc nothrow handle_x121_dcc_code,
+        scope jres.Result delegate(typeof(Value.iso_3166_alpha2_code)) @nogc nothrow handle_iso_3166_alpha2_code,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.x121_dcc_code)
+            return handle_x121_dcc_code(_value.x121_dcc_code);
+        if(_choice == Choice.iso_3166_alpha2_code)
+            return handle_iso_3166_alpha2_code(_value.iso_3166_alpha2_code);
+        assert(false, "attempted to use an uninitialised PhysicalDeliveryCountryName!");
+
+    }
+
     jres.Result setX121_dcc_code(
         typeof(Value.x121_dcc_code) value,
     ) @nogc nothrow
@@ -9445,6 +9754,19 @@ struct PostalCode
     {
         Choice _choice;
         Value _value;
+    }
+
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.numeric_code)) @nogc nothrow handle_numeric_code,
+        scope jres.Result delegate(typeof(Value.printable_code)) @nogc nothrow handle_printable_code,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.numeric_code)
+            return handle_numeric_code(_value.numeric_code);
+        if(_choice == Choice.printable_code)
+            return handle_printable_code(_value.printable_code);
+        assert(false, "attempted to use an uninitialised PostalCode!");
+
     }
 
     jres.Result setNumeric_code(
@@ -10084,13 +10406,18 @@ struct PDSParameter
         depth++;
         sink("printable-string: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_printable_string), "toString"))
-            _printable_string.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_printable_string)
+        {
+            static if(__traits(hasMember, typeof(_printable_string), "toString"))
+                _printable_string.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -10250,13 +10577,18 @@ struct ExtendedNetworkAddress_e163_4_address
         depth++;
         sink("sub-address: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_sub_address), "toString"))
-            _sub_address.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_sub_address)
+        {
+            static if(__traits(hasMember, typeof(_sub_address), "toString"))
+                _sub_address.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -10355,6 +10687,19 @@ struct ExtendedNetworkAddress
     {
         Choice _choice;
         Value _value;
+    }
+
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.e163_4_address)) @nogc nothrow handle_e163_4_address,
+        scope jres.Result delegate(typeof(Value.psap_address)) @nogc nothrow handle_psap_address,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.e163_4_address)
+            return handle_e163_4_address(_value.e163_4_address);
+        if(_choice == Choice.psap_address)
+            return handle_psap_address(_value.psap_address);
+        assert(false, "attempted to use an uninitialised ExtendedNetworkAddress!");
+
     }
 
     jres.Result setE163_4_address(
@@ -10642,37 +10987,52 @@ struct PresentationAddress
         depth++;
         sink("pSelector: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_pSelector), "toString"))
-            _pSelector.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_pSelector)
+        {
+            static if(__traits(hasMember, typeof(_pSelector), "toString"))
+                _pSelector.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("sSelector: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_sSelector), "toString"))
-            _sSelector.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_sSelector)
+        {
+            static if(__traits(hasMember, typeof(_sSelector), "toString"))
+                _sSelector.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("tSelector: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_tSelector), "toString"))
-            _tSelector.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_tSelector)
+        {
+            static if(__traits(hasMember, typeof(_tSelector), "toString"))
+                _tSelector.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;

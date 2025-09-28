@@ -161,37 +161,52 @@ struct AuthorityKeyIdentifier
         depth++;
         sink("keyIdentifier: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_keyIdentifier), "toString"))
-            _keyIdentifier.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_keyIdentifier)
+        {
+            static if(__traits(hasMember, typeof(_keyIdentifier), "toString"))
+                _keyIdentifier.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("authorityCertIssuer: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_authorityCertIssuer), "toString"))
-            _authorityCertIssuer.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_authorityCertIssuer)
+        {
+            static if(__traits(hasMember, typeof(_authorityCertIssuer), "toString"))
+                _authorityCertIssuer.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("authorityCertSerialNumber: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_authorityCertSerialNumber), "toString"))
-            _authorityCertSerialNumber.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_authorityCertSerialNumber)
+        {
+            static if(__traits(hasMember, typeof(_authorityCertSerialNumber), "toString"))
+                _authorityCertSerialNumber.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -763,13 +778,18 @@ struct PolicyInformation
         depth++;
         sink("policyQualifiers: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_policyQualifiers), "toString"))
-            _policyQualifiers.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_policyQualifiers)
+        {
+            static if(__traits(hasMember, typeof(_policyQualifiers), "toString"))
+                _policyQualifiers.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -1314,25 +1334,35 @@ struct UserNotice
         depth++;
         sink("noticeRef: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_noticeRef), "toString"))
-            _noticeRef.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_noticeRef)
+        {
+            static if(__traits(hasMember, typeof(_noticeRef), "toString"))
+                _noticeRef.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("explicitText: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_explicitText), "toString"))
-            _explicitText.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_explicitText)
+        {
+            static if(__traits(hasMember, typeof(_explicitText), "toString"))
+                _explicitText.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -1593,6 +1623,19 @@ struct DisplayText
     {
         Choice _choice;
         Value _value;
+    }
+
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.ia5String)) @nogc nothrow handle_ia5String,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.ia5String)
+            return handle_ia5String(_value.ia5String);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised DisplayText!");
+
     }
 
     jres.Result setIa5String(
@@ -2203,6 +2246,40 @@ struct GeneralName
     {
         Choice _choice;
         Value _value;
+    }
+
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.otherName)) @nogc nothrow handle_otherName,
+        scope jres.Result delegate(typeof(Value.rfc822Name)) @nogc nothrow handle_rfc822Name,
+        scope jres.Result delegate(typeof(Value.dNSName)) @nogc nothrow handle_dNSName,
+        scope jres.Result delegate(typeof(Value.x400Address)) @nogc nothrow handle_x400Address,
+        scope jres.Result delegate(typeof(Value.directoryName)) @nogc nothrow handle_directoryName,
+        scope jres.Result delegate(typeof(Value.ediPartyName)) @nogc nothrow handle_ediPartyName,
+        scope jres.Result delegate(typeof(Value.uniformResourceIdentifier)) @nogc nothrow handle_uniformResourceIdentifier,
+        scope jres.Result delegate(typeof(Value.iPAddress)) @nogc nothrow handle_iPAddress,
+        scope jres.Result delegate(typeof(Value.registeredID)) @nogc nothrow handle_registeredID,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.otherName)
+            return handle_otherName(_value.otherName);
+        if(_choice == Choice.rfc822Name)
+            return handle_rfc822Name(_value.rfc822Name);
+        if(_choice == Choice.dNSName)
+            return handle_dNSName(_value.dNSName);
+        if(_choice == Choice.x400Address)
+            return handle_x400Address(_value.x400Address);
+        if(_choice == Choice.directoryName)
+            return handle_directoryName(_value.directoryName);
+        if(_choice == Choice.ediPartyName)
+            return handle_ediPartyName(_value.ediPartyName);
+        if(_choice == Choice.uniformResourceIdentifier)
+            return handle_uniformResourceIdentifier(_value.uniformResourceIdentifier);
+        if(_choice == Choice.iPAddress)
+            return handle_iPAddress(_value.iPAddress);
+        if(_choice == Choice.registeredID)
+            return handle_registeredID(_value.registeredID);
+        assert(false, "attempted to use an uninitialised GeneralName!");
+
     }
 
     jres.Result setOtherName(
@@ -2955,13 +3032,18 @@ struct EDIPartyName
         depth++;
         sink("nameAssigner: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_nameAssigner), "toString"))
-            _nameAssigner.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_nameAssigner)
+        {
+            static if(__traits(hasMember, typeof(_nameAssigner), "toString"))
+                _nameAssigner.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
@@ -3365,13 +3447,18 @@ struct BasicConstraints
         depth++;
         sink("pathLenConstraint: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_pathLenConstraint), "toString"))
-            _pathLenConstraint.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_pathLenConstraint)
+        {
+            static if(__traits(hasMember, typeof(_pathLenConstraint), "toString"))
+                _pathLenConstraint.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -3569,25 +3656,35 @@ struct NameConstraints
         depth++;
         sink("permittedSubtrees: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_permittedSubtrees), "toString"))
-            _permittedSubtrees.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_permittedSubtrees)
+        {
+            static if(__traits(hasMember, typeof(_permittedSubtrees), "toString"))
+                _permittedSubtrees.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("excludedSubtrees: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_excludedSubtrees), "toString"))
-            _excludedSubtrees.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_excludedSubtrees)
+        {
+            static if(__traits(hasMember, typeof(_excludedSubtrees), "toString"))
+                _excludedSubtrees.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -3895,13 +3992,18 @@ struct GeneralSubtree
         depth++;
         sink("maximum: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_maximum), "toString"))
-            _maximum.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_maximum)
+        {
+            static if(__traits(hasMember, typeof(_maximum), "toString"))
+                _maximum.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -4200,25 +4302,35 @@ struct PolicyConstraints
         depth++;
         sink("requireExplicitPolicy: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_requireExplicitPolicy), "toString"))
-            _requireExplicitPolicy.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_requireExplicitPolicy)
+        {
+            static if(__traits(hasMember, typeof(_requireExplicitPolicy), "toString"))
+                _requireExplicitPolicy.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("inhibitPolicyMapping: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_inhibitPolicyMapping), "toString"))
-            _inhibitPolicyMapping.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_inhibitPolicyMapping)
+        {
+            static if(__traits(hasMember, typeof(_inhibitPolicyMapping), "toString"))
+                _inhibitPolicyMapping.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -4605,37 +4717,52 @@ struct DistributionPoint
         depth++;
         sink("distributionPoint: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_distributionPoint), "toString"))
-            _distributionPoint.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_distributionPoint)
+        {
+            static if(__traits(hasMember, typeof(_distributionPoint), "toString"))
+                _distributionPoint.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("reasons: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_reasons), "toString"))
-            _reasons.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_reasons)
+        {
+            static if(__traits(hasMember, typeof(_reasons), "toString"))
+                _reasons.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
         sink("cRLIssuer: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_cRLIssuer), "toString"))
-            _cRLIssuer.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_cRLIssuer)
+        {
+            static if(__traits(hasMember, typeof(_cRLIssuer), "toString"))
+                _cRLIssuer.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         depth--;
 
@@ -4666,8 +4793,22 @@ struct DistributionPoint
                 if(result.isError)
                     return result.wrapError("when reading content bytes of field 'distributionPoint' in type "~__traits(identifier, typeof(this))~":");
                 /++ FIELD - distributionPoint ++/
+                jbuf.MemoryReader memory_0distributionPoint;
+                    // EXPLICIT TAG - 0
+                    if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
+                        return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 0 for field distributionPoint a primitive tag was found when a constructed one was expected");
+                    if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 0 for field 'distributionPoint' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                    if(componentHeader.identifier.tag != 0)
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 0 for field 'distributionPoint' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                    result = asn1.asn1DecodeComponentHeader!ruleset(memory_distributionPoint, componentHeader);
+                    if(result.isError)
+                        return result.wrapError("when decoding header of field 'distributionPoint' in type "~__traits(identifier, typeof(this))~":");
+                    result = asn1.asn1ReadContentBytes(memory_distributionPoint, componentHeader.length, memory_0distributionPoint);
+                    if(result.isError)
+                        return result.wrapError("when reading content bytes of field 'distributionPoint' in type "~__traits(identifier, typeof(this))~":");
                 typeof(_distributionPoint) temp_distributionPoint;
-                result = temp_distributionPoint.fromDecoding!ruleset(memory_distributionPoint, componentHeader.identifier);
+                result = temp_distributionPoint.fromDecoding!ruleset(memory_0distributionPoint, componentHeader.identifier);
                 if(result.isError)
                     return result.wrapError("when decoding field 'distributionPoint' in type "~__traits(identifier, typeof(this))~":");
                 result = this.setDistributionPoint(temp_distributionPoint);
@@ -4770,6 +4911,19 @@ struct DistributionPointName
     {
         Choice _choice;
         Value _value;
+    }
+
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.fullName)) @nogc nothrow handle_fullName,
+        scope jres.Result delegate(typeof(Value.nameRelativeToCRLIssuer)) @nogc nothrow handle_nameRelativeToCRLIssuer,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.fullName)
+            return handle_fullName(_value.fullName);
+        if(_choice == Choice.nameRelativeToCRLIssuer)
+            return handle_nameRelativeToCRLIssuer(_value.nameRelativeToCRLIssuer);
+        assert(false, "attempted to use an uninitialised DistributionPointName!");
+
     }
 
     jres.Result setFullName(
@@ -6086,13 +6240,18 @@ struct IssuingDistributionPoint
         depth++;
         sink("distributionPoint: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_distributionPoint), "toString"))
-            _distributionPoint.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_distributionPoint)
+        {
+            static if(__traits(hasMember, typeof(_distributionPoint), "toString"))
+                _distributionPoint.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;
@@ -6122,13 +6281,18 @@ struct IssuingDistributionPoint
         depth++;
         sink("onlySomeReasons: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_onlySomeReasons), "toString"))
-            _onlySomeReasons.toString(sink, depth+1);
-        else
-            {
-            putIndent();
-            sink("<no toString impl>\n");
+        if(_isSet_onlySomeReasons)
+        {
+            static if(__traits(hasMember, typeof(_onlySomeReasons), "toString"))
+                _onlySomeReasons.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
         }
+        else
+            sink("<null>\n");
         depth--;
         putIndent();
         depth++;

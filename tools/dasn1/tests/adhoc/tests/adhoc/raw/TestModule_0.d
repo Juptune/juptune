@@ -106,6 +106,19 @@ struct MyChoice
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.bitstring)) @nogc nothrow handle_bitstring,
+        scope jres.Result delegate(typeof(Value.boolean)) @nogc nothrow handle_boolean,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.bitstring)
+            return handle_bitstring(_value.bitstring);
+        if(_choice == Choice.boolean)
+            return handle_boolean(_value.boolean);
+        assert(false, "attempted to use an uninitialised MyChoice!");
+
+    }
+
     jres.Result setBitstring(
         typeof(Value.bitstring) value,
     ) @nogc nothrow

@@ -285,6 +285,7 @@ private immutable DECODER_VAR_HEADER = "componentHeader";
 private immutable SETTER_FUNCTION_PREFIX = "set";
 private immutable GETTER_FUNCTION_PREFIX = "get";
 private immutable CHECKER_FUNCTION_PREFIX = "is";
+private immutable MATCH_FUNCTION_PREFIX = "match";
 private immutable VALIDATE_FUNCTION_PREFIX = "validate";
 private immutable DEFAULT_VALUE_PREFIX = "defaultOf";
 
@@ -672,6 +673,33 @@ private void putRawType(
                     putLine(CHOICE_ENUM, ' ', CHOICE_FIELD, ";");
                     putLine(VALUE_UNION, ' ', VALUE_FIELD, ";");
                 });
+
+                declareFunction(
+                    RESULT_TYPE, 
+                    MATCH_FUNCTION_PREFIX,
+                    (next){
+                        ir.foreachChoiceGC((name, typeIr, _){
+                            put(
+                                "scope ", RESULT_TYPE, " delegate(",
+                                    "typeof(", VALUE_UNION, '.', fixName(name), ")",
+                                ") @nogc nothrow handle_", fixName(name)
+                            );
+                            next();
+                            return Result.noError;
+                        }).resultEnforce;
+                    }, (){
+                        ir.foreachChoiceGC((name, typeIr, _){
+                            putLine("if(", CHOICE_FIELD, " == ", CHOICE_ENUM, '.', fixName(name), ")");
+                            indent();
+                                putLine("return handle_", fixName(name), "(", VALUE_FIELD, '.', fixName(name), ");");
+                            dedent();
+                            return Result.noError;
+                        }).resultEnforce;
+
+                        putLine(`assert(false, "attempted to use an uninitialised `, name, `!");`);
+                    },
+                    funcAttributes: "@nogc nothrow",
+                );
 
                 ir.foreachChoiceGC((name, typeIr, _){
                     declareFunction(
@@ -1324,6 +1352,14 @@ private void putRawType(
                         putLine("depth++;");
                         putLine(`sink("`, item.name, `: ");`);
                         putLine(`sink("\n");`);
+                        
+                        if(item.isOptional)
+                        {
+                            putLine("if(", IS_SET_PREFIX, fixName(item.name), ")");
+                            putLine("{");
+                            indent();
+                        }
+
                         putLine("static if(__traits(hasMember, typeof(_", fixName(item.name), ")", `, "toString"))`);
                         indent();
                             putLine("_", fixName(item.name), ".toString(sink, depth+1);");
@@ -1335,6 +1371,20 @@ private void putRawType(
                             putLine(`sink("<no toString impl>\n");`);
                         dedent();
                         putLine("}");
+
+                        if(item.isOptional)
+                        {
+                            dedent();
+                            putLine("}");
+                            putLine("else");
+                            putLine("{");
+                            indent();
+                                putLine("putIndent();");
+                                putLine(`sink("<optional null>\n");`);
+                            dedent();
+                            putLine("}");
+                        }
+
                         putLine("depth--;");
                         return Result.noError;
                     }).resultEnforce;

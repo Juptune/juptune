@@ -5,6 +5,7 @@ static import asn1 = juptune.data.asn1.decode.bcd.encoding;
 static import jres = juptune.core.util.result;
 static import jbuf = juptune.data.buffer;
 static import jstr = juptune.core.ds.string2;
+static import utf8 = juptune.data.utf8;
 
 asn1.Asn1ObjectIdentifier id_pkix(
 ) @nogc nothrow
@@ -150,6 +151,7 @@ struct AttributeType
         asn1.Asn1ObjectIdentifier newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -224,6 +226,7 @@ struct AttributeTypeAndValue
         typeof(_type) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_type = true;
         _type = value;
         return jres.Result.noError;
@@ -240,6 +243,7 @@ struct AttributeTypeAndValue
         typeof(_value) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_value = true;
         _value = value;
         return jres.Result.noError;
@@ -374,6 +378,7 @@ struct Attribute
         typeof(_type) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_type = true;
         _type = value;
         return jres.Result.noError;
@@ -390,6 +395,7 @@ struct Attribute
         typeof(_values) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_values = true;
         _values = value;
         return jres.Result.noError;
@@ -625,11 +631,28 @@ struct X520name
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520name!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 32768;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.printableString = value;
         _choice = Choice.printableString;
         return jres.Result.noError;
@@ -652,7 +675,17 @@ struct X520name
         typeof(Value.utf8String) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            size_t _utf8string__length;
+            result = utf8.utf8Length(value.asSlice, _utf8string__length);
+            if(result.isError)
+                return result.wrapError("when counting length of utf8 string in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _utf8string__length >= 1 && _utf8string__length <= 32768;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.utf8String = value;
         _choice = Choice.utf8String;
         return jres.Result.noError;
@@ -800,11 +833,28 @@ struct X520CommonName
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520CommonName!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 64;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.printableString = value;
         _choice = Choice.printableString;
         return jres.Result.noError;
@@ -827,7 +877,17 @@ struct X520CommonName
         typeof(Value.utf8String) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            size_t _utf8string__length;
+            result = utf8.utf8Length(value.asSlice, _utf8string__length);
+            if(result.isError)
+                return result.wrapError("when counting length of utf8 string in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _utf8string__length >= 1 && _utf8string__length <= 64;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.utf8String = value;
         _choice = Choice.utf8String;
         return jres.Result.noError;
@@ -975,11 +1035,28 @@ struct X520LocalityName
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520LocalityName!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 128;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.printableString = value;
         _choice = Choice.printableString;
         return jres.Result.noError;
@@ -1002,7 +1079,17 @@ struct X520LocalityName
         typeof(Value.utf8String) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            size_t _utf8string__length;
+            result = utf8.utf8Length(value.asSlice, _utf8string__length);
+            if(result.isError)
+                return result.wrapError("when counting length of utf8 string in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _utf8string__length >= 1 && _utf8string__length <= 128;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.utf8String = value;
         _choice = Choice.utf8String;
         return jres.Result.noError;
@@ -1150,11 +1237,28 @@ struct X520StateOrProvinceName
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520StateOrProvinceName!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 128;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.printableString = value;
         _choice = Choice.printableString;
         return jres.Result.noError;
@@ -1177,7 +1281,17 @@ struct X520StateOrProvinceName
         typeof(Value.utf8String) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            size_t _utf8string__length;
+            result = utf8.utf8Length(value.asSlice, _utf8string__length);
+            if(result.isError)
+                return result.wrapError("when counting length of utf8 string in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _utf8string__length >= 1 && _utf8string__length <= 128;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.utf8String = value;
         _choice = Choice.utf8String;
         return jres.Result.noError;
@@ -1325,11 +1439,28 @@ struct X520OrganizationName
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520OrganizationName!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 64;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.printableString = value;
         _choice = Choice.printableString;
         return jres.Result.noError;
@@ -1352,7 +1483,17 @@ struct X520OrganizationName
         typeof(Value.utf8String) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            size_t _utf8string__length;
+            result = utf8.utf8Length(value.asSlice, _utf8string__length);
+            if(result.isError)
+                return result.wrapError("when counting length of utf8 string in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _utf8string__length >= 1 && _utf8string__length <= 64;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.utf8String = value;
         _choice = Choice.utf8String;
         return jres.Result.noError;
@@ -1500,11 +1641,28 @@ struct X520OrganizationalUnitName
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520OrganizationalUnitName!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 64;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.printableString = value;
         _choice = Choice.printableString;
         return jres.Result.noError;
@@ -1527,7 +1685,17 @@ struct X520OrganizationalUnitName
         typeof(Value.utf8String) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            size_t _utf8string__length;
+            result = utf8.utf8Length(value.asSlice, _utf8string__length);
+            if(result.isError)
+                return result.wrapError("when counting length of utf8 string in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _utf8string__length >= 1 && _utf8string__length <= 64;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.utf8String = value;
         _choice = Choice.utf8String;
         return jres.Result.noError;
@@ -1675,11 +1843,28 @@ struct X520Title
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520Title!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 64;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.printableString = value;
         _choice = Choice.printableString;
         return jres.Result.noError;
@@ -1702,7 +1887,17 @@ struct X520Title
         typeof(Value.utf8String) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            size_t _utf8string__length;
+            result = utf8.utf8Length(value.asSlice, _utf8string__length);
+            if(result.isError)
+                return result.wrapError("when counting length of utf8 string in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _utf8string__length >= 1 && _utf8string__length <= 64;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.utf8String = value;
         _choice = Choice.utf8String;
         return jres.Result.noError;
@@ -1836,6 +2031,7 @@ struct X520dnQualifier
         asn1.Asn1PrintableString newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -1922,6 +2118,11 @@ struct X520countryName
         asn1.Asn1PrintableString newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.asSlice.length == 2;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -2008,6 +2209,11 @@ struct X520SerialNumber
         asn1.Asn1PrintableString newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.asSlice.length >= 1 && newValue.asSlice.length <= 64;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -2108,11 +2314,28 @@ struct X520Pseudonym
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520Pseudonym!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 128;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.printableString = value;
         _choice = Choice.printableString;
         return jres.Result.noError;
@@ -2135,7 +2358,17 @@ struct X520Pseudonym
         typeof(Value.utf8String) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            size_t _utf8string__length;
+            result = utf8.utf8Length(value.asSlice, _utf8string__length);
+            if(result.isError)
+                return result.wrapError("when counting length of utf8 string in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _utf8string__length >= 1 && _utf8string__length <= 128;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.utf8String = value;
         _choice = Choice.utf8String;
         return jres.Result.noError;
@@ -2269,6 +2502,7 @@ struct DomainComponent
         asn1.Asn1Ia5String newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -2367,6 +2601,11 @@ struct EmailAddress
         asn1.Asn1Ia5String newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.asSlice.length >= 1 && newValue.asSlice.length <= 255;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -2450,10 +2689,21 @@ struct Name
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.rdnSequence)) @nogc nothrow handle_rdnSequence,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.rdnSequence)
+            return handle_rdnSequence(_value.rdnSequence);
+        assert(false, "attempted to use an uninitialised Name!");
+
+    }
+
     jres.Result setRdnSequence(
         typeof(Value.rdnSequence) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.rdnSequence = value;
         _choice = Choice.rdnSequence;
         return jres.Result.noError;
@@ -2544,6 +2794,7 @@ struct RDNSequence
         asn1.Asn1SequenceOf!(.RelativeDistinguishedName) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -2620,6 +2871,7 @@ struct DistinguishedName
         .RDNSequence newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -2692,6 +2944,11 @@ struct RelativeDistinguishedName
         asn1.Asn1SetOf!(.AttributeTypeAndValue) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.elementCount >= 1 && newValue.elementCount <= 18446744073709551615;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -2782,11 +3039,28 @@ struct DirectoryString
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised DirectoryString!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 18446744073709551615;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.printableString = value;
         _choice = Choice.printableString;
         return jres.Result.noError;
@@ -2809,7 +3083,17 @@ struct DirectoryString
         typeof(Value.utf8String) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            size_t _utf8string__length;
+            result = utf8.utf8Length(value.asSlice, _utf8string__length);
+            if(result.isError)
+                return result.wrapError("when counting length of utf8 string in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _utf8string__length >= 1 && _utf8string__length <= 18446744073709551615;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.utf8String = value;
         _choice = Choice.utf8String;
         return jres.Result.noError;
@@ -2931,6 +3215,7 @@ struct AlgorithmIdentifier
         typeof(_algorithm) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_algorithm = true;
         _algorithm = value;
         return jres.Result.noError;
@@ -2947,6 +3232,7 @@ struct AlgorithmIdentifier
         typeof(_parameters) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_parameters = true;
         _parameters = value;
         return jres.Result.noError;
@@ -2956,8 +3242,11 @@ struct AlgorithmIdentifier
         tcon.Nullable!(asn1.Asn1OctetString) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setParameters(value.get());
+        }
         else
             _isSet_parameters = false;
         return jres.Result.noError;
@@ -3006,12 +3295,20 @@ struct AlgorithmIdentifier
         depth++;
         sink("parameters: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_parameters), "toString"))
-            _parameters.toString(sink, depth+1);
+        if(_isSet_parameters)
+        {
+            static if(__traits(hasMember, typeof(_parameters), "toString"))
+                _parameters.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         depth--;
@@ -3093,6 +3390,7 @@ struct CertificateSerialNumber
         asn1.Asn1Integer newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -3176,10 +3474,21 @@ struct Time
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.utcTime)) @nogc nothrow handle_utcTime,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.utcTime)
+            return handle_utcTime(_value.utcTime);
+        assert(false, "attempted to use an uninitialised Time!");
+
+    }
+
     jres.Result setUtcTime(
         typeof(Value.utcTime) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.utcTime = value;
         _choice = Choice.utcTime;
         return jres.Result.noError;
@@ -3272,6 +3581,7 @@ struct Validity
         typeof(_notBefore) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_notBefore = true;
         _notBefore = value;
         return jres.Result.noError;
@@ -3288,6 +3598,7 @@ struct Validity
         typeof(_notAfter) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_notAfter = true;
         _notAfter = value;
         return jres.Result.noError;
@@ -3417,6 +3728,7 @@ struct SubjectPublicKeyInfo
         typeof(_algorithm) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_algorithm = true;
         _algorithm = value;
         return jres.Result.noError;
@@ -3433,6 +3745,7 @@ struct SubjectPublicKeyInfo
         typeof(_subjectPublicKey) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_subjectPublicKey = true;
         _subjectPublicKey = value;
         return jres.Result.noError;
@@ -3568,6 +3881,7 @@ struct UniqueIdentifier
         asn1.Asn1BitString newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -3644,6 +3958,7 @@ struct Extension
         typeof(_extnID) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_extnID = true;
         _extnID = value;
         return jres.Result.noError;
@@ -3660,6 +3975,7 @@ struct Extension
         typeof(_critical) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_critical = true;
         _critical = value;
         return jres.Result.noError;
@@ -3685,6 +4001,7 @@ struct Extension
         typeof(_extnValue) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_extnValue = true;
         _extnValue = value;
         return jres.Result.noError;
@@ -3876,6 +4193,11 @@ struct Extensions
         asn1.Asn1SequenceOf!(.Extension) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.elementCount >= 1 && newValue.elementCount <= 18446744073709551615;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -3958,6 +4280,7 @@ struct Version
         asn1.Asn1Integer newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -4022,6 +4345,8 @@ struct TBSCertificate
 {
     private
     {
+        bool _isSet_dasn1_RawBytes;
+        asn1.Asn1OctetString _dasn1_RawBytes;
         bool _isSet_version;
         .Version _version;
         bool _isSet_serialNumber;
@@ -4044,10 +4369,43 @@ struct TBSCertificate
         .Extensions _extensions;
     }
 
+    jres.Result setDasn1_RawBytes(
+        typeof(_dasn1_RawBytes) value,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        _isSet_dasn1_RawBytes = true;
+        _dasn1_RawBytes = value;
+        return jres.Result.noError;
+    }
+
+    jres.Result setDasn1_RawBytes(
+        tcon.Nullable!(asn1.Asn1OctetString) value,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        if(!value.isNull)
+        {
+            return setDasn1_RawBytes(value.get());
+        }
+        else
+            _isSet_dasn1_RawBytes = false;
+        return jres.Result.noError;
+    }
+
+    tcon.Nullable!(asn1.Asn1OctetString) getDasn1_RawBytes(
+    ) @nogc nothrow
+    {
+        if(_isSet_dasn1_RawBytes)
+            return typeof(return)(_dasn1_RawBytes);
+        return typeof(return).init;
+    }
+
     jres.Result setVersion(
         typeof(_version) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_version = true;
         _version = value;
         return jres.Result.noError;
@@ -4078,6 +4436,7 @@ struct TBSCertificate
         typeof(_serialNumber) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_serialNumber = true;
         _serialNumber = value;
         return jres.Result.noError;
@@ -4094,6 +4453,7 @@ struct TBSCertificate
         typeof(_signature) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_signature = true;
         _signature = value;
         return jres.Result.noError;
@@ -4110,6 +4470,7 @@ struct TBSCertificate
         typeof(_issuer) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_issuer = true;
         _issuer = value;
         return jres.Result.noError;
@@ -4126,6 +4487,7 @@ struct TBSCertificate
         typeof(_validity) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_validity = true;
         _validity = value;
         return jres.Result.noError;
@@ -4142,6 +4504,7 @@ struct TBSCertificate
         typeof(_subject) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_subject = true;
         _subject = value;
         return jres.Result.noError;
@@ -4158,6 +4521,7 @@ struct TBSCertificate
         typeof(_subjectPublicKeyInfo) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_subjectPublicKeyInfo = true;
         _subjectPublicKeyInfo = value;
         return jres.Result.noError;
@@ -4174,6 +4538,7 @@ struct TBSCertificate
         typeof(_issuerUniqueID) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_issuerUniqueID = true;
         _issuerUniqueID = value;
         return jres.Result.noError;
@@ -4183,8 +4548,11 @@ struct TBSCertificate
         tcon.Nullable!(.UniqueIdentifier) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setIssuerUniqueID(value.get());
+        }
         else
             _isSet_issuerUniqueID = false;
         return jres.Result.noError;
@@ -4202,6 +4570,7 @@ struct TBSCertificate
         typeof(_subjectUniqueID) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_subjectUniqueID = true;
         _subjectUniqueID = value;
         return jres.Result.noError;
@@ -4211,8 +4580,11 @@ struct TBSCertificate
         tcon.Nullable!(.UniqueIdentifier) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setSubjectUniqueID(value.get());
+        }
         else
             _isSet_subjectUniqueID = false;
         return jres.Result.noError;
@@ -4230,6 +4602,7 @@ struct TBSCertificate
         typeof(_extensions) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_extensions = true;
         _extensions = value;
         return jres.Result.noError;
@@ -4239,8 +4612,11 @@ struct TBSCertificate
         tcon.Nullable!(.Extensions) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setExtensions(value.get());
+        }
         else
             _isSet_extensions = false;
         return jres.Result.noError;
@@ -4289,6 +4665,26 @@ struct TBSCertificate
         putIndent();
         sink("["~__traits(identifier, typeof(this))~"]\n");
         depth++;
+        putIndent();
+        depth++;
+        sink("dasn1-RawBytes: ");
+        sink("\n");
+        if(_isSet_dasn1_RawBytes)
+        {
+            static if(__traits(hasMember, typeof(_dasn1_RawBytes), "toString"))
+                _dasn1_RawBytes.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
+        else
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
+        depth--;
         putIndent();
         depth++;
         sink("version: ");
@@ -4377,36 +4773,60 @@ struct TBSCertificate
         depth++;
         sink("issuerUniqueID: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_issuerUniqueID), "toString"))
-            _issuerUniqueID.toString(sink, depth+1);
+        if(_isSet_issuerUniqueID)
+        {
+            static if(__traits(hasMember, typeof(_issuerUniqueID), "toString"))
+                _issuerUniqueID.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("subjectUniqueID: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_subjectUniqueID), "toString"))
-            _subjectUniqueID.toString(sink, depth+1);
+        if(_isSet_subjectUniqueID)
+        {
+            static if(__traits(hasMember, typeof(_subjectUniqueID), "toString"))
+                _subjectUniqueID.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("extensions: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_extensions), "toString"))
-            _extensions.toString(sink, depth+1);
+        if(_isSet_extensions)
+        {
+            static if(__traits(hasMember, typeof(_extensions), "toString"))
+                _extensions.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         depth--;
@@ -4424,6 +4844,7 @@ struct TBSCertificate
         componentHeader.identifier = ident;
         this = typeof(this).init;
 
+        // -- Suppressed putRawType for RawBytes special case --
         /+++ TAG FOR FIELD: version +++/
         auto backtrack_version = jbuf.MemoryReader(memory.buffer, memory.cursor);
         if(memory.bytesLeft != 0)
@@ -4724,6 +5145,7 @@ struct Certificate
         typeof(_tbsCertificate) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_tbsCertificate = true;
         _tbsCertificate = value;
         return jres.Result.noError;
@@ -4740,6 +5162,7 @@ struct Certificate
         typeof(_signatureAlgorithm) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_signatureAlgorithm = true;
         _signatureAlgorithm = value;
         return jres.Result.noError;
@@ -4756,6 +5179,7 @@ struct Certificate
         typeof(_signature) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_signature = true;
         _signature = value;
         return jres.Result.noError;
@@ -4842,6 +5266,8 @@ struct Certificate
         componentHeader.identifier = ident;
         this = typeof(this).init;
 
+        // -- RawBytes special case, preserving DER bytes --
+        auto rawBytes_tbsCertificate = memory.cursor;
         /+++ TAG FOR FIELD: tbsCertificate +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
         if(result.isError)
@@ -4863,6 +5289,10 @@ struct Certificate
         if(result.isError)
             return result.wrapError("when setting field 'tbsCertificate' in type "~__traits(identifier, typeof(this))~":");
 
+        // -- RawBytes special case, setting raw DER bytes --
+        result = this._tbsCertificate.setDasn1_RawBytes(asn1.Asn1OctetString.fromUnownedBytes(memory.buffer[rawBytes_tbsCertificate..memory.cursor]));
+        if(result.isError)
+            return result.wrapError("when handling RawBytes special case in type "~__traits(identifier, typeof(this))~":");
         
         /+++ TAG FOR FIELD: signatureAlgorithm +++/
         result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
@@ -4931,6 +5361,7 @@ struct CertificateList
         typeof(_tbsCertList) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_tbsCertList = true;
         _tbsCertList = value;
         return jres.Result.noError;
@@ -4947,6 +5378,7 @@ struct CertificateList
         typeof(_signatureAlgorithm) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_signatureAlgorithm = true;
         _signatureAlgorithm = value;
         return jres.Result.noError;
@@ -4963,6 +5395,7 @@ struct CertificateList
         typeof(_signature) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_signature = true;
         _signature = value;
         return jres.Result.noError;
@@ -5138,6 +5571,7 @@ struct TBSCertList_RevokedCertificate
         typeof(_userCertificate) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_userCertificate = true;
         _userCertificate = value;
         return jres.Result.noError;
@@ -5154,6 +5588,7 @@ struct TBSCertList_RevokedCertificate
         typeof(_revocationDate) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_revocationDate = true;
         _revocationDate = value;
         return jres.Result.noError;
@@ -5170,6 +5605,7 @@ struct TBSCertList_RevokedCertificate
         typeof(_crlEntryExtensions) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_crlEntryExtensions = true;
         _crlEntryExtensions = value;
         return jres.Result.noError;
@@ -5179,8 +5615,11 @@ struct TBSCertList_RevokedCertificate
         tcon.Nullable!(.Extensions) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setCrlEntryExtensions(value.get());
+        }
         else
             _isSet_crlEntryExtensions = false;
         return jres.Result.noError;
@@ -5243,12 +5682,20 @@ struct TBSCertList_RevokedCertificate
         depth++;
         sink("crlEntryExtensions: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_crlEntryExtensions), "toString"))
-            _crlEntryExtensions.toString(sink, depth+1);
+        if(_isSet_crlEntryExtensions)
+        {
+            static if(__traits(hasMember, typeof(_crlEntryExtensions), "toString"))
+                _crlEntryExtensions.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         depth--;
@@ -5366,6 +5813,7 @@ struct TBSCertList
         typeof(_version) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_version = true;
         _version = value;
         return jres.Result.noError;
@@ -5375,8 +5823,11 @@ struct TBSCertList
         tcon.Nullable!(.Version) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setVersion(value.get());
+        }
         else
             _isSet_version = false;
         return jres.Result.noError;
@@ -5394,6 +5845,7 @@ struct TBSCertList
         typeof(_signature) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_signature = true;
         _signature = value;
         return jres.Result.noError;
@@ -5410,6 +5862,7 @@ struct TBSCertList
         typeof(_issuer) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_issuer = true;
         _issuer = value;
         return jres.Result.noError;
@@ -5426,6 +5879,7 @@ struct TBSCertList
         typeof(_thisUpdate) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_thisUpdate = true;
         _thisUpdate = value;
         return jres.Result.noError;
@@ -5442,6 +5896,7 @@ struct TBSCertList
         typeof(_nextUpdate) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_nextUpdate = true;
         _nextUpdate = value;
         return jres.Result.noError;
@@ -5451,8 +5906,11 @@ struct TBSCertList
         tcon.Nullable!(.Time) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setNextUpdate(value.get());
+        }
         else
             _isSet_nextUpdate = false;
         return jres.Result.noError;
@@ -5470,6 +5928,7 @@ struct TBSCertList
         typeof(_revokedCertificates) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_revokedCertificates = true;
         _revokedCertificates = value;
         return jres.Result.noError;
@@ -5479,8 +5938,11 @@ struct TBSCertList
         tcon.Nullable!(asn1.Asn1SequenceOf!(.TBSCertList_RevokedCertificate)) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setRevokedCertificates(value.get());
+        }
         else
             _isSet_revokedCertificates = false;
         return jres.Result.noError;
@@ -5498,6 +5960,7 @@ struct TBSCertList
         typeof(_crlExtensions) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_crlExtensions = true;
         _crlExtensions = value;
         return jres.Result.noError;
@@ -5507,8 +5970,11 @@ struct TBSCertList
         tcon.Nullable!(.Extensions) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setCrlExtensions(value.get());
+        }
         else
             _isSet_crlExtensions = false;
         return jres.Result.noError;
@@ -5549,12 +6015,20 @@ struct TBSCertList
         depth++;
         sink("version: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_version), "toString"))
-            _version.toString(sink, depth+1);
+        if(_isSet_version)
+        {
+            static if(__traits(hasMember, typeof(_version), "toString"))
+                _version.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
@@ -5597,36 +6071,60 @@ struct TBSCertList
         depth++;
         sink("nextUpdate: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_nextUpdate), "toString"))
-            _nextUpdate.toString(sink, depth+1);
+        if(_isSet_nextUpdate)
+        {
+            static if(__traits(hasMember, typeof(_nextUpdate), "toString"))
+                _nextUpdate.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("revokedCertificates: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_revokedCertificates), "toString"))
-            _revokedCertificates.toString(sink, depth+1);
+        if(_isSet_revokedCertificates)
+        {
+            static if(__traits(hasMember, typeof(_revokedCertificates), "toString"))
+                _revokedCertificates.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("crlExtensions: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_crlExtensions), "toString"))
-            _crlExtensions.toString(sink, depth+1);
+        if(_isSet_crlExtensions)
+        {
+            static if(__traits(hasMember, typeof(_crlExtensions), "toString"))
+                _crlExtensions.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         depth--;
@@ -5869,11 +6367,28 @@ struct CountryName
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.x121_dcc_code)) @nogc nothrow handle_x121_dcc_code,
+        scope jres.Result delegate(typeof(Value.iso_3166_alpha2_code)) @nogc nothrow handle_iso_3166_alpha2_code,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.x121_dcc_code)
+            return handle_x121_dcc_code(_value.x121_dcc_code);
+        if(_choice == Choice.iso_3166_alpha2_code)
+            return handle_iso_3166_alpha2_code(_value.iso_3166_alpha2_code);
+        assert(false, "attempted to use an uninitialised CountryName!");
+
+    }
+
     jres.Result setX121_dcc_code(
         typeof(Value.x121_dcc_code) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length == 3;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.x121_dcc_code = value;
         _choice = Choice.x121_dcc_code;
         return jres.Result.noError;
@@ -5896,7 +6411,11 @@ struct CountryName
         typeof(Value.iso_3166_alpha2_code) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length == 2;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.iso_3166_alpha2_code = value;
         _choice = Choice.iso_3166_alpha2_code;
         return jres.Result.noError;
@@ -6030,11 +6549,28 @@ struct AdministrationDomainName
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.numeric)) @nogc nothrow handle_numeric,
+        scope jres.Result delegate(typeof(Value.printable)) @nogc nothrow handle_printable,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.numeric)
+            return handle_numeric(_value.numeric);
+        if(_choice == Choice.printable)
+            return handle_printable(_value.printable);
+        assert(false, "attempted to use an uninitialised AdministrationDomainName!");
+
+    }
+
     jres.Result setNumeric(
         typeof(Value.numeric) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 0 && value.asSlice.length <= 16;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.numeric = value;
         _choice = Choice.numeric;
         return jres.Result.noError;
@@ -6057,7 +6593,11 @@ struct AdministrationDomainName
         typeof(Value.printable) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 0 && value.asSlice.length <= 16;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.printable = value;
         _choice = Choice.printable;
         return jres.Result.noError;
@@ -6177,6 +6717,7 @@ struct NetworkAddress
         .X121Address newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -6249,6 +6790,11 @@ struct X121Address
         asn1.Asn1NumericString newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.asSlice.length >= 1 && newValue.asSlice.length <= 16;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -6321,6 +6867,11 @@ struct TerminalIdentifier
         asn1.Asn1PrintableString newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.asSlice.length >= 1 && newValue.asSlice.length <= 24;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -6407,11 +6958,28 @@ struct PrivateDomainName
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.numeric)) @nogc nothrow handle_numeric,
+        scope jres.Result delegate(typeof(Value.printable)) @nogc nothrow handle_printable,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.numeric)
+            return handle_numeric(_value.numeric);
+        if(_choice == Choice.printable)
+            return handle_printable(_value.printable);
+        assert(false, "attempted to use an uninitialised PrivateDomainName!");
+
+    }
+
     jres.Result setNumeric(
         typeof(Value.numeric) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 16;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.numeric = value;
         _choice = Choice.numeric;
         return jres.Result.noError;
@@ -6434,7 +7002,11 @@ struct PrivateDomainName
         typeof(Value.printable) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 16;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.printable = value;
         _choice = Choice.printable;
         return jres.Result.noError;
@@ -6554,6 +7126,11 @@ struct OrganizationName
         asn1.Asn1PrintableString newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.asSlice.length >= 1 && newValue.asSlice.length <= 64;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -6626,6 +7203,11 @@ struct NumericUserIdentifier
         asn1.Asn1NumericString newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.asSlice.length >= 1 && newValue.asSlice.length <= 32;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -6704,6 +7286,7 @@ struct PersonalName
         typeof(_surname) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_surname = true;
         _surname = value;
         return jres.Result.noError;
@@ -6720,6 +7303,7 @@ struct PersonalName
         typeof(_given_name) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_given_name = true;
         _given_name = value;
         return jres.Result.noError;
@@ -6729,8 +7313,11 @@ struct PersonalName
         tcon.Nullable!(asn1.Asn1PrintableString) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setGiven_name(value.get());
+        }
         else
             _isSet_given_name = false;
         return jres.Result.noError;
@@ -6748,6 +7335,7 @@ struct PersonalName
         typeof(_initials) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_initials = true;
         _initials = value;
         return jres.Result.noError;
@@ -6757,8 +7345,11 @@ struct PersonalName
         tcon.Nullable!(asn1.Asn1PrintableString) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setInitials(value.get());
+        }
         else
             _isSet_initials = false;
         return jres.Result.noError;
@@ -6776,6 +7367,7 @@ struct PersonalName
         typeof(_generation_qualifier) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_generation_qualifier = true;
         _generation_qualifier = value;
         return jres.Result.noError;
@@ -6785,8 +7377,11 @@ struct PersonalName
         tcon.Nullable!(asn1.Asn1PrintableString) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setGeneration_qualifier(value.get());
+        }
         else
             _isSet_generation_qualifier = false;
         return jres.Result.noError;
@@ -6835,36 +7430,60 @@ struct PersonalName
         depth++;
         sink("given-name: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_given_name), "toString"))
-            _given_name.toString(sink, depth+1);
+        if(_isSet_given_name)
+        {
+            static if(__traits(hasMember, typeof(_given_name), "toString"))
+                _given_name.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("initials: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_initials), "toString"))
-            _initials.toString(sink, depth+1);
+        if(_isSet_initials)
+        {
+            static if(__traits(hasMember, typeof(_initials), "toString"))
+                _initials.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("generation-qualifier: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_generation_qualifier), "toString"))
-            _generation_qualifier.toString(sink, depth+1);
+        if(_isSet_generation_qualifier)
+        {
+            static if(__traits(hasMember, typeof(_generation_qualifier), "toString"))
+                _generation_qualifier.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         depth--;
@@ -7011,6 +7630,11 @@ struct ExtensionAttributes
         asn1.Asn1SetOf!(.ExtensionAttribute) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.elementCount >= 1 && newValue.elementCount <= 256;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -7089,6 +7713,7 @@ struct ExtensionAttribute
         typeof(_extension_attribute_type) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_extension_attribute_type = true;
         _extension_attribute_type = value;
         return jres.Result.noError;
@@ -7105,6 +7730,7 @@ struct ExtensionAttribute
         typeof(_extension_attribute_value) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_extension_attribute_value = true;
         _extension_attribute_value = value;
         return jres.Result.noError;
@@ -7254,6 +7880,11 @@ struct BuiltInDomainDefinedAttributes
         asn1.Asn1SequenceOf!(.BuiltInDomainDefinedAttribute) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.elementCount >= 1 && newValue.elementCount <= 4;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -7332,7 +7963,11 @@ struct BuiltInDomainDefinedAttribute
         typeof(_type) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 8;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _isSet_type = true;
         _type = value;
         return jres.Result.noError;
@@ -7349,7 +7984,11 @@ struct BuiltInDomainDefinedAttribute
         typeof(_value) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 128;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _isSet_value = true;
         _value = value;
         return jres.Result.noError;
@@ -7485,6 +8124,11 @@ struct OrganizationalUnitNames
         asn1.Asn1SequenceOf!(.OrganizationalUnitName) newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.elementCount >= 1 && newValue.elementCount <= 4;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -7561,6 +8205,11 @@ struct OrganizationalUnitName
         asn1.Asn1PrintableString newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.asSlice.length >= 1 && newValue.asSlice.length <= 32;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -7649,6 +8298,7 @@ struct BuiltInStandardAttributes
         typeof(_country_name) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_country_name = true;
         _country_name = value;
         return jres.Result.noError;
@@ -7658,8 +8308,11 @@ struct BuiltInStandardAttributes
         tcon.Nullable!(.CountryName) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setCountry_name(value.get());
+        }
         else
             _isSet_country_name = false;
         return jres.Result.noError;
@@ -7677,6 +8330,7 @@ struct BuiltInStandardAttributes
         typeof(_administration_domain_name) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_administration_domain_name = true;
         _administration_domain_name = value;
         return jres.Result.noError;
@@ -7686,8 +8340,11 @@ struct BuiltInStandardAttributes
         tcon.Nullable!(.AdministrationDomainName) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setAdministration_domain_name(value.get());
+        }
         else
             _isSet_administration_domain_name = false;
         return jres.Result.noError;
@@ -7705,6 +8362,7 @@ struct BuiltInStandardAttributes
         typeof(_network_address) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_network_address = true;
         _network_address = value;
         return jres.Result.noError;
@@ -7714,8 +8372,11 @@ struct BuiltInStandardAttributes
         tcon.Nullable!(.NetworkAddress) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setNetwork_address(value.get());
+        }
         else
             _isSet_network_address = false;
         return jres.Result.noError;
@@ -7733,6 +8394,7 @@ struct BuiltInStandardAttributes
         typeof(_terminal_identifier) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_terminal_identifier = true;
         _terminal_identifier = value;
         return jres.Result.noError;
@@ -7742,8 +8404,11 @@ struct BuiltInStandardAttributes
         tcon.Nullable!(.TerminalIdentifier) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setTerminal_identifier(value.get());
+        }
         else
             _isSet_terminal_identifier = false;
         return jres.Result.noError;
@@ -7761,6 +8426,7 @@ struct BuiltInStandardAttributes
         typeof(_private_domain_name) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_private_domain_name = true;
         _private_domain_name = value;
         return jres.Result.noError;
@@ -7770,8 +8436,11 @@ struct BuiltInStandardAttributes
         tcon.Nullable!(.PrivateDomainName) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setPrivate_domain_name(value.get());
+        }
         else
             _isSet_private_domain_name = false;
         return jres.Result.noError;
@@ -7789,6 +8458,7 @@ struct BuiltInStandardAttributes
         typeof(_organization_name) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_organization_name = true;
         _organization_name = value;
         return jres.Result.noError;
@@ -7798,8 +8468,11 @@ struct BuiltInStandardAttributes
         tcon.Nullable!(.OrganizationName) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setOrganization_name(value.get());
+        }
         else
             _isSet_organization_name = false;
         return jres.Result.noError;
@@ -7817,6 +8490,7 @@ struct BuiltInStandardAttributes
         typeof(_numeric_user_identifier) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_numeric_user_identifier = true;
         _numeric_user_identifier = value;
         return jres.Result.noError;
@@ -7826,8 +8500,11 @@ struct BuiltInStandardAttributes
         tcon.Nullable!(.NumericUserIdentifier) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setNumeric_user_identifier(value.get());
+        }
         else
             _isSet_numeric_user_identifier = false;
         return jres.Result.noError;
@@ -7845,6 +8522,7 @@ struct BuiltInStandardAttributes
         typeof(_personal_name) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_personal_name = true;
         _personal_name = value;
         return jres.Result.noError;
@@ -7854,8 +8532,11 @@ struct BuiltInStandardAttributes
         tcon.Nullable!(.PersonalName) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setPersonal_name(value.get());
+        }
         else
             _isSet_personal_name = false;
         return jres.Result.noError;
@@ -7873,6 +8554,7 @@ struct BuiltInStandardAttributes
         typeof(_organizational_unit_names) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_organizational_unit_names = true;
         _organizational_unit_names = value;
         return jres.Result.noError;
@@ -7882,8 +8564,11 @@ struct BuiltInStandardAttributes
         tcon.Nullable!(.OrganizationalUnitNames) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setOrganizational_unit_names(value.get());
+        }
         else
             _isSet_organizational_unit_names = false;
         return jres.Result.noError;
@@ -7918,108 +8603,180 @@ struct BuiltInStandardAttributes
         depth++;
         sink("country-name: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_country_name), "toString"))
-            _country_name.toString(sink, depth+1);
+        if(_isSet_country_name)
+        {
+            static if(__traits(hasMember, typeof(_country_name), "toString"))
+                _country_name.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("administration-domain-name: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_administration_domain_name), "toString"))
-            _administration_domain_name.toString(sink, depth+1);
+        if(_isSet_administration_domain_name)
+        {
+            static if(__traits(hasMember, typeof(_administration_domain_name), "toString"))
+                _administration_domain_name.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("network-address: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_network_address), "toString"))
-            _network_address.toString(sink, depth+1);
+        if(_isSet_network_address)
+        {
+            static if(__traits(hasMember, typeof(_network_address), "toString"))
+                _network_address.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("terminal-identifier: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_terminal_identifier), "toString"))
-            _terminal_identifier.toString(sink, depth+1);
+        if(_isSet_terminal_identifier)
+        {
+            static if(__traits(hasMember, typeof(_terminal_identifier), "toString"))
+                _terminal_identifier.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("private-domain-name: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_private_domain_name), "toString"))
-            _private_domain_name.toString(sink, depth+1);
+        if(_isSet_private_domain_name)
+        {
+            static if(__traits(hasMember, typeof(_private_domain_name), "toString"))
+                _private_domain_name.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("organization-name: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_organization_name), "toString"))
-            _organization_name.toString(sink, depth+1);
+        if(_isSet_organization_name)
+        {
+            static if(__traits(hasMember, typeof(_organization_name), "toString"))
+                _organization_name.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("numeric-user-identifier: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_numeric_user_identifier), "toString"))
-            _numeric_user_identifier.toString(sink, depth+1);
+        if(_isSet_numeric_user_identifier)
+        {
+            static if(__traits(hasMember, typeof(_numeric_user_identifier), "toString"))
+                _numeric_user_identifier.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("personal-name: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_personal_name), "toString"))
-            _personal_name.toString(sink, depth+1);
+        if(_isSet_personal_name)
+        {
+            static if(__traits(hasMember, typeof(_personal_name), "toString"))
+                _personal_name.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("organizational-unit-names: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_organizational_unit_names), "toString"))
-            _organizational_unit_names.toString(sink, depth+1);
+        if(_isSet_organizational_unit_names)
+        {
+            static if(__traits(hasMember, typeof(_organizational_unit_names), "toString"))
+                _organizational_unit_names.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         depth--;
@@ -8363,6 +9120,7 @@ struct ORAddress
         typeof(_built_in_standard_attributes) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_built_in_standard_attributes = true;
         _built_in_standard_attributes = value;
         return jres.Result.noError;
@@ -8379,6 +9137,7 @@ struct ORAddress
         typeof(_built_in_domain_defined_attributes) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_built_in_domain_defined_attributes = true;
         _built_in_domain_defined_attributes = value;
         return jres.Result.noError;
@@ -8388,8 +9147,11 @@ struct ORAddress
         tcon.Nullable!(.BuiltInDomainDefinedAttributes) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setBuilt_in_domain_defined_attributes(value.get());
+        }
         else
             _isSet_built_in_domain_defined_attributes = false;
         return jres.Result.noError;
@@ -8407,6 +9169,7 @@ struct ORAddress
         typeof(_extension_attributes) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_extension_attributes = true;
         _extension_attributes = value;
         return jres.Result.noError;
@@ -8416,8 +9179,11 @@ struct ORAddress
         tcon.Nullable!(.ExtensionAttributes) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setExtension_attributes(value.get());
+        }
         else
             _isSet_extension_attributes = false;
         return jres.Result.noError;
@@ -8466,24 +9232,40 @@ struct ORAddress
         depth++;
         sink("built-in-domain-defined-attributes: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_built_in_domain_defined_attributes), "toString"))
-            _built_in_domain_defined_attributes.toString(sink, depth+1);
+        if(_isSet_built_in_domain_defined_attributes)
+        {
+            static if(__traits(hasMember, typeof(_built_in_domain_defined_attributes), "toString"))
+                _built_in_domain_defined_attributes.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("extension-attributes: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_extension_attributes), "toString"))
-            _extension_attributes.toString(sink, depth+1);
+        if(_isSet_extension_attributes)
+        {
+            static if(__traits(hasMember, typeof(_extension_attributes), "toString"))
+                _extension_attributes.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         depth--;
@@ -8612,6 +9394,11 @@ struct CommonName
         asn1.Asn1PrintableString newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.asSlice.length >= 1 && newValue.asSlice.length <= 64;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -8744,6 +9531,11 @@ struct PDSName
         asn1.Asn1PrintableString newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = newValue.asSlice.length >= 1 && newValue.asSlice.length <= 16;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;
@@ -8842,11 +9634,28 @@ struct PhysicalDeliveryCountryName
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.x121_dcc_code)) @nogc nothrow handle_x121_dcc_code,
+        scope jres.Result delegate(typeof(Value.iso_3166_alpha2_code)) @nogc nothrow handle_iso_3166_alpha2_code,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.x121_dcc_code)
+            return handle_x121_dcc_code(_value.x121_dcc_code);
+        if(_choice == Choice.iso_3166_alpha2_code)
+            return handle_iso_3166_alpha2_code(_value.iso_3166_alpha2_code);
+        assert(false, "attempted to use an uninitialised PhysicalDeliveryCountryName!");
+
+    }
+
     jres.Result setX121_dcc_code(
         typeof(Value.x121_dcc_code) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length == 3;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.x121_dcc_code = value;
         _choice = Choice.x121_dcc_code;
         return jres.Result.noError;
@@ -8869,7 +9678,11 @@ struct PhysicalDeliveryCountryName
         typeof(Value.iso_3166_alpha2_code) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length == 2;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.iso_3166_alpha2_code = value;
         _choice = Choice.iso_3166_alpha2_code;
         return jres.Result.noError;
@@ -9015,11 +9828,28 @@ struct PostalCode
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.numeric_code)) @nogc nothrow handle_numeric_code,
+        scope jres.Result delegate(typeof(Value.printable_code)) @nogc nothrow handle_printable_code,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.numeric_code)
+            return handle_numeric_code(_value.numeric_code);
+        if(_choice == Choice.printable_code)
+            return handle_printable_code(_value.printable_code);
+        assert(false, "attempted to use an uninitialised PostalCode!");
+
+    }
+
     jres.Result setNumeric_code(
         typeof(Value.numeric_code) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 16;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.numeric_code = value;
         _choice = Choice.numeric_code;
         return jres.Result.noError;
@@ -9042,7 +9872,11 @@ struct PostalCode
         typeof(Value.printable_code) value,
     ) @nogc nothrow
     {
-        // TODO: Warning - type has a constraint but it's not being handled yet!
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 16;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value.printable_code = value;
         _choice = Choice.printable_code;
         return jres.Result.noError;
@@ -9150,6 +9984,568 @@ struct PostalCode
 
 }
 
+asn1.Asn1Integer street_address(
+) @nogc nothrow
+{
+    asn1.Asn1Integer mainValue;
+    static immutable ubyte[] mainValue__underlying = [
+        /* 17 */ 0x11, 
+    ];
+    mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
+    return mainValue;
+
+}
+
+struct StreetAddress
+{
+    private
+    {
+        .PDSParameter _value;
+        bool _isSet;
+    }
+
+    jres.Result set(
+        .PDSParameter newValue,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        _value = newValue;
+        _isSet = true;
+        return jres.Result.noError;
+    }
+
+    .PDSParameter get(
+    ) @nogc nothrow
+    {
+        assert(_isSet, "Cannot call get() when no value has been set!");
+        return _value;
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, .PDSParameter, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
+    private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
+    jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
+        scope ref jbuf.MemoryReader memory,
+        const asn1.Asn1Identifier ident,
+    ) 
+    {
+        auto result = jres.Result.noError;
+        asn1.Asn1ComponentHeader componentHeader;
+        componentHeader.identifier = ident;
+        this = typeof(this).init;
+
+        /++ FIELD - _value ++/
+        typeof(_value) temp__value;
+        result = temp__value.fromDecoding!ruleset(memory, componentHeader.identifier);
+        if(result.isError)
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
+        result = this.set(temp__value);
+        if(result.isError)
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
+
+        return jres.Result.noError;
+    }
+
+}
+
+asn1.Asn1Integer post_office_box_address(
+) @nogc nothrow
+{
+    asn1.Asn1Integer mainValue;
+    static immutable ubyte[] mainValue__underlying = [
+        /* 18 */ 0x12, 
+    ];
+    mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
+    return mainValue;
+
+}
+
+struct PostOfficeBoxAddress
+{
+    private
+    {
+        .PDSParameter _value;
+        bool _isSet;
+    }
+
+    jres.Result set(
+        .PDSParameter newValue,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        _value = newValue;
+        _isSet = true;
+        return jres.Result.noError;
+    }
+
+    .PDSParameter get(
+    ) @nogc nothrow
+    {
+        assert(_isSet, "Cannot call get() when no value has been set!");
+        return _value;
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, .PDSParameter, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
+    private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
+    jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
+        scope ref jbuf.MemoryReader memory,
+        const asn1.Asn1Identifier ident,
+    ) 
+    {
+        auto result = jres.Result.noError;
+        asn1.Asn1ComponentHeader componentHeader;
+        componentHeader.identifier = ident;
+        this = typeof(this).init;
+
+        /++ FIELD - _value ++/
+        typeof(_value) temp__value;
+        result = temp__value.fromDecoding!ruleset(memory, componentHeader.identifier);
+        if(result.isError)
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
+        result = this.set(temp__value);
+        if(result.isError)
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
+
+        return jres.Result.noError;
+    }
+
+}
+
+asn1.Asn1Integer poste_restante_address(
+) @nogc nothrow
+{
+    asn1.Asn1Integer mainValue;
+    static immutable ubyte[] mainValue__underlying = [
+        /* 19 */ 0x13, 
+    ];
+    mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
+    return mainValue;
+
+}
+
+struct PosteRestanteAddress
+{
+    private
+    {
+        .PDSParameter _value;
+        bool _isSet;
+    }
+
+    jres.Result set(
+        .PDSParameter newValue,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        _value = newValue;
+        _isSet = true;
+        return jres.Result.noError;
+    }
+
+    .PDSParameter get(
+    ) @nogc nothrow
+    {
+        assert(_isSet, "Cannot call get() when no value has been set!");
+        return _value;
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, .PDSParameter, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
+    private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
+    jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
+        scope ref jbuf.MemoryReader memory,
+        const asn1.Asn1Identifier ident,
+    ) 
+    {
+        auto result = jres.Result.noError;
+        asn1.Asn1ComponentHeader componentHeader;
+        componentHeader.identifier = ident;
+        this = typeof(this).init;
+
+        /++ FIELD - _value ++/
+        typeof(_value) temp__value;
+        result = temp__value.fromDecoding!ruleset(memory, componentHeader.identifier);
+        if(result.isError)
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
+        result = this.set(temp__value);
+        if(result.isError)
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
+
+        return jres.Result.noError;
+    }
+
+}
+
+asn1.Asn1Integer unique_postal_name(
+) @nogc nothrow
+{
+    asn1.Asn1Integer mainValue;
+    static immutable ubyte[] mainValue__underlying = [
+        /* 20 */ 0x14, 
+    ];
+    mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
+    return mainValue;
+
+}
+
+struct UniquePostalName
+{
+    private
+    {
+        .PDSParameter _value;
+        bool _isSet;
+    }
+
+    jres.Result set(
+        .PDSParameter newValue,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        _value = newValue;
+        _isSet = true;
+        return jres.Result.noError;
+    }
+
+    .PDSParameter get(
+    ) @nogc nothrow
+    {
+        assert(_isSet, "Cannot call get() when no value has been set!");
+        return _value;
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, .PDSParameter, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
+    private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
+    jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
+        scope ref jbuf.MemoryReader memory,
+        const asn1.Asn1Identifier ident,
+    ) 
+    {
+        auto result = jres.Result.noError;
+        asn1.Asn1ComponentHeader componentHeader;
+        componentHeader.identifier = ident;
+        this = typeof(this).init;
+
+        /++ FIELD - _value ++/
+        typeof(_value) temp__value;
+        result = temp__value.fromDecoding!ruleset(memory, componentHeader.identifier);
+        if(result.isError)
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
+        result = this.set(temp__value);
+        if(result.isError)
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
+
+        return jres.Result.noError;
+    }
+
+}
+
+asn1.Asn1Integer local_postal_attributes(
+) @nogc nothrow
+{
+    asn1.Asn1Integer mainValue;
+    static immutable ubyte[] mainValue__underlying = [
+        /* 21 */ 0x15, 
+    ];
+    mainValue = asn1.Asn1Integer.fromUnownedBytes(mainValue__underlying);
+    return mainValue;
+
+}
+
+struct LocalPostalAttributes
+{
+    private
+    {
+        .PDSParameter _value;
+        bool _isSet;
+    }
+
+    jres.Result set(
+        .PDSParameter newValue,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        _value = newValue;
+        _isSet = true;
+        return jres.Result.noError;
+    }
+
+    .PDSParameter get(
+    ) @nogc nothrow
+    {
+        assert(_isSet, "Cannot call get() when no value has been set!");
+        return _value;
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        static if(__traits(hasMember, .PDSParameter, "toString"))
+            _value.toString(sink, depth+1);
+        else
+        {
+            putIndent();
+            sink("<no toString impl>");
+        }
+        sink("\n");
+        depth--;
+
+    }
+
+    private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
+    jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
+        scope ref jbuf.MemoryReader memory,
+        const asn1.Asn1Identifier ident,
+    ) 
+    {
+        auto result = jres.Result.noError;
+        asn1.Asn1ComponentHeader componentHeader;
+        componentHeader.identifier = ident;
+        this = typeof(this).init;
+
+        /++ FIELD - _value ++/
+        typeof(_value) temp__value;
+        result = temp__value.fromDecoding!ruleset(memory, componentHeader.identifier);
+        if(result.isError)
+            return result.wrapError("when decoding field '_value' in type "~__traits(identifier, typeof(this))~":");
+        result = this.set(temp__value);
+        if(result.isError)
+            return result.wrapError("when setting field '_value' in type "~__traits(identifier, typeof(this))~":");
+
+        return jres.Result.noError;
+    }
+
+}
+
+struct PDSParameter
+{
+    private
+    {
+        bool _isSet_printable_string;
+        asn1.Asn1PrintableString _printable_string;
+    }
+
+    jres.Result setPrintable_string(
+        typeof(_printable_string) value,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        _successFlag = value.asSlice.length >= 1 && value.asSlice.length <= 30;
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
+        _isSet_printable_string = true;
+        _printable_string = value;
+        return jres.Result.noError;
+    }
+
+    jres.Result setPrintable_string(
+        tcon.Nullable!(asn1.Asn1PrintableString) value,
+    ) @nogc nothrow
+    {
+        jres.Result result = jres.Result.noError;
+        if(!value.isNull)
+        {
+            bool _successFlag;
+            _successFlag = value.get.asSlice.length >= 1 && value.get.asSlice.length <= 30;
+            if(!_successFlag)
+                return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
+            return setPrintable_string(value.get());
+        }
+        else
+            _isSet_printable_string = false;
+        return jres.Result.noError;
+    }
+
+    tcon.Nullable!(asn1.Asn1PrintableString) getPrintable_string(
+    ) @nogc nothrow
+    {
+        if(_isSet_printable_string)
+            return typeof(return)(_printable_string);
+        return typeof(return).init;
+    }
+
+    jres.Result validate(
+    ) @nogc nothrow
+    {
+        return jres.Result.noError;
+    }
+
+    private alias _toStringTestInstantiation = toString!(void delegate(scope const(char)[]) @nogc nothrow);
+    void toString(SinkT)(
+        scope SinkT sink,
+        int depth = 0,
+    ) 
+    {
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
+        
+        putIndent();
+        sink("["~__traits(identifier, typeof(this))~"]\n");
+        depth++;
+        putIndent();
+        depth++;
+        sink("printable-string: ");
+        sink("\n");
+        if(_isSet_printable_string)
+        {
+            static if(__traits(hasMember, typeof(_printable_string), "toString"))
+                _printable_string.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
+        else
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
+        depth--;
+        depth--;
+
+    }
+
+    private alias testInstantiation = fromDecoding!(asn1.Asn1Ruleset.der);
+    jres.Result fromDecoding(asn1.Asn1Ruleset ruleset)(
+        scope ref jbuf.MemoryReader memory,
+        const asn1.Asn1Identifier ident,
+    ) 
+    {
+        auto result = jres.Result.noError;
+        asn1.Asn1ComponentHeader componentHeader;
+        componentHeader.identifier = ident;
+        this = typeof(this).init;
+
+        static assert(ruleset == asn1.Asn1Ruleset.der, "TODO: Support non-DER SET encodings");
+        /+++ TAG FOR FIELD: printable-string +++/
+        auto backtrack_printable_string = jbuf.MemoryReader(memory.buffer, memory.cursor);
+        if(memory.bytesLeft != 0)
+        {
+            result = asn1.asn1DecodeComponentHeader!ruleset(memory, componentHeader);
+            if(result.isError)
+                return result.wrapError("when decoding header of field 'printable-string' in type "~__traits(identifier, typeof(this))~":");
+            if(componentHeader.identifier.class_ == asn1.Asn1Identifier.Class.universal && componentHeader.identifier.tag == 19)
+            {
+                jbuf.MemoryReader memory_printable_string;
+                result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_printable_string);
+                if(result.isError)
+                    return result.wrapError("when reading content bytes of field 'printable-string' in type "~__traits(identifier, typeof(this))~":");
+                /++ FIELD - printable-string ++/
+                typeof(_printable_string) temp_printable_string;
+                result = typeof(temp_printable_string).fromDecoding!ruleset(memory_printable_string, temp_printable_string, componentHeader.identifier);
+                if(result.isError)
+                    return result.wrapError("when decoding field 'printable_string' in type "~__traits(identifier, typeof(this))~":");
+                result = this.setPrintable_string(temp_printable_string);
+                if(result.isError)
+                    return result.wrapError("when setting field 'printable_string' in type "~__traits(identifier, typeof(this))~":");
+
+            }
+            else
+            {
+                memory = jbuf.MemoryReader(backtrack_printable_string.buffer, backtrack_printable_string.cursor);
+            }
+        }
+        
+        if(memory.bytesLeft != 0)
+            return jres.Result.make(asn1.Asn1DecodeError.setHasExtraData, "when decoding non-extensible SET PDSParameter there were unsused content bytes after attempting to decode all known fields - this is either due to a decoder bug; an outdated ASN.1 spec, or malformed input");
+        return this.validate();
+    }
+
+}
+
 asn1.Asn1Integer extended_network_address(
 ) @nogc nothrow
 {
@@ -9176,6 +10572,7 @@ struct ExtendedNetworkAddress_e163_4_address
         typeof(_number) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_number = true;
         _number = value;
         return jres.Result.noError;
@@ -9192,6 +10589,7 @@ struct ExtendedNetworkAddress_e163_4_address
         typeof(_sub_address) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_sub_address = true;
         _sub_address = value;
         return jres.Result.noError;
@@ -9201,8 +10599,11 @@ struct ExtendedNetworkAddress_e163_4_address
         tcon.Nullable!(asn1.Asn1NumericString) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setSub_address(value.get());
+        }
         else
             _isSet_sub_address = false;
         return jres.Result.noError;
@@ -9251,12 +10652,20 @@ struct ExtendedNetworkAddress_e163_4_address
         depth++;
         sink("sub-address: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_sub_address), "toString"))
-            _sub_address.toString(sink, depth+1);
+        if(_isSet_sub_address)
+        {
+            static if(__traits(hasMember, typeof(_sub_address), "toString"))
+                _sub_address.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         depth--;
@@ -9358,10 +10767,24 @@ struct ExtendedNetworkAddress
         Value _value;
     }
 
+    jres.Result match(
+        scope jres.Result delegate(typeof(Value.e163_4_address)) @nogc nothrow handle_e163_4_address,
+        scope jres.Result delegate(typeof(Value.psap_address)) @nogc nothrow handle_psap_address,
+    ) @nogc nothrow
+    {
+        if(_choice == Choice.e163_4_address)
+            return handle_e163_4_address(_value.e163_4_address);
+        if(_choice == Choice.psap_address)
+            return handle_psap_address(_value.psap_address);
+        assert(false, "attempted to use an uninitialised ExtendedNetworkAddress!");
+
+    }
+
     jres.Result setE163_4_address(
         typeof(Value.e163_4_address) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.e163_4_address = value;
         _choice = Choice.e163_4_address;
         return jres.Result.noError;
@@ -9384,6 +10807,7 @@ struct ExtendedNetworkAddress
         typeof(Value.psap_address) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _value.psap_address = value;
         _choice = Choice.psap_address;
         return jres.Result.noError;
@@ -9509,6 +10933,7 @@ struct PresentationAddress
         typeof(_pSelector) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_pSelector = true;
         _pSelector = value;
         return jres.Result.noError;
@@ -9518,8 +10943,11 @@ struct PresentationAddress
         tcon.Nullable!(asn1.Asn1OctetString) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setPSelector(value.get());
+        }
         else
             _isSet_pSelector = false;
         return jres.Result.noError;
@@ -9537,6 +10965,7 @@ struct PresentationAddress
         typeof(_sSelector) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_sSelector = true;
         _sSelector = value;
         return jres.Result.noError;
@@ -9546,8 +10975,11 @@ struct PresentationAddress
         tcon.Nullable!(asn1.Asn1OctetString) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setSSelector(value.get());
+        }
         else
             _isSet_sSelector = false;
         return jres.Result.noError;
@@ -9565,6 +10997,7 @@ struct PresentationAddress
         typeof(_tSelector) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_tSelector = true;
         _tSelector = value;
         return jres.Result.noError;
@@ -9574,8 +11007,11 @@ struct PresentationAddress
         tcon.Nullable!(asn1.Asn1OctetString) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         if(!value.isNull)
+        {
             return setTSelector(value.get());
+        }
         else
             _isSet_tSelector = false;
         return jres.Result.noError;
@@ -9593,6 +11029,7 @@ struct PresentationAddress
         typeof(_nAddresses) value,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
         _isSet_nAddresses = true;
         _nAddresses = value;
         return jres.Result.noError;
@@ -9628,36 +11065,60 @@ struct PresentationAddress
         depth++;
         sink("pSelector: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_pSelector), "toString"))
-            _pSelector.toString(sink, depth+1);
+        if(_isSet_pSelector)
+        {
+            static if(__traits(hasMember, typeof(_pSelector), "toString"))
+                _pSelector.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("sSelector: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_sSelector), "toString"))
-            _sSelector.toString(sink, depth+1);
+        if(_isSet_sSelector)
+        {
+            static if(__traits(hasMember, typeof(_sSelector), "toString"))
+                _sSelector.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
         depth++;
         sink("tSelector: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_tSelector), "toString"))
-            _tSelector.toString(sink, depth+1);
+        if(_isSet_tSelector)
+        {
+            static if(__traits(hasMember, typeof(_tSelector), "toString"))
+                _tSelector.toString(sink, depth+1);
+            else
+                {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
         else
-            {
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
@@ -9895,6 +11356,17 @@ struct TerminalType
         asn1.Asn1Integer newValue,
     ) @nogc nothrow
     {
+        jres.Result result = jres.Result.noError;
+        bool _successFlag;
+        {
+            long _integer__value;
+            result = newValue.asInt!long(_integer__value);
+            if(result.isError)
+                return result.wrapError("when converting ASN.1 integer into native integer in type "~__traits(identifier, typeof(this))~":");
+            _successFlag = _integer__value >= 0 && _integer__value <= 256;
+        }
+        if(!_successFlag)
+            return jres.Result.make(asn1.Asn1DecodeError.constraintFailed, "Value failed to match against type's constraint (TODO: A much more specific error message)");
         _value = newValue;
         _isSet = true;
         return jres.Result.noError;

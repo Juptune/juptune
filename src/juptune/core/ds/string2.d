@@ -276,12 +276,14 @@ struct String2
     }
 
     /++
-     + Quality of life constructor that is the equivalent of: 
+     + Quality of life constructor that is the rough equivalent of: 
      + `Array!char buf; buf.put(values); return String2.fromDestroyingArray(buf)`
      +
      + Notes:
      +  Values that cannot be directly given to `Array!char.put` will instead be given to
      +  `juptune.core.util.conv : toStringSink`, in order to improve quality of life even further.
+     +
+     +  Non-char and non-string ranges will be handled correctly, by passing each value into `toStringSink`.
      +
      + Params:
      +  values = Values to pass into either `Array!char.put` or `toStringSink`.
@@ -289,6 +291,9 @@ struct String2
     this(Values...)(scope auto ref Values values)
     if(Values.length > 1)
     {
+        import std.range : isInputRange, ElementEncodingType;
+        import std.traits : isSomeString, isSomeChar;
+
         import juptune.core.ds   : Array;
         import juptune.core.util : toStringSink;
 
@@ -297,6 +302,23 @@ struct String2
         {
             static if(__traits(compiles, { buffer.put(value); }))
                 buffer.put(value);
+            else static if(
+                isInputRange!(typeof(value))
+                && !isSomeString!(ElementEncodingType!(typeof(value)))
+                && !isSomeChar!(ElementEncodingType!(typeof(value)))
+            )
+            {
+                buffer.put('[');
+                bool first = true;
+                foreach(ref item; value)
+                {
+                    if(!first)
+                        buffer.put(", ");
+                    first = false;
+                    toStringSink(item, buffer);
+                }
+                buffer.put(']');
+            }
             else
                 toStringSink(value, buffer);
         }

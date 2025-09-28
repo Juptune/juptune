@@ -533,7 +533,44 @@ struct Asn1BitString
         return Result.noError;
     }
 
-    size_t bitCount() const => _bitCount;
+    size_t bitCount() @nogc nothrow pure const => _bitCount;
+    const(ubyte)[] bytes() @nogc nothrow pure const => _value;
+
+    auto bits() @nogc nothrow
+    {
+        static struct R
+        {
+            const(ubyte)[] value;
+            size_t bitCount;
+            size_t bitIndex;
+
+            bool front;
+            bool empty;
+
+            @nogc nothrow:
+
+            this(const(ubyte)[] value, size_t bitCount)
+            {
+                this.value = value;
+                this.bitCount = bitCount;
+                this.popFront();
+            }
+
+            void popFront()
+            {
+                if(this.bitIndex >= this.bitCount)
+                {
+                    this.empty = true;
+                    return;
+                }
+
+                this.front = (this.value[this.bitIndex / 8] & (1 << (7 - (this.bitIndex % 8)))) > 0;
+                this.bitIndex++;
+            }
+        }
+
+        return R(this._value, this._bitCount);
+    }
 }
 
 /++
@@ -1638,6 +1675,8 @@ struct Asn1Utf8String // @suppress(dscanner.suspicious.incomplete_operator_overl
         void putIndent() { foreach(i; 0..depth) sink("  "); }
         putIndent();
         sink("[UTF8String]\n");
+        depth++;
+        putIndent();
         sink(this.asSlice);
         sink("\n");
     }
@@ -1717,6 +1756,8 @@ struct Asn1AsciiAlphabetString(string DebugName, string AlphaChars) // @suppress
         void putIndent() { foreach(i; 0..depth) sink("  "); }
         putIndent();
         sink("["~DebugName~"]\n");
+        depth++;
+        putIndent();
         sink(this.asSlice);
         sink("\n");
     }

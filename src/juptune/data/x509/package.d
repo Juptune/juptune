@@ -4,13 +4,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
-module juptune.data;
+module juptune.data.x509;
 
-public import 
-    juptune.data.alphabet,
-    juptune.data.base,
-    juptune.data.buffer,
-    juptune.data.json,
-    juptune.data.utf8,
-    juptune.data.x509
+public import
+    juptune.data.x509.asn1convert
 ;
