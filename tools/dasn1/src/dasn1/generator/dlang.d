@@ -1368,8 +1368,8 @@ private void putRawType(
                             putLine("_", fixName(item.name), ".toString(sink, depth+1);");
                         dedent();
                         putLine("else");
-                        indent();
                         putLine("{");
+                        indent();
                             putLine("putIndent();");
                             putLine(`sink("<no toString impl>\n");`);
                         dedent();
