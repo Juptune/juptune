@@ -674,15 +674,18 @@ private void putRawType(
                     putLine(VALUE_UNION, ' ', VALUE_FIELD, ";");
                 });
 
+                static struct MatchFunc { string suffix; string attribs; }
+
+                static foreach(func; [MatchFunc("", "@nogc nothrow"), MatchFunc("GC", "")])
                 declareFunction(
                     RESULT_TYPE, 
-                    MATCH_FUNCTION_PREFIX,
+                    MATCH_FUNCTION_PREFIX~func.suffix,
                     (next){
                         ir.foreachChoiceGC((name, typeIr, _){
                             put(
                                 "scope ", RESULT_TYPE, " delegate(",
                                     "typeof(", VALUE_UNION, '.', fixName(name), ")",
-                                ") @nogc nothrow handle_", fixName(name)
+                                ") ", func.attribs, " handle_", fixName(name)
                             );
                             next();
                             return Result.noError;
@@ -698,7 +701,7 @@ private void putRawType(
 
                         putLine(`assert(false, "attempted to use an uninitialised `, name, `!");`);
                     },
-                    funcAttributes: "@nogc nothrow",
+                    funcAttributes: func.attribs,
                 );
 
                 ir.foreachChoiceGC((name, typeIr, _){

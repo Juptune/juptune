@@ -77,6 +77,7 @@ developing applications that use %{name}.
     --wrap-mode=nodownload \
     --auto-features=enabled \
     --strip \
+    -Ddefault_library=static \
     %{_vpath_srcdir} \
     %{_vpath_builddir}
 %meson_build

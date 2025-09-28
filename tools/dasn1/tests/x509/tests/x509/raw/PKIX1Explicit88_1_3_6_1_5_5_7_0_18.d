@@ -644,6 +644,19 @@ struct X520name
 
     }
 
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.printableString))  handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String))  handle_utf8String,
+    ) 
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520name!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
@@ -837,6 +850,19 @@ struct X520CommonName
         scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
         scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
     ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520CommonName!");
+
+    }
+
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.printableString))  handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String))  handle_utf8String,
+    ) 
     {
         if(_choice == Choice.printableString)
             return handle_printableString(_value.printableString);
@@ -1048,6 +1074,19 @@ struct X520LocalityName
 
     }
 
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.printableString))  handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String))  handle_utf8String,
+    ) 
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520LocalityName!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
@@ -1241,6 +1280,19 @@ struct X520StateOrProvinceName
         scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
         scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
     ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520StateOrProvinceName!");
+
+    }
+
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.printableString))  handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String))  handle_utf8String,
+    ) 
     {
         if(_choice == Choice.printableString)
             return handle_printableString(_value.printableString);
@@ -1452,6 +1504,19 @@ struct X520OrganizationName
 
     }
 
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.printableString))  handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String))  handle_utf8String,
+    ) 
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520OrganizationName!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
@@ -1654,6 +1719,19 @@ struct X520OrganizationalUnitName
 
     }
 
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.printableString))  handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String))  handle_utf8String,
+    ) 
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520OrganizationalUnitName!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
@@ -1847,6 +1925,19 @@ struct X520Title
         scope jres.Result delegate(typeof(Value.printableString)) @nogc nothrow handle_printableString,
         scope jres.Result delegate(typeof(Value.utf8String)) @nogc nothrow handle_utf8String,
     ) @nogc nothrow
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520Title!");
+
+    }
+
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.printableString))  handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String))  handle_utf8String,
+    ) 
     {
         if(_choice == Choice.printableString)
             return handle_printableString(_value.printableString);
@@ -2327,6 +2418,19 @@ struct X520Pseudonym
 
     }
 
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.printableString))  handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String))  handle_utf8String,
+    ) 
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised X520Pseudonym!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
@@ -2699,6 +2803,16 @@ struct Name
 
     }
 
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.rdnSequence))  handle_rdnSequence,
+    ) 
+    {
+        if(_choice == Choice.rdnSequence)
+            return handle_rdnSequence(_value.rdnSequence);
+        assert(false, "attempted to use an uninitialised Name!");
+
+    }
+
     jres.Result setRdnSequence(
         typeof(Value.rdnSequence) value,
     ) @nogc nothrow
@@ -3052,6 +3166,19 @@ struct DirectoryString
 
     }
 
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.printableString))  handle_printableString,
+        scope jres.Result delegate(typeof(Value.utf8String))  handle_utf8String,
+    ) 
+    {
+        if(_choice == Choice.printableString)
+            return handle_printableString(_value.printableString);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised DirectoryString!");
+
+    }
+
     jres.Result setPrintableString(
         typeof(Value.printableString) value,
     ) @nogc nothrow
@@ -3306,7 +3433,10 @@ struct AlgorithmIdentifier
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         depth--;
 
@@ -3474,6 +3604,16 @@ struct Time
     jres.Result match(
         scope jres.Result delegate(typeof(Value.utcTime)) @nogc nothrow handle_utcTime,
     ) @nogc nothrow
+    {
+        if(_choice == Choice.utcTime)
+            return handle_utcTime(_value.utcTime);
+        assert(false, "attempted to use an uninitialised Time!");
+
+    }
+
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.utcTime))  handle_utcTime,
+    ) 
     {
         if(_choice == Choice.utcTime)
             return handle_utcTime(_value.utcTime);
@@ -4677,7 +4817,10 @@ struct TBSCertificate
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -4778,7 +4921,10 @@ struct TBSCertificate
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -4795,7 +4941,10 @@ struct TBSCertificate
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -4812,7 +4961,10 @@ struct TBSCertificate
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         depth--;
 
@@ -5678,7 +5830,10 @@ struct TBSCertList_RevokedCertificate
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         depth--;
 
@@ -6008,7 +6163,10 @@ struct TBSCertList
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -6061,7 +6219,10 @@ struct TBSCertList
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -6078,7 +6239,10 @@ struct TBSCertList
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -6095,7 +6259,10 @@ struct TBSCertList
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         depth--;
 
@@ -6350,6 +6517,19 @@ struct CountryName
 
     }
 
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.x121_dcc_code))  handle_x121_dcc_code,
+        scope jres.Result delegate(typeof(Value.iso_3166_alpha2_code))  handle_iso_3166_alpha2_code,
+    ) 
+    {
+        if(_choice == Choice.x121_dcc_code)
+            return handle_x121_dcc_code(_value.x121_dcc_code);
+        if(_choice == Choice.iso_3166_alpha2_code)
+            return handle_iso_3166_alpha2_code(_value.iso_3166_alpha2_code);
+        assert(false, "attempted to use an uninitialised CountryName!");
+
+    }
+
     jres.Result setX121_dcc_code(
         typeof(Value.x121_dcc_code) value,
     ) @nogc nothrow
@@ -6523,6 +6703,19 @@ struct AdministrationDomainName
         scope jres.Result delegate(typeof(Value.numeric)) @nogc nothrow handle_numeric,
         scope jres.Result delegate(typeof(Value.printable)) @nogc nothrow handle_printable,
     ) @nogc nothrow
+    {
+        if(_choice == Choice.numeric)
+            return handle_numeric(_value.numeric);
+        if(_choice == Choice.printable)
+            return handle_printable(_value.printable);
+        assert(false, "attempted to use an uninitialised AdministrationDomainName!");
+
+    }
+
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.numeric))  handle_numeric,
+        scope jres.Result delegate(typeof(Value.printable))  handle_printable,
+    ) 
     {
         if(_choice == Choice.numeric)
             return handle_numeric(_value.numeric);
@@ -6932,6 +7125,19 @@ struct PrivateDomainName
         scope jres.Result delegate(typeof(Value.numeric)) @nogc nothrow handle_numeric,
         scope jres.Result delegate(typeof(Value.printable)) @nogc nothrow handle_printable,
     ) @nogc nothrow
+    {
+        if(_choice == Choice.numeric)
+            return handle_numeric(_value.numeric);
+        if(_choice == Choice.printable)
+            return handle_printable(_value.printable);
+        assert(false, "attempted to use an uninitialised PrivateDomainName!");
+
+    }
+
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.numeric))  handle_numeric,
+        scope jres.Result delegate(typeof(Value.printable))  handle_printable,
+    ) 
     {
         if(_choice == Choice.numeric)
             return handle_numeric(_value.numeric);
@@ -7411,7 +7617,10 @@ struct PersonalName
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -7428,7 +7637,10 @@ struct PersonalName
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -7445,7 +7657,10 @@ struct PersonalName
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         depth--;
 
@@ -8575,7 +8790,10 @@ struct BuiltInStandardAttributes
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -8592,7 +8810,10 @@ struct BuiltInStandardAttributes
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -8609,7 +8830,10 @@ struct BuiltInStandardAttributes
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -8626,7 +8850,10 @@ struct BuiltInStandardAttributes
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -8643,7 +8870,10 @@ struct BuiltInStandardAttributes
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -8660,7 +8890,10 @@ struct BuiltInStandardAttributes
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -8677,7 +8910,10 @@ struct BuiltInStandardAttributes
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -8694,7 +8930,10 @@ struct BuiltInStandardAttributes
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -8711,7 +8950,10 @@ struct BuiltInStandardAttributes
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         depth--;
 
@@ -9177,7 +9419,10 @@ struct ORAddress
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -9194,7 +9439,10 @@ struct ORAddress
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         depth--;
 
@@ -9575,6 +9823,19 @@ struct PhysicalDeliveryCountryName
 
     }
 
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.x121_dcc_code))  handle_x121_dcc_code,
+        scope jres.Result delegate(typeof(Value.iso_3166_alpha2_code))  handle_iso_3166_alpha2_code,
+    ) 
+    {
+        if(_choice == Choice.x121_dcc_code)
+            return handle_x121_dcc_code(_value.x121_dcc_code);
+        if(_choice == Choice.iso_3166_alpha2_code)
+            return handle_iso_3166_alpha2_code(_value.iso_3166_alpha2_code);
+        assert(false, "attempted to use an uninitialised PhysicalDeliveryCountryName!");
+
+    }
+
     jres.Result setX121_dcc_code(
         typeof(Value.x121_dcc_code) value,
     ) @nogc nothrow
@@ -9760,6 +10021,19 @@ struct PostalCode
         scope jres.Result delegate(typeof(Value.numeric_code)) @nogc nothrow handle_numeric_code,
         scope jres.Result delegate(typeof(Value.printable_code)) @nogc nothrow handle_printable_code,
     ) @nogc nothrow
+    {
+        if(_choice == Choice.numeric_code)
+            return handle_numeric_code(_value.numeric_code);
+        if(_choice == Choice.printable_code)
+            return handle_printable_code(_value.printable_code);
+        assert(false, "attempted to use an uninitialised PostalCode!");
+
+    }
+
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.numeric_code))  handle_numeric_code,
+        scope jres.Result delegate(typeof(Value.printable_code))  handle_printable_code,
+    ) 
     {
         if(_choice == Choice.numeric_code)
             return handle_numeric_code(_value.numeric_code);
@@ -10417,7 +10691,10 @@ struct PDSParameter
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         depth--;
 
@@ -10588,7 +10865,10 @@ struct ExtendedNetworkAddress_e163_4_address
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         depth--;
 
@@ -10693,6 +10973,19 @@ struct ExtendedNetworkAddress
         scope jres.Result delegate(typeof(Value.e163_4_address)) @nogc nothrow handle_e163_4_address,
         scope jres.Result delegate(typeof(Value.psap_address)) @nogc nothrow handle_psap_address,
     ) @nogc nothrow
+    {
+        if(_choice == Choice.e163_4_address)
+            return handle_e163_4_address(_value.e163_4_address);
+        if(_choice == Choice.psap_address)
+            return handle_psap_address(_value.psap_address);
+        assert(false, "attempted to use an uninitialised ExtendedNetworkAddress!");
+
+    }
+
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.e163_4_address))  handle_e163_4_address,
+        scope jres.Result delegate(typeof(Value.psap_address))  handle_psap_address,
+    ) 
     {
         if(_choice == Choice.e163_4_address)
             return handle_e163_4_address(_value.e163_4_address);
@@ -10998,7 +11291,10 @@ struct PresentationAddress
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -11015,7 +11311,10 @@ struct PresentationAddress
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;
@@ -11032,7 +11331,10 @@ struct PresentationAddress
             }
         }
         else
-            sink("<null>\n");
+        {
+            putIndent();
+            sink("<optional null>\n");
+        }
         depth--;
         putIndent();
         depth++;

@@ -1143,48 +1143,177 @@ unittest
     asn1DecodeComponentHeader!(Asn1Ruleset.der)(memory, header).resultAssert;
     asn1ReadContentBytes(memory, header.length, content).resultAssert;
 
-    import std.stdio : writeln;
-    Certificate cert;
-    cert.fromDecoding!(Asn1Ruleset.der)(content, header.identifier).resultAssert;
+    Certificate asn1Cert;
+    asn1Cert.fromDecoding!(Asn1Ruleset.der)(content, header.identifier).resultAssert;
 
-    X509Certificate certt;
-    x509FromAsn1(cert, certt).resultAssert;
+    X509Certificate cert;
+    x509FromAsn1(asn1Cert, cert).resultAssert;
 
-    certt.tbsCertificateRawDerEncoding = null;
-    // writeln(certt);
-    writeln(Certificate.sizeof, " ", X509Certificate.sizeof);
-
-    writeln("Issuer:");
-    x509ForeachNameComponentGC(certt.issuer, (element){
+    string[X509Certificate.NameComponentKind] issuerComps;
+    x509ForeachNameComponentGC(cert.issuer, (element){
         X509Certificate.NameComponentKind kind;
         const(char)[] text;
 
         x509HandleNameComponent(element, kind, text).resultAssert;
+        issuerComps[kind] = text.idup;
 
-        writeln("  ", kind, ": ", text);
         return Result.noError;
     }).resultAssert;
-    writeln("Subject:");
-    x509ForeachNameComponentGC(certt.subject, (element){
+
+    string[X509Certificate.NameComponentKind] subjectComps;
+    x509ForeachNameComponentGC(cert.subject, (element){
         X509Certificate.NameComponentKind kind;
         const(char)[] text;
 
         x509HandleNameComponent(element, kind, text).resultAssert;
+        subjectComps[kind] = text.idup;
 
-        writeln("  ", kind, ": ", text);
         return Result.noError;
     }).resultAssert;
 
-    if(!certt.extensions.isNull)
+    X509Extension.SumT[TypeInfo] extByTypeInfo;
+    cert.extensions.get.get().foreachElementAutoGC((element){
+        X509Extension.SumT ext;
+        x509HandleExtension(element, ext).resultAssert;
+
+        import std.sumtype : match;
+        ext.match!((e) { extByTypeInfo[typeid(e)] = ext; });
+
+        return Result.noError;
+    }).resultAssert;
+    
+    with(X509Certificate.NameComponentKind)
     {
-        writeln("Extensions:");
-        certt.extensions.get.get().foreachElementAutoGC((element){
-            X509Extension.SumT ext;
-            x509HandleExtension(element, ext).resultAssert;
-            writeln(ext);
-            return Result.noError;
-        }).resultAssert;
+        assert(issuerComps[commonName] == "WR2");
+        assert(issuerComps[organizationName] == "Google Trust Services");
+        assert(issuerComps[countryName] == "US");
+
+        assert(subjectComps[commonName] == "*.google.com");
     }
 
-    assert(false);
+    T getSum(T)()
+    {
+        import std.sumtype : match;
+        return extByTypeInfo[typeid(T)].match!((T v) => v, (_) { assert(false, "wrong type?"); return T.init; });
+    }
+
+    with(X509Extension)
+    {
+        import std.format : format;
+
+        BasicConstraints basicConstraint = getSum!BasicConstraints;
+        assert(!basicConstraint.ca);
+        assert(basicConstraint.pathLenConstraint.isNull);
+
+        AuthorityKeyIdentifier authKeyId = getSum!AuthorityKeyIdentifier;
+        assert(authKeyId.keyIdentifier == [
+            0xde,  0x1b,  0x1e,  0xed,  0x79,  0x15,  0xd4,  0x3e,  0x37,  0x24,
+            0xc3,  0x21,  0xbb,  0xec,  0x34,  0x39,  0x6d,  0x42,  0xb2,  0x30,
+        ]);
+        assert(authKeyId.authorityCertIssuer.isNull);
+        assert(authKeyId.authorityCertSerialNumber.isNull);
+
+        ExtendedKeyUsage extKeyUse = getSum!ExtendedKeyUsage;
+        assert(extKeyUse.serverAuth);
+
+        KeyUsage keyUse = getSum!KeyUsage;
+        assert(keyUse.digitalSignature);
+
+        SubjectKeyIdentifier subKeyId = getSum!SubjectKeyIdentifier;
+        assert(subKeyId.keyIdentifier == [
+            0x86,  0x54,  0x1e,  0x8e,  0x99,  0xb0,  0x05,  0x78,  0x9e,  0xa7,  
+            0x57,  0x11,  0x74,  0x6a,  0x9a,  0x63,  0x74,  0x16,  0xa7,  0x53,
+        ]);
+
+        import juptune.data.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19 : DistributionPoint;
+        CrlDistributionPoints dps = getSum!CrlDistributionPoints;
+        DistributionPoint dp;
+        assert(dps.points.get().elementCount == 1);
+        dps.points.get().foreachElementAutoGC((dpElem) { dp = dpElem; return Result.noError; }).resultAssert;
+        assert(dp.getReasons().isNull);
+        assert(dp.getCRLIssuer().isNull);
+        dp.getDistributionPoint().get.getFullName().get().foreachElementAutoGC((generalName){
+            assert(generalName.getUniformResourceIdentifier().asSlice == "http://c.pki.goog/wr2/oBFYYahzgVI.crl");
+            return Result.noError;
+        }).resultAssert;
+
+        import juptune.data.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19 : AccessDescription;
+        AuthorityInfoAccessSyntax assSyntax = getSum!AuthorityInfoAccessSyntax;
+        size_t assCount;
+        assSyntax.get().foreachElementAutoGC((AccessDescription ass){
+            import std.algorithm : equal;
+            import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 
+                : id_ad_ocsp, id_ad_caIssuers;
+
+            final switch(assCount)
+            {
+                case 0:
+                    assert(ass.getAccessMethod().components.equal(id_ad_ocsp().components));
+                    assert(ass.getAccessLocation().getUniformResourceIdentifier().asSlice == "http://o.pki.goog/wr2");
+                    break;
+
+                case 1:
+                    assert(ass.getAccessMethod().components.equal(id_ad_caIssuers().components));
+                    assert(ass.getAccessLocation().getUniformResourceIdentifier().asSlice == "http://i.pki.goog/wr2.crt"); // @suppress(dscanner.style.long_line)
+                    break;
+            }
+
+            assCount++;
+            return Result.noError;
+        }).resultAssert;
+
+        import juptune.data.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19 : GeneralName;
+        SubjectAltName subAltName = getSum!SubjectAltName;
+        string[] altNames;
+        subAltName.names.get().foreachElementAutoGC((GeneralName name){
+            // Note: I just wanted to test the match function, could've just used getDNSName instead.
+            return name.matchGC(
+                (_) { assert(false); return Result.noError; },
+                (_) { assert(false); return Result.noError; },
+                (dnsName) { altNames ~= dnsName.asSlice; return Result.noError; },
+                (_) { assert(false); return Result.noError; },
+                (_) { assert(false); return Result.noError; },
+                (_) { assert(false); return Result.noError; },
+                (_) { assert(false); return Result.noError; },
+                (_) { assert(false); return Result.noError; },
+                (_) { assert(false); return Result.noError; },
+            );
+        }).resultAssert;
+        assert(altNames == [ // The world's least bloated certificate
+            "*.google.com", "*.appengine.google.com", "*.bdn.dev", "*.origin-test.bdn.dev", 
+            "*.cloud.google.com", "*.crowdsource.google.com", "*.datacompute.google.com", 
+            "*.google.ca", "*.google.cl", "*.google.co.in", "*.google.co.jp", 
+            "*.google.co.uk", "*.google.com.ar", "*.google.com.au", "*.google.com.br", 
+            "*.google.com.co", "*.google.com.mx", "*.google.com.tr", "*.google.com.vn", 
+            "*.google.de", "*.google.es", "*.google.fr", "*.google.hu", "*.google.it", 
+            "*.google.nl", "*.google.pl", "*.google.pt", "*.googleapis.cn", 
+            "*.googlevideo.com", "*.gstatic.cn", "*.gstatic-cn.com", "googlecnapps.cn", 
+            "*.googlecnapps.cn", "googleapps-cn.com", "*.googleapps-cn.com", "gkecnapps.cn", 
+            "*.gkecnapps.cn", "googledownloads.cn", "*.googledownloads.cn", "recaptcha.net.cn", 
+            "*.recaptcha.net.cn", "recaptcha-cn.net", "*.recaptcha-cn.net", "widevine.cn", 
+            "*.widevine.cn", "ampproject.org.cn", "*.ampproject.org.cn", "ampproject.net.cn", 
+            "*.ampproject.net.cn", "google-analytics-cn.com", "*.google-analytics-cn.com", 
+            "googleadservices-cn.com", "*.googleadservices-cn.com", "googlevads-cn.com", 
+            "*.googlevads-cn.com", "googleapis-cn.com", "*.googleapis-cn.com", "googleoptimize-cn.com", 
+            "*.googleoptimize-cn.com", "doubleclick-cn.net", "*.doubleclick-cn.net", 
+            "*.fls.doubleclick-cn.net", "*.g.doubleclick-cn.net", "doubleclick.cn", "*.doubleclick.cn", 
+            "*.fls.doubleclick.cn", "*.g.doubleclick.cn", "dartsearch-cn.net", "*.dartsearch-cn.net", 
+            "googletraveladservices-cn.com", "*.googletraveladservices-cn.com", "googletagservices-cn.com", 
+            "*.googletagservices-cn.com", "googletagmanager-cn.com", "*.googletagmanager-cn.com", 
+            "googlesyndication-cn.com", "*.googlesyndication-cn.com", "*.safeframe.googlesyndication-cn.com", 
+            "app-measurement-cn.com", "*.app-measurement-cn.com", "gvt1-cn.com", "*.gvt1-cn.com", "gvt2-cn.com", 
+            "*.gvt2-cn.com", "2mdn-cn.net", "*.2mdn-cn.net", "googleflights-cn.net", "*.googleflights-cn.net", 
+            "admob-cn.com", "*.admob-cn.com", "*.gemini.cloud.google.com", "googlesandbox-cn.com", 
+            "*.googlesandbox-cn.com", "*.safenup.googlesandbox-cn.com", "*.gstatic.com", "*.metric.gstatic.com", 
+            "*.gvt1.com", "*.gcpcdn.gvt1.com", "*.gvt2.com", "*.gcp.gvt2.com", "*.url.google.com", 
+            "*.youtube-nocookie.com", "*.ytimg.com", "ai.android", "android.com", "*.android.com", 
+            "*.flash.android.com", "g.cn", "*.g.cn", "g.co", "*.g.co", "goo.gl", "www.goo.gl", 
+            "google-analytics.com", "*.google-analytics.com", "google.com", "googlecommerce.com", 
+            "*.googlecommerce.com", "ggpht.cn", "*.ggpht.cn", "urchin.com", "*.urchin.com", "youtu.be", 
+            "youtube.com", "*.youtube.com", "music.youtube.com", "*.music.youtube.com", "youtubeeducation.com", 
+            "*.youtubeeducation.com", "youtubekids.com", "*.youtubekids.com", "yt.be", "*.yt.be", 
+            "android.clients.google.com", "*.android.google.cn", "*.chrome.google.cn", "*.developers.google.cn", 
+            "*.aistudio.google.com"
+        ]);
+    }
 }

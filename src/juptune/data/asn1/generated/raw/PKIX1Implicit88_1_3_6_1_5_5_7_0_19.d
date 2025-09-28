@@ -1656,6 +1656,19 @@ struct DisplayText
 
     }
 
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.ia5String))  handle_ia5String,
+        scope jres.Result delegate(typeof(Value.utf8String))  handle_utf8String,
+    ) 
+    {
+        if(_choice == Choice.ia5String)
+            return handle_ia5String(_value.ia5String);
+        if(_choice == Choice.utf8String)
+            return handle_utf8String(_value.utf8String);
+        assert(false, "attempted to use an uninitialised DisplayText!");
+
+    }
+
     jres.Result setIa5String(
         typeof(Value.ia5String) value,
     ) @nogc nothrow
@@ -2277,6 +2290,40 @@ struct GeneralName
         scope jres.Result delegate(typeof(Value.iPAddress)) @nogc nothrow handle_iPAddress,
         scope jres.Result delegate(typeof(Value.registeredID)) @nogc nothrow handle_registeredID,
     ) @nogc nothrow
+    {
+        if(_choice == Choice.otherName)
+            return handle_otherName(_value.otherName);
+        if(_choice == Choice.rfc822Name)
+            return handle_rfc822Name(_value.rfc822Name);
+        if(_choice == Choice.dNSName)
+            return handle_dNSName(_value.dNSName);
+        if(_choice == Choice.x400Address)
+            return handle_x400Address(_value.x400Address);
+        if(_choice == Choice.directoryName)
+            return handle_directoryName(_value.directoryName);
+        if(_choice == Choice.ediPartyName)
+            return handle_ediPartyName(_value.ediPartyName);
+        if(_choice == Choice.uniformResourceIdentifier)
+            return handle_uniformResourceIdentifier(_value.uniformResourceIdentifier);
+        if(_choice == Choice.iPAddress)
+            return handle_iPAddress(_value.iPAddress);
+        if(_choice == Choice.registeredID)
+            return handle_registeredID(_value.registeredID);
+        assert(false, "attempted to use an uninitialised GeneralName!");
+
+    }
+
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.otherName))  handle_otherName,
+        scope jres.Result delegate(typeof(Value.rfc822Name))  handle_rfc822Name,
+        scope jres.Result delegate(typeof(Value.dNSName))  handle_dNSName,
+        scope jres.Result delegate(typeof(Value.x400Address))  handle_x400Address,
+        scope jres.Result delegate(typeof(Value.directoryName))  handle_directoryName,
+        scope jres.Result delegate(typeof(Value.ediPartyName))  handle_ediPartyName,
+        scope jres.Result delegate(typeof(Value.uniformResourceIdentifier))  handle_uniformResourceIdentifier,
+        scope jres.Result delegate(typeof(Value.iPAddress))  handle_iPAddress,
+        scope jres.Result delegate(typeof(Value.registeredID))  handle_registeredID,
+    ) 
     {
         if(_choice == Choice.otherName)
             return handle_otherName(_value.otherName);
@@ -4965,6 +5012,19 @@ struct DistributionPointName
         scope jres.Result delegate(typeof(Value.fullName)) @nogc nothrow handle_fullName,
         scope jres.Result delegate(typeof(Value.nameRelativeToCRLIssuer)) @nogc nothrow handle_nameRelativeToCRLIssuer,
     ) @nogc nothrow
+    {
+        if(_choice == Choice.fullName)
+            return handle_fullName(_value.fullName);
+        if(_choice == Choice.nameRelativeToCRLIssuer)
+            return handle_nameRelativeToCRLIssuer(_value.nameRelativeToCRLIssuer);
+        assert(false, "attempted to use an uninitialised DistributionPointName!");
+
+    }
+
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.fullName))  handle_fullName,
+        scope jres.Result delegate(typeof(Value.nameRelativeToCRLIssuer))  handle_nameRelativeToCRLIssuer,
+    ) 
     {
         if(_choice == Choice.fullName)
             return handle_fullName(_value.fullName);
