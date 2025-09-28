@@ -4,6 +4,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
+
+/// This module is responsible for converting the ASN.1 model of an x.509 certificate into something
+/// a little bit more natural to use, while also performing light amounts of validation.
+///
+/// The goal of this module is to try and flatten the ASN.1 model where possible (i.e. where allocation isn't required),
+/// while providing helper functions for the extra parts that would otherwise require allocation to be handled cleanly.
 module juptune.data.x509.asn1convert;
 
 import juptune.core.ds : String2;
@@ -24,6 +30,7 @@ import juptune.data.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19
             Asn1SubjectInfoAccessSyntax = SubjectInfoAccessSyntax
         ;
 
+// A `Result` error enum.
 enum X509Error
 {
     none,
@@ -40,20 +47,25 @@ enum X509Error
     criticalExtensionNotHandled, /// (Useful for user code) an extension marked as critical was unable to be handled.
 }
 
+/// Namespace class used to store all supported signature algorithms.
 abstract class X509SignatureAlgorithm
 {
     import std.sumtype : SumType;
 
+    /// A SumType of all possible signature algorithms.
     alias SumT = SumType!(Unknown);
 
+    /// An unknown signature was encountered - user code may be able to recognise it though.
     static struct Unknown { AlgorithmIdentifier identifier; }
 }
 
+/// Namespace class used to store all recognised extensions.
 abstract class X509Extension
 {
     import std.typecons : Nullable;
     import std.sumtype : SumType;
 
+    /// A SumType of all recognised extensions.
     alias SumT = SumType!(
         Unknown, 
         AuthorityKeyIdentifier,
@@ -74,8 +86,10 @@ abstract class X509Extension
         SubjectInfoAccessSyntax,
     );
 
+    /// An unknown extension was encoutered - user code may be able to recognise it though.
     static struct Unknown { Extension extension; }
 
+    /// The Authority Key Identifier extension from (RFC 5280 4.2.1.1).
     static struct AuthorityKeyIdentifier
     {
         const(ubyte)[] keyIdentifier;
@@ -83,11 +97,13 @@ abstract class X509Extension
         Nullable!Asn1Integer authorityCertSerialNumber;
     }
 
+    /// The Subject Key Identifier extension from (RFC 5280 4.2.1.2).
     static struct SubjectKeyIdentifier
     {
         const(ubyte)[] keyIdentifier;
     }
 
+    /// The Key Usage extension from (RFC 5280 4.2.1.3).
     static struct KeyUsage
     {
         private enum Flag
@@ -119,38 +135,46 @@ abstract class X509Extension
         bool decipherOnly() => (this._flag & Flag.decipherOnly) > 0;
     }
 
+    /// The Policy Mappings extension from (RFC 5280 4.2.1.5).
     alias PolicyMappings = Asn1PolicyMappings;
 
+    /// The Subject Alt Name extension from (RFC 5280 4.2.1.6).
     static struct SubjectAltName
     {
         GeneralNames names;
     }
 
+    /// The Issuer Alt Name extension from (RFC 5280 4.2.1.7).
     static struct IssuerAltName
     {
         GeneralNames names;
     }
 
+    /// The Subject Directory Attributes extension from (RFC 5280 4.2.1.8).
     alias SubjectDirectoryAttributes = Asn1SubjectDirectoryAttributes;
 
+    /// The Basic Constraints extension from (RFC 5280 4.2.1.9).
     static struct BasicConstraints
     {
         bool ca;
         Nullable!ulong pathLenConstraint;
     }
 
+    /// The Name Constraints extension from (RFC 5280 4.2.1.10).
     static struct NameConstraints
     {
         Nullable!GeneralSubtrees permittedSubtrees;
         Nullable!GeneralSubtrees excludedSubtrees;
     }
 
+    /// The Policy Constraints extension from (RFC 5280 4.2.1.11).
     static struct PolicyConstraints
     {
         Nullable!ulong requireExplicitPolicy;
         Nullable!ulong inhibitPolicyMapping;
     }
 
+    /// The Extended Key Usage extension from (RFC 5280 4.2.1.12).
     static struct ExtendedKeyUsage
     {
         enum Flag
@@ -174,25 +198,37 @@ abstract class X509Extension
         bool ocspSigning() => (this._flag & Flag.ocspSigning) > 0;
     }
 
+    /// The CRL Distribution Points extension from (RFC 5280 4.2.1.13).
     static struct CrlDistributionPoints
     {
         CRLDistributionPoints points;
     }
 
+    /// The Freshest CRL extension from (RFC 5280 4.2.1.15).
     static struct FreshestCrl
     {
         CRLDistributionPoints points;
     }
 
+    /// The Inhibit anyPolicy extension from (RFC 5280 4.2.1.14).
     static struct InhibitAnyPolicy
     {
         ulong skipCerts;
     }
 
+    /// The Authority Information Access extension from (RFC 5280 4.2.2.1).
     alias AuthorityInfoAccessSyntax = Asn1AuthorityInfoAccessSyntax;
+    /// The Subject Information Access extension from (RFC 5280 4.2.2.2).
     alias SubjectInfoAccessSyntax = Asn1SubjectInfoAccessSyntax;
 }
 
+/++
+ + Represents an x.509 certificate, with as much of the ASN.1 jank cut out as possible without
+ + the need for allocation.
+ +
+ + It's advised to read through RFC 5280 to learn what each field is, as there's no point in me copy-pasting
+ + the spec into comments.
+ + ++/
 struct X509Certificate
 {
     import std.typecons : Nullable;
@@ -231,7 +267,7 @@ struct X509Certificate
         v3
     }
 
-    static struct Time
+    static struct Time // Phobos' stuff needs the GC for some dumb reason lol.
     {
         ushort year;
         ubyte month;
@@ -247,7 +283,7 @@ struct X509Certificate
 
     // From "TBSCertificate"
     Version version_;
-    Asn1Integer serialNumber;
+    Asn1Integer serialNumber; // Reminder: RFC 5280 dictates that implementations must support this value being 20 bytes long, hence why it's a raw Asn1Integer.
     Time notValidBefore;
     Time notValidAfter;
     Nullable!Asn1BitString issuerUniqueId;
@@ -264,10 +300,39 @@ struct X509Certificate
     const(ubyte)[] tbsCertificateRawDerEncoding; // Used for signature validation.
 }
 
-Result x509FromAsn1(
-    Certificate asn1Cert,
-    out X509Certificate cert,
-) @nogc nothrow
+/++
+ + Flattens the given `asn1Cert` into the more easier to use structure of `cert`, while performing light amounts of validation.
+ +
+ + Further validation has to be handled outside of this function as it requires additional context on how the certificate is even
+ + being used. The rest of the x509 package should handle most of their respective checks for you.
+ +
+ + Notes:
+ +  This function only allocates memory for providing descriptive error messages. If no error is returned then no memory is allocated.
+ +
+ +  This leads to a slightly awkward design where user code must call auxilary functions such as `x509ForeachNameComponent` to deal
+ +  with array types, for the tradeoff of allowing the user code to have maximum flexbility around how to deal with its own memory.
+ +
+ + Params:
+ +  asn1Cert = The ASN.1 model of the x.509 to convert.
+ +  cert     = The result.
+ +
+ + Throws:
+ +  Anything that `x509IdentifySignatureAlgorithm` can throw.
+ +
+ +  Anything that `x509HandleTime` can throw.
+ +
+ +  `X509Error.signatureAlgorithmMismatch` if there's a mismatch between the `signature` and `signatureAlgorithm` fields.
+ +
+ +  `X509Error.invalidCertVersion` if the certificate is of an unsupported/invalid version.
+ +
+ +  `X509Error.uniqueIdentifiersWrongVersion` if the certificate contains an unique identifier with a version that does not suport them.
+ +
+ +  `X509Error.extensionsWrongVersion` if the certificate contains extensions with a version that does not suport them.
+ +
+ + Returns:
+ +  An errorful `Result` if something went wrong.
+ + ++/
+Result x509FromAsn1(Certificate asn1Cert, out X509Certificate cert) @nogc nothrow
 {
     // Some of these are just so intelisense works
     import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18
@@ -376,6 +441,7 @@ Result x509FromAsn1(
     return Result.noError;
 }
 
+// TODO: implement lol
 Result x509IdentifySignatureAlgorithm(
     AlgorithmIdentifier asn1Algorithm,
     out X509SignatureAlgorithm.SumT algorithm,
@@ -385,10 +451,20 @@ Result x509IdentifySignatureAlgorithm(
     return Result.noError;
 }
 
-Result x509HandleTime(
-    Time asn1Time,
-    out X509Certificate.Time time,
-) @nogc nothrow
+/++
+ + Converts the given ASN.1 model `Time` into the easier to use structure of `time`.
+ +
+ + Params:
+ +  asn1Time = The ASN.1 time to convert.
+ +  time     = The result.
+ +
+ + Throws:
+ +  `X509Error.invalidTimeType` if the time represents a year <= 2049, but doesn't use the ASN.1 UTCTime type as its representation.
+ +
+ + Returns:
+ +  An errorful `Result` if something went wrong.
+ + ++/
+Result x509HandleTime(Time asn1Time, out X509Certificate.Time time) @nogc nothrow
 {
     auto result = asn1Time.match(
         (utcTime){
@@ -412,6 +488,26 @@ Result x509HandleTime(
     return Result.noError;
 }
 
+/++
+ + Iterates over the components of the given `name`, passing them into the provided `handler`.
+ +
+ + Notes:
+ +  It's recommended to use `x509HandleNameComponent` on the `component` field passed to the `handler`, as that will detect
+ +  most of the common name components.
+ +
+ +  The ASN.1 model for `name` can very technically change in the future (as its a CHOICE type) so it's recommended to always use this function
+ +  for future compatibility purposes.
+ +
+ + Params:
+ +  name    = The name whose components to iterate over.
+ +  handler = The handler to call for each component.
+ +
+ + Throws:
+ +  Anything that the provided `handler` throws.
+ +
+ + Returns:
+ +  Any error thrown by `handler`.
+ + ++/
 Result x509ForeachNameComponent(
     Name name,
     scope Result delegate(AttributeTypeAndValue component) @nogc nothrow handler,
@@ -443,6 +539,26 @@ Result x509ForeachNameComponentGC(
     });
 }
 
+/++
+ + Attempts to identify the given name component, and provide its textual data.
+ +
+ + Notes:
+ +  Currently you can safely assume that `text` is either an ASCII or UTF8 string.
+ +
+ +  Currently a null `text` result has no special meaning for identified components, but may change in the future since some
+ +  ASN.1 string types will need a converter instead of being able to be used as-is.
+ +
+ + Params:
+ +  component = The name component to identify.
+ +  kind      = The identified component, or `X509Certificate.NameComponentKind.unknown` if it wasn't recognised.
+ +  text      = The text of an identified component. Will be `null` if the component wasn't recognised.
+ +
+ + Throws:
+ +  Currently, nothing should be thrown.
+ +
+ + Returns:
+ +  An errorful `Result` if something went wrong.
+ + ++/
 Result x509HandleNameComponent(
     AttributeTypeAndValue component,
     out X509Certificate.NameComponentKind kind,
@@ -577,6 +693,31 @@ Result x509HandleNameComponent(
     return Result.noError;
 }
 
+/++
+ + Attempts to identify the given extension; flatten it into an easier to work with type, and perform some light validation.
+ +
+ + Notes:
+ +  (Phobos' SumType really sucks so please be aware that `X509Extension.SumT` is a highly unstable part of the API).
+ +
+ +  A lot of extensions have additional validation requirements that can't be performed by this function due to a lack
+ +  of context. This function can only perform validation where the extension is viewed in isolation from any other extension.
+ +
+ + Params:
+ +  asn1Extension = The ASN.1 model to identify and convert.
+ +  extension     = The result.
+ +
+ + Throws:
+ +  `X509Error.keyUsageTooManyBits` if a Key Usage extension has more bits than expected.
+ +
+ +  `X509Error.keyUsageNoSetBit` if a Key Usage extension has no set bits.
+ +
+ +  `X509Error.extendedKeyUsageUnknownUsage` if an Extended Key Usage extension specifies an unknown usage.
+ +
+ +  Various errors from `Asn1DecodeError` - mainly around trying to convert Asn1Integer into a native ulong.
+ +
+ + Returns:
+ +  An errorful `Result` if something went wrong.
+ + ++/
 Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT extension) @nogc nothrow
 {
     import std.algorithm : equal;
