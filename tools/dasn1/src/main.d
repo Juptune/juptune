@@ -7,7 +7,7 @@
 
 const MAIN_HELP = 
 `Commands:
-    compile dlang-raw   - TODO
+    compile dlang-raw   - Compiles ASN.1 notation files into D code.
     print               - Parses ASN.1 notation files, and prints out how dasn1 interpreted each file.
 `;
 
@@ -45,7 +45,7 @@ int main(string[] args)
                         return compileDlangRawCommand(args[2..$]);
 
                     default:
-                        writeln("error: `dlang-raw` is not a valid language-type pair.\n");
+                        writeln("error: `", args[2], "` is not a valid language-type pair.\n");
                         writeln(MAIN_HELP);
                         return 1;
                 }

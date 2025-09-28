@@ -6,8 +6,6 @@ This project is currently in a _very_ early state; almost certainly has major is
 
 Only Linux is supported, and that likely won't ever change.
 
-**I currently don't accept MRs for this project - really small things like tiny bug fixes may be merged in however**
-
 **NOTE: This README is kind of outdated, which I'll eventually get around to fixing...**
 
 # Getting Started
