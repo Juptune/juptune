@@ -320,40 +320,30 @@ struct ArrayBase(
         if(l > this._values.length)
         {
             const newCapacity = GetGrowSize(l, this._values.length);
-            static if(!hasElaborateCopyConstructor!ValueT && !hasElaborateMove!ValueT)
+            auto slice = (cast(ValueT*)this.calloc(ValueT.sizeof * newCapacity))[0..newCapacity];
+            if(!slice.ptr)
+                onOutOfMemoryErrorNoGC();
+            foreach(i, ref value; this._values[0..oldLength])
             {
-                auto ptr = cast(ValueT*)this.realloc(this._values.ptr, ValueT.sizeof * newCapacity);
-                if(!ptr)
-                    onOutOfMemoryErrorNoGC();
-                this._values = ptr[0..newCapacity];
+                static if(hasElaborateMove!ValueT)
+                    moveEmplace(value, slice[i]);
+                else
+                    slice[i] = value;
             }
-            else
-            {
-                auto slice = (cast(ValueT*)this.calloc(ValueT.sizeof * newCapacity))[0..newCapacity];
-                if(!slice.ptr)
-                    onOutOfMemoryErrorNoGC();
-                foreach(i, ref value; this._values[0..oldLength])
-                {
-                    static if(hasElaborateMove!ValueT)
-                        moveEmplace(value, slice[i]);
-                    else
-                        slice[i] = value;
-                }
 
-                ValueT init;
-                static if(!__traits(isZeroInit, ValueT))
-                foreach(ref value; slice[oldLength..$])
-                {
-                    static if(hasElaborateMove!ValueT)
-                        moveEmplace(init, value);
-                    else
-                        value = init;
-                }
-                
-                this.dtorValues(0, oldLength);
-                this.free(this._values.ptr);
-                this._values = slice;
+            ValueT init;
+            static if(!__traits(isZeroInit, ValueT))
+            foreach(ref value; slice[oldLength..$])
+            {
+                static if(hasElaborateMove!ValueT)
+                    moveEmplace(init, value);
+                else
+                    value = init;
             }
+            
+            this.dtorValues(0, oldLength);
+            this.free(this._values.ptr);
+            this._values = slice;
         }
 
         if(l < oldLength)

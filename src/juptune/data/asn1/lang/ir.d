@@ -1073,6 +1073,20 @@ final class Asn1ImportsIr : Asn1BaseIr
             auto result = this._registry.getModuleOrNull(item.moduleRef, item.moduleVersion, importModIr, errors);
             if(result.isError)
                 return result;
+            
+            if(importModIr is null)
+            {
+                return Result.make(
+                    Asn1SemanticError.importNotFound,
+                    "failed to lookup imported module",
+                    errors.errorAndString(
+                        this.getRoughLocation(),
+                        "module '", item.moduleRef, "' ",
+                        "version TODO was not found"
+                    )
+                );
+            }
+
             result = importModIr.doSemanticStage(stageBit, lookup, context, info, errors); // Reminder: `lookup` in this case is the raw user-provided lookup, without the module lookup wrapper.
             if(result.isError)
                 return result;

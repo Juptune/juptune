@@ -106,7 +106,7 @@ final class DlangCodeBuilder
             "module ",
             context.baseModuleComponents.joiner("."),
             '.',
-            getModuleDlangIdentifier(mod.getModuleName(), mod.getModuleVersion(), context.errors),
+            fixName(getModuleDlangIdentifier(mod.getModuleName(), mod.getModuleVersion(), context.errors)),
             ";"
         );
 
@@ -122,7 +122,7 @@ final class DlangCodeBuilder
                 " = ",
                 context.baseModuleComponents.joiner("."), // TODO: Alow different modules to have different bases, configurable by the user
                 ".",
-                dlangId,
+                fixName(dlangId),
                 ";"
             );
             return Result.noError;
@@ -392,6 +392,9 @@ private void putValueLiteral(
             ulong[] ids;
             void getIds(Asn1ValueIr idIr)
             {
+                if(auto valueRefIr = cast(Asn1ValueReferenceIr)idIr)
+                    idIr = valueRefIr.getResolvedValueRecurse();
+
                 if(auto objIdIr = cast(Asn1ObjectIdSequenceValueIr)idIr)
                 {
                     objIdIr.foreachObjectIdGC((subValueIr){
@@ -1925,6 +1928,7 @@ private void putRawDerDecodingForField(
         override void visit(Asn1NumericStringTypeIr ir) => this.decodePrimitive();
         override void visit(Asn1IA5StringTypeIr ir) => this.decodePrimitive();
         override void visit(Asn1UtcTimeTypeIr ir) => this.decodePrimitive();
+        override void visit(Asn1NullTypeIr ir) => this.decodePrimitive();
 
         override void visit(Asn1TypeReferenceIr ir)
         {
@@ -2133,6 +2137,7 @@ private string rawTypeOf(Asn1TypeIr ir, Asn1ModuleIr currentModule, Asn1ErrorHan
         override void visit(Asn1NumericStringTypeIr ir) { result = ASN1_SHORTHAND~".Asn1NumericString"; }
         override void visit(Asn1IA5StringTypeIr ir) { result = ASN1_SHORTHAND~".Asn1Ia5String"; }
         override void visit(Asn1UtcTimeTypeIr ir) { result = ASN1_SHORTHAND~".Asn1UtcTime"; }
+        override void visit(Asn1NullTypeIr ir) { result = ASN1_SHORTHAND~".Asn1Null"; }
 
         override void visit(Asn1TypeReferenceIr ir)
         {
@@ -2207,7 +2212,7 @@ private void topLevelIrTagAndClass(
     class_ = Asn1Identifier.Class.universal;
 }
 
-private string fixName(scope const char[] name)
+string fixName(scope const char[] name)
 {
     import std.exception : assumeUnique;
 

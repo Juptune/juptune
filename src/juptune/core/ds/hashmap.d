@@ -244,14 +244,16 @@ struct RobinHoodHashMapBase(
                     return;
                 }
 
-                while(this.cursor < this.map.array.length && !this.map.array[this.cursor++].isSet) {}
+                while(this.cursor < this.map.array.length && !this.map.array[this.cursor].isSet)
+                    this.cursor++;
+
                 if(this.cursor >= this.map.array.length)
                 {
                     this.empty = true;
                     return;
                 }
 
-                this.front = &this.map.array[this.cursor-1];
+                this.front = &this.map.array[this.cursor++];
             }
         }
 
@@ -422,6 +424,9 @@ unittest
     {
         map.put(i, i);
     }
+
+    import std.range : walkLength;
+    assert(map.byKeyValue.walkLength == map.length);
 
     foreach(i; 0..100_000)
     {

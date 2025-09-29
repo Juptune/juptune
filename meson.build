@@ -63,8 +63,15 @@ data_srcs = files(
     './src/juptune/data/utf8.d',
 
     './src/juptune/data/asn1/decode/bcd/encoding.d',
+    './src/juptune/data/asn1/generated/raw/AttributeCertificateVersion1_1_2_840_113549_1_9_16_0_15.d',
+    './src/juptune/data/asn1/generated/raw/CryptographicMessageSyntax_1_2_840_113549_1_9_16_0_14.d',
+    './src/juptune/data/asn1/generated/raw/CryptographicMessageSyntaxAlgorithms_1_2_840_113549_1_9_16_0_16.d',
+    './src/juptune/data/asn1/generated/raw/PKIX1_PSS_OAEP_Algorithms_1_3_6_1_5_5_7_0_33.d',
+    './src/juptune/data/asn1/generated/raw/PKIX1Algorithms88_1_3_6_1_5_5_7_0_17.d',
     './src/juptune/data/asn1/generated/raw/PKIX1Explicit88_1_3_6_1_5_5_7_0_18.d',
     './src/juptune/data/asn1/generated/raw/PKIX1Implicit88_1_3_6_1_5_5_7_0_19.d',
+    './src/juptune/data/asn1/generated/raw/PKIXAttributeCertificate_1_3_6_1_5_5_7_0_12.d',
+    './src/juptune/data/asn1/generated/raw/SecureMimeMessageV3dot1_1_2_840_113549_1_9_16_0_21.d',
     './src/juptune/data/asn1/lang/ast.d',
     './src/juptune/data/asn1/lang/ast2ir.d',
     './src/juptune/data/asn1/lang/common.d',
@@ -82,6 +89,7 @@ data_srcs = files(
     
     './src/juptune/data/x509/asn1convert.d',
     './src/juptune/data/x509/package.d',
+    './src/juptune/data/x509/validation.d',
 )
 
 event_srcs = files(

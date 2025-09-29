@@ -119,6 +119,19 @@ struct MyChoice
 
     }
 
+    jres.Result matchGC(
+        scope jres.Result delegate(typeof(Value.bitstring))  handle_bitstring,
+        scope jres.Result delegate(typeof(Value.boolean))  handle_boolean,
+    ) 
+    {
+        if(_choice == Choice.bitstring)
+            return handle_bitstring(_value.bitstring);
+        if(_choice == Choice.boolean)
+            return handle_boolean(_value.boolean);
+        assert(false, "attempted to use an uninitialised MyChoice!");
+
+    }
+
     jres.Result setBitstring(
         typeof(Value.bitstring) value,
     ) @nogc nothrow
@@ -388,7 +401,7 @@ struct MySequence
         static if(__traits(hasMember, typeof(_a), "toString"))
             _a.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -397,12 +410,20 @@ struct MySequence
         depth++;
         sink("b: ");
         sink("\n");
-        static if(__traits(hasMember, typeof(_b), "toString"))
-            _b.toString(sink, depth+1);
-        else
+        if(_isSet_b)
+        {
+            static if(__traits(hasMember, typeof(_b), "toString"))
+                _b.toString(sink, depth+1);
+            else
             {
+                putIndent();
+                sink("<no toString impl>\n");
+            }
+        }
+        else
+        {
             putIndent();
-            sink("<no toString impl>\n");
+            sink("<optional null>\n");
         }
         depth--;
         putIndent();
@@ -412,7 +433,7 @@ struct MySequence
         static if(__traits(hasMember, typeof(_c), "toString"))
             _c.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }

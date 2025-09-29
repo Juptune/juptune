@@ -7,5 +7,6 @@
 module juptune.data.x509;
 
 public import
-    juptune.data.x509.asn1convert
+    juptune.data.x509.asn1convert,
+    juptune.data.x509.validation
 ;

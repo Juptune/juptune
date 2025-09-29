@@ -284,7 +284,7 @@ struct AttributeTypeAndValue
         static if(__traits(hasMember, typeof(_type), "toString"))
             _type.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -296,7 +296,7 @@ struct AttributeTypeAndValue
         static if(__traits(hasMember, typeof(_value), "toString"))
             _value.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -436,7 +436,7 @@ struct Attribute
         static if(__traits(hasMember, typeof(_type), "toString"))
             _type.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -448,7 +448,7 @@ struct Attribute
         static if(__traits(hasMember, typeof(_values), "toString"))
             _values.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -3413,7 +3413,7 @@ struct AlgorithmIdentifier
         static if(__traits(hasMember, typeof(_algorithm), "toString"))
             _algorithm.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -3427,7 +3427,7 @@ struct AlgorithmIdentifier
             static if(__traits(hasMember, typeof(_parameters), "toString"))
                 _parameters.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -3776,7 +3776,7 @@ struct Validity
         static if(__traits(hasMember, typeof(_notBefore), "toString"))
             _notBefore.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -3788,7 +3788,7 @@ struct Validity
         static if(__traits(hasMember, typeof(_notAfter), "toString"))
             _notAfter.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -3923,7 +3923,7 @@ struct SubjectPublicKeyInfo
         static if(__traits(hasMember, typeof(_algorithm), "toString"))
             _algorithm.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -3935,7 +3935,7 @@ struct SubjectPublicKeyInfo
         static if(__traits(hasMember, typeof(_subjectPublicKey), "toString"))
             _subjectPublicKey.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -4185,7 +4185,7 @@ struct Extension
         static if(__traits(hasMember, typeof(_extnID), "toString"))
             _extnID.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -4197,7 +4197,7 @@ struct Extension
         static if(__traits(hasMember, typeof(_critical), "toString"))
             _critical.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -4209,7 +4209,7 @@ struct Extension
         static if(__traits(hasMember, typeof(_extnValue), "toString"))
             _extnValue.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -4811,7 +4811,7 @@ struct TBSCertificate
             static if(__traits(hasMember, typeof(_dasn1_RawBytes), "toString"))
                 _dasn1_RawBytes.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -4829,7 +4829,7 @@ struct TBSCertificate
         static if(__traits(hasMember, typeof(_version), "toString"))
             _version.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -4841,7 +4841,7 @@ struct TBSCertificate
         static if(__traits(hasMember, typeof(_serialNumber), "toString"))
             _serialNumber.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -4853,7 +4853,7 @@ struct TBSCertificate
         static if(__traits(hasMember, typeof(_signature), "toString"))
             _signature.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -4865,7 +4865,7 @@ struct TBSCertificate
         static if(__traits(hasMember, typeof(_issuer), "toString"))
             _issuer.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -4877,7 +4877,7 @@ struct TBSCertificate
         static if(__traits(hasMember, typeof(_validity), "toString"))
             _validity.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -4889,7 +4889,7 @@ struct TBSCertificate
         static if(__traits(hasMember, typeof(_subject), "toString"))
             _subject.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -4901,7 +4901,7 @@ struct TBSCertificate
         static if(__traits(hasMember, typeof(_subjectPublicKeyInfo), "toString"))
             _subjectPublicKeyInfo.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -4915,7 +4915,7 @@ struct TBSCertificate
             static if(__traits(hasMember, typeof(_issuerUniqueID), "toString"))
                 _issuerUniqueID.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -4935,7 +4935,7 @@ struct TBSCertificate
             static if(__traits(hasMember, typeof(_subjectUniqueID), "toString"))
                 _subjectUniqueID.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -4955,7 +4955,7 @@ struct TBSCertificate
             static if(__traits(hasMember, typeof(_extensions), "toString"))
                 _extensions.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -5359,7 +5359,7 @@ struct Certificate
         static if(__traits(hasMember, typeof(_tbsCertificate), "toString"))
             _tbsCertificate.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -5371,7 +5371,7 @@ struct Certificate
         static if(__traits(hasMember, typeof(_signatureAlgorithm), "toString"))
             _signatureAlgorithm.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -5383,7 +5383,7 @@ struct Certificate
         static if(__traits(hasMember, typeof(_signature), "toString"))
             _signature.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -5575,7 +5575,7 @@ struct CertificateList
         static if(__traits(hasMember, typeof(_tbsCertList), "toString"))
             _tbsCertList.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -5587,7 +5587,7 @@ struct CertificateList
         static if(__traits(hasMember, typeof(_signatureAlgorithm), "toString"))
             _signatureAlgorithm.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -5599,7 +5599,7 @@ struct CertificateList
         static if(__traits(hasMember, typeof(_signature), "toString"))
             _signature.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -5798,7 +5798,7 @@ struct TBSCertList_RevokedCertificate
         static if(__traits(hasMember, typeof(_userCertificate), "toString"))
             _userCertificate.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -5810,7 +5810,7 @@ struct TBSCertList_RevokedCertificate
         static if(__traits(hasMember, typeof(_revocationDate), "toString"))
             _revocationDate.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -5824,7 +5824,7 @@ struct TBSCertList_RevokedCertificate
             static if(__traits(hasMember, typeof(_crlEntryExtensions), "toString"))
                 _crlEntryExtensions.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -6157,7 +6157,7 @@ struct TBSCertList
             static if(__traits(hasMember, typeof(_version), "toString"))
                 _version.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -6175,7 +6175,7 @@ struct TBSCertList
         static if(__traits(hasMember, typeof(_signature), "toString"))
             _signature.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -6187,7 +6187,7 @@ struct TBSCertList
         static if(__traits(hasMember, typeof(_issuer), "toString"))
             _issuer.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -6199,7 +6199,7 @@ struct TBSCertList
         static if(__traits(hasMember, typeof(_thisUpdate), "toString"))
             _thisUpdate.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -6213,7 +6213,7 @@ struct TBSCertList
             static if(__traits(hasMember, typeof(_nextUpdate), "toString"))
                 _nextUpdate.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -6233,7 +6233,7 @@ struct TBSCertList
             static if(__traits(hasMember, typeof(_revokedCertificates), "toString"))
                 _revokedCertificates.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -6253,7 +6253,7 @@ struct TBSCertList
             static if(__traits(hasMember, typeof(_crlExtensions), "toString"))
                 _crlExtensions.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -7597,7 +7597,7 @@ struct PersonalName
         static if(__traits(hasMember, typeof(_surname), "toString"))
             _surname.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -7611,7 +7611,7 @@ struct PersonalName
             static if(__traits(hasMember, typeof(_given_name), "toString"))
                 _given_name.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -7631,7 +7631,7 @@ struct PersonalName
             static if(__traits(hasMember, typeof(_initials), "toString"))
                 _initials.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -7651,7 +7651,7 @@ struct PersonalName
             static if(__traits(hasMember, typeof(_generation_qualifier), "toString"))
                 _generation_qualifier.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -7947,7 +7947,7 @@ struct ExtensionAttribute
         static if(__traits(hasMember, typeof(_extension_attribute_type), "toString"))
             _extension_attribute_type.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -7959,7 +7959,7 @@ struct ExtensionAttribute
         static if(__traits(hasMember, typeof(_extension_attribute_value), "toString"))
             _extension_attribute_value.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -8205,7 +8205,7 @@ struct BuiltInDomainDefinedAttribute
         static if(__traits(hasMember, typeof(_type), "toString"))
             _type.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -8217,7 +8217,7 @@ struct BuiltInDomainDefinedAttribute
         static if(__traits(hasMember, typeof(_value), "toString"))
             _value.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -8784,7 +8784,7 @@ struct BuiltInStandardAttributes
             static if(__traits(hasMember, typeof(_country_name), "toString"))
                 _country_name.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -8804,7 +8804,7 @@ struct BuiltInStandardAttributes
             static if(__traits(hasMember, typeof(_administration_domain_name), "toString"))
                 _administration_domain_name.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -8824,7 +8824,7 @@ struct BuiltInStandardAttributes
             static if(__traits(hasMember, typeof(_network_address), "toString"))
                 _network_address.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -8844,7 +8844,7 @@ struct BuiltInStandardAttributes
             static if(__traits(hasMember, typeof(_terminal_identifier), "toString"))
                 _terminal_identifier.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -8864,7 +8864,7 @@ struct BuiltInStandardAttributes
             static if(__traits(hasMember, typeof(_private_domain_name), "toString"))
                 _private_domain_name.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -8884,7 +8884,7 @@ struct BuiltInStandardAttributes
             static if(__traits(hasMember, typeof(_organization_name), "toString"))
                 _organization_name.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -8904,7 +8904,7 @@ struct BuiltInStandardAttributes
             static if(__traits(hasMember, typeof(_numeric_user_identifier), "toString"))
                 _numeric_user_identifier.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -8924,7 +8924,7 @@ struct BuiltInStandardAttributes
             static if(__traits(hasMember, typeof(_personal_name), "toString"))
                 _personal_name.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -8944,7 +8944,7 @@ struct BuiltInStandardAttributes
             static if(__traits(hasMember, typeof(_organizational_unit_names), "toString"))
                 _organizational_unit_names.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -9399,7 +9399,7 @@ struct ORAddress
         static if(__traits(hasMember, typeof(_built_in_standard_attributes), "toString"))
             _built_in_standard_attributes.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -9413,7 +9413,7 @@ struct ORAddress
             static if(__traits(hasMember, typeof(_built_in_domain_defined_attributes), "toString"))
                 _built_in_domain_defined_attributes.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -9433,7 +9433,7 @@ struct ORAddress
             static if(__traits(hasMember, typeof(_extension_attributes), "toString"))
                 _extension_attributes.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -10685,7 +10685,7 @@ struct PDSParameter
             static if(__traits(hasMember, typeof(_printable_string), "toString"))
                 _printable_string.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -10845,7 +10845,7 @@ struct ExtendedNetworkAddress_e163_4_address
         static if(__traits(hasMember, typeof(_number), "toString"))
             _number.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -10859,7 +10859,7 @@ struct ExtendedNetworkAddress_e163_4_address
             static if(__traits(hasMember, typeof(_sub_address), "toString"))
                 _sub_address.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -11285,7 +11285,7 @@ struct PresentationAddress
             static if(__traits(hasMember, typeof(_pSelector), "toString"))
                 _pSelector.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -11305,7 +11305,7 @@ struct PresentationAddress
             static if(__traits(hasMember, typeof(_sSelector), "toString"))
                 _sSelector.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -11325,7 +11325,7 @@ struct PresentationAddress
             static if(__traits(hasMember, typeof(_tSelector), "toString"))
                 _tSelector.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -11343,7 +11343,7 @@ struct PresentationAddress
         static if(__traits(hasMember, typeof(_nAddresses), "toString"))
             _nAddresses.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -11560,6 +11560,7 @@ struct TerminalType
         ia5_terminal = 7,
         g3_facsimile = 5,
         videotex = 8,
+        g4_facsimile = 6,
     }
     private
     {

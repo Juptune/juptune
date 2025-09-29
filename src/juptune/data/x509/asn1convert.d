@@ -27,7 +27,8 @@ import juptune.data.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19
             Asn1PolicyMappings = PolicyMappings,
             Asn1SubjectDirectoryAttributes = SubjectDirectoryAttributes,
             Asn1AuthorityInfoAccessSyntax = AuthorityInfoAccessSyntax,
-            Asn1SubjectInfoAccessSyntax = SubjectInfoAccessSyntax
+            Asn1SubjectInfoAccessSyntax = SubjectInfoAccessSyntax,
+            Asn1CertificatePolicies = CertificatePolicies
         ;
 
 // A `Result` error enum.
@@ -53,10 +54,213 @@ abstract class X509SignatureAlgorithm
     import std.sumtype : SumType;
 
     /// A SumType of all possible signature algorithms.
-    alias SumT = SumType!(Unknown);
+    alias SumT = SumType!(
+        Unknown,
+        Md2WithRsaEncryption,
+        Md5WithRsaEncryption,
+        Sha1WithRsaEncryption,
+        DsaWithSha1,
+        EcdsaWithSha1,
+        DsaWithSha244,
+        DsaWithSha256,
+        Sha244WithRsaEncryption,
+        Sha256WithRsaEncryption,
+        Sha384WithRsaEncryption,
+        Sha512WithRsaEncryption,
+        EcdsaWith244,
+        EcdsaWith256,
+        EcdsaWith384,
+        EcdsaWith512,
+    );
 
     /// An unknown signature was encountered - user code may be able to recognise it though.
     static struct Unknown { AlgorithmIdentifier identifier; }
+
+    /// RSA + MD2 (RFC 3279)
+    static struct Md2WithRsaEncryption {}
+    /// RSA + MD5 (RFC 3279)
+    static struct Md5WithRsaEncryption {}
+    /// RSA + SHA1 (RFC 3279)
+    static struct Sha1WithRsaEncryption {}
+
+    /// DSA + SHA1 (RFC 3279)
+    static struct DsaWithSha1
+    {
+        ulong r;
+        ulong s;
+    }
+
+    /// ECDSA + SHA1 (RFC 3279)
+    static struct EcdsaWithSha1
+    {
+        ulong r;
+        ulong s;
+    }
+
+    /// DSA + SHA224 (RFC 5754)
+    static struct DsaWithSha244 {}
+    /// DSA + SHA256 (RFC 5754)
+    static struct DsaWithSha256 {}
+
+    /// RSA + SHA244 (RFC 5754)
+    static struct Sha244WithRsaEncryption {}
+    /// RSA + SHA256 (RFC 5754)
+    static struct Sha256WithRsaEncryption {}
+    /// RSA + SHA384 (RFC 5754)
+    static struct Sha384WithRsaEncryption {}
+    /// RSA + SHA512 (RFC 5754)
+    static struct Sha512WithRsaEncryption {}
+
+    /// ECDSA + SHA244 (RFC 5754)
+    static struct EcdsaWith244 {}
+    /// ECDSA + SHA256 (RFC 5754)
+    static struct EcdsaWith256 {}
+    /// ECDSA + SHA384 (RFC 5754)
+    static struct EcdsaWith384 {}
+    /// ECDSA + SHA512 (RFC 5754)
+    static struct EcdsaWith512 {}
+}
+
+/// Namespace class used to store all supported public key algorithms.
+abstract class X509PublicKeyAlgorithm
+{
+    import std.sumtype : SumType;
+    import std.typecons : Nullable;
+
+    import juptune.data.asn1.decode.bcd.encoding : Asn1BitString;
+
+    /// A SumType of all possible public key algorithms.
+    alias SumT = SumType!(
+        Unknown,
+        RsaEncryption,
+        DsaEncryption,
+        DhPublicNumber,
+        KeyExchangeAlgorithm,
+        EcPublicKey,
+        RsaSsaPss,
+        RsaEsOaep,
+    );
+
+    /// An unknown algorithm was encountered - user code may be able to recognise it though.
+    static struct Unknown { AlgorithmIdentifier identifier; }
+
+    /// RSA (RFC 3279)
+    static struct RsaEncryption
+    {
+        enum AllowedKeyUsageNonCa = 
+            X509Extension.KeyUsage.Flag.digitalSignature
+            | X509Extension.KeyUsage.Flag.contentCommitment
+            | X509Extension.KeyUsage.Flag.keyEncipherment
+            | X509Extension.KeyUsage.Flag.dataEncipherment
+        ;
+        enum AllowedKeyUsageCa = 
+            X509Extension.KeyUsage.Flag.digitalSignature
+            | X509Extension.KeyUsage.Flag.contentCommitment
+            | X509Extension.KeyUsage.Flag.keyEncipherment
+            | X509Extension.KeyUsage.Flag.dataEncipherment
+            | X509Extension.KeyUsage.Flag.keyCertSign
+            | X509Extension.KeyUsage.Flag.cRLSign
+        ;
+
+        ulong modulus;
+        ulong publicExponent;
+    }
+
+    /// DSA (RFC 3279)
+    static struct DsaEncryption
+    {
+        enum AllowedKeyUsageNonCa = 
+            X509Extension.KeyUsage.Flag.digitalSignature
+            | X509Extension.KeyUsage.Flag.contentCommitment
+        ;
+        enum AllowedKeyUsageCa = 
+            X509Extension.KeyUsage.Flag.digitalSignature
+            | X509Extension.KeyUsage.Flag.contentCommitment
+            | X509Extension.KeyUsage.Flag.keyCertSign
+            | X509Extension.KeyUsage.Flag.cRLSign
+        ;
+
+        ulong p;
+        ulong q;
+        ulong g;
+    }
+
+    /// Diffie-Hellman (RFC 3279)
+    static struct DhPublicNumber
+    {
+        enum AllowedKeyUsage = 
+            X509Extension.KeyUsage.Flag.keyAgreement
+            | X509Extension.KeyUsage.Flag.encipherOnly
+            | X509Extension.KeyUsage.Flag.decipherOnly
+        ;
+
+        ulong p;
+        ulong g;
+        ulong q;
+        ulong j;
+        Nullable!(Asn1BitString) validationSeed;
+        Nullable!ulong validationPgenCounter;
+    }
+
+    /// KEA (RFC 3279)
+    static struct KeyExchangeAlgorithm
+    {
+        enum AllowedKeyUsage = 
+            X509Extension.KeyUsage.Flag.keyAgreement
+            | X509Extension.KeyUsage.Flag.encipherOnly
+            | X509Extension.KeyUsage.Flag.decipherOnly
+        ;
+
+        ubyte[10] domainIdentifier;
+    }
+
+    /// ECDSA/ECDH (RFC 3279)
+    static struct EcPublicKey
+    {
+        import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17 : EcpkParameters;
+
+        enum AllowedKeyUsageCa = 
+            X509Extension.KeyUsage.Flag.digitalSignature
+            | X509Extension.KeyUsage.Flag.contentCommitment
+            | X509Extension.KeyUsage.Flag.keyAgreement
+            | X509Extension.KeyUsage.Flag.keyCertSign
+            | X509Extension.KeyUsage.Flag.cRLSign
+            | X509Extension.KeyUsage.Flag.encipherOnly
+            | X509Extension.KeyUsage.Flag.decipherOnly
+        ;
+
+        EcpkParameters params;
+    }
+
+    /// RSASSA-PSS (RFC 4055)
+    static struct RsaSsaPss
+    {
+        enum AllowedKeyUsageNonCa = 
+            X509Extension.KeyUsage.Flag.digitalSignature
+            | X509Extension.KeyUsage.Flag.contentCommitment
+        ;
+        enum AllowedKeyUsageCa = 
+            X509Extension.KeyUsage.Flag.digitalSignature
+            | X509Extension.KeyUsage.Flag.contentCommitment
+            | X509Extension.KeyUsage.Flag.keyCertSign
+            | X509Extension.KeyUsage.Flag.cRLSign
+        ;
+
+        ulong modulus;
+        ulong publicExponent;
+    }
+
+    /// RSAES-OAEP (RFC 4055)
+    static struct RsaEsOaep
+    {
+        enum AllowedKeyUsage = 
+            X509Extension.KeyUsage.Flag.keyEncipherment
+            | X509Extension.KeyUsage.Flag.dataEncipherment
+        ;
+
+        ulong modulus;
+        ulong publicExponent;
+    }
 }
 
 /// Namespace class used to store all recognised extensions.
@@ -84,6 +288,7 @@ abstract class X509Extension
         FreshestCrl,
         AuthorityInfoAccessSyntax,
         SubjectInfoAccessSyntax,
+        CertificatePolicies,
     );
 
     /// An unknown extension was encoutered - user code may be able to recognise it though.
@@ -220,6 +425,9 @@ abstract class X509Extension
     alias AuthorityInfoAccessSyntax = Asn1AuthorityInfoAccessSyntax;
     /// The Subject Information Access extension from (RFC 5280 4.2.2.2).
     alias SubjectInfoAccessSyntax = Asn1SubjectInfoAccessSyntax;
+    /// The Certificate Policies extension from (RFC 5280 4.2.1.4).
+    alias CertificatePolicies = Asn1CertificatePolicies;
+    
 }
 
 /++
@@ -267,6 +475,7 @@ struct X509Certificate
         v3
     }
 
+    /// NOTE: This should always be a UTC time.
     static struct Time // Phobos' stuff needs the GC for some dumb reason lol.
     {
         ushort year;
@@ -289,7 +498,7 @@ struct X509Certificate
     Nullable!Asn1BitString issuerUniqueId;
     Nullable!Asn1BitString subjectUniqueId;
 
-    X509SignatureAlgorithm.SumT subjectPublicKeyAlgorithm;
+    X509PublicKeyAlgorithm.SumT subjectPublicKeyAlgorithm;
     Asn1BitString subjectPublicKey;
 
     Name issuer;
@@ -319,6 +528,8 @@ struct X509Certificate
  + Throws:
  +  Anything that `x509IdentifySignatureAlgorithm` can throw.
  +
+ +  Anything that `x509IdentifyPublicKeyAlgorithm` can throw.
+ +
  +  Anything that `x509HandleTime` can throw.
  +
  +  `X509Error.signatureAlgorithmMismatch` if there's a mismatch between the `signature` and `signatureAlgorithm` fields.
@@ -345,7 +556,7 @@ Result x509FromAsn1(Certificate asn1Cert, out X509Certificate cert) @nogc nothro
     if(result.isError)
         return result.wrapError("when identifying signatureAlgorithm:");
 
-    result = x509IdentifySignatureAlgorithm(tbsCert.getSubjectPublicKeyInfo().getAlgorithm(), cert.subjectPublicKeyAlgorithm); // @suppress(dscanner.style.long_line)
+    result = x509IdentifyPublicKeyAlgorithm(tbsCert.getSubjectPublicKeyInfo().getAlgorithm(), cert.subjectPublicKeyAlgorithm); // @suppress(dscanner.style.long_line)
     if(result.isError)
         return result.wrapError("when identifying tbsCertificate subjectPublicKeyAlgorithm:");
 
@@ -447,7 +658,43 @@ Result x509IdentifySignatureAlgorithm(
     out X509SignatureAlgorithm.SumT algorithm,
 ) @nogc nothrow
 {
+    import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
+        :
+            sha256WithRSAEncryption
+        ;
+
+    if(asn1Algorithm.getAlgorithm() == sha256WithRSAEncryption())
+    {
+        algorithm = X509SignatureAlgorithm.Sha256WithRsaEncryption();
+        return Result.noError;
+    }
+
     algorithm = X509SignatureAlgorithm.Unknown(asn1Algorithm);
+    return Result.noError;
+}
+
+// TODO: implement lol
+Result x509IdentifyPublicKeyAlgorithm(
+    AlgorithmIdentifier asn1Algorithm,
+    out X509PublicKeyAlgorithm.SumT algorithm,
+) @nogc nothrow
+{
+    import juptune.data.buffer : MemoryReader;
+
+    import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
+        :
+            id_ecPublicKey
+        ;
+
+    if(asn1Algorithm.getAlgorithm() == id_ecPublicKey())
+    {
+        // assert(false, "TODO: Pending support for Dasn1-Any to preserve identifier");
+
+        algorithm = X509PublicKeyAlgorithm.EcPublicKey();
+        return Result.noError;
+    }
+
+    algorithm = X509PublicKeyAlgorithm.Unknown(asn1Algorithm);
     return Result.noError;
 }
 
@@ -741,6 +988,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
             id_ce_freshestCRL,
             id_pe_authorityInfoAccess,
             id_pe_subjectInfoAccess,
+            id_ce_certificatePolicies,
             AuthorityKeyIdentifier,
             SubjectKeyIdentifier,
             KeyUsage,
@@ -822,7 +1070,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
             final switch(bitIndex)
             {
                 case KeyUsage.NamedBit.digitalSignature:    ext._flag |= KeyFlag.digitalSignature; break;
-                case 1:                                     ext._flag |= KeyFlag.contentCommitment; break; // TODO: Look into dasn1 bug - why doesn't this field exist in the NamedBit enum?
+                case KeyUsage.NamedBit.nonRepudiation:      ext._flag |= KeyFlag.contentCommitment; break;
                 case KeyUsage.NamedBit.keyEncipherment:     ext._flag |= KeyFlag.keyEncipherment; break;
                 case KeyUsage.NamedBit.dataEncipherment:    ext._flag |= KeyFlag.dataEncipherment; break;
                 case KeyUsage.NamedBit.keyAgreement:        ext._flag |= KeyFlag.keyAgreement; break;
@@ -1028,6 +1276,14 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = value;
         return Result.noError;
     }
+    if(id_ce_certificatePolicies().components.equal(id))
+    {
+        Asn1CertificatePolicies value;
+        if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
+
+        extension = value;
+        return Result.noError;
+    }
 
     extension = X509Extension.Unknown(asn1Extension);
     return Result.noError;
@@ -1036,6 +1292,8 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
 @("x.509 - general megatest")
 unittest
 {
+    import std.algorithm : equal;
+
     import juptune.core.util : resultAssert;
     import juptune.data.buffer : MemoryReader;
 
@@ -1382,7 +1640,6 @@ unittest
         AuthorityInfoAccessSyntax assSyntax = getSum!AuthorityInfoAccessSyntax;
         size_t assCount;
         assSyntax.get().foreachElementAutoGC((AccessDescription ass){
-            import std.algorithm : equal;
             import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 
                 : id_ad_ocsp, id_ad_caIssuers;
 
@@ -1456,5 +1713,31 @@ unittest
             "android.clients.google.com", "*.android.google.cn", "*.chrome.google.cn", "*.developers.google.cn", 
             "*.aistudio.google.com"
         ]);
+
+        import juptune.data.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19 : PolicyInformation;
+        CertificatePolicies certPolicies = getSum!CertificatePolicies;
+        assert(certPolicies.get().elementCount == 1);
+        certPolicies.get().foreachElementAutoGC((PolicyInformation info){
+            assert(info.getPolicyQualifiers().isNull);
+            assert(info.getPolicyIdentifier().get().components.equal([
+                2, 23, 140, 1, 2, 1
+            ]));
+            return Result.noError;
+        }).resultAssert;
     }
+
+    import std.sumtype : match;
+    cert.signatureAlgorithm.match!(
+        (X509SignatureAlgorithm.Sha256WithRsaEncryption _) { },
+        (_) { assert(false); }
+    );
+
+    cert.subjectPublicKeyAlgorithm.match!(
+        (X509PublicKeyAlgorithm.EcPublicKey _) { /*TODO: Verify parameters*/ },
+        (_) { assert(false); }
+    );
+
+    // import std : writeln;
+    // writeln(cert.subjectPublicKeyAlgorithm);
+    // assert(false);
 }

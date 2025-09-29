@@ -166,7 +166,7 @@ struct AuthorityKeyIdentifier
             static if(__traits(hasMember, typeof(_keyIdentifier), "toString"))
                 _keyIdentifier.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -186,7 +186,7 @@ struct AuthorityKeyIdentifier
             static if(__traits(hasMember, typeof(_authorityCertIssuer), "toString"))
                 _authorityCertIssuer.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -206,7 +206,7 @@ struct AuthorityKeyIdentifier
             static if(__traits(hasMember, typeof(_authorityCertSerialNumber), "toString"))
                 _authorityCertSerialNumber.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -508,6 +508,7 @@ struct KeyUsage
         keyCertSign = 5,
         cRLSign = 6,
         keyEncipherment = 2,
+        nonRepudiation = 1,
     }
     private
     {
@@ -778,7 +779,7 @@ struct PolicyInformation
         static if(__traits(hasMember, typeof(_policyIdentifier), "toString"))
             _policyIdentifier.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -792,7 +793,7 @@ struct PolicyInformation
             static if(__traits(hasMember, typeof(_policyQualifiers), "toString"))
                 _policyQualifiers.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -1025,7 +1026,7 @@ struct PolicyQualifierInfo
         static if(__traits(hasMember, typeof(_policyQualifierId), "toString"))
             _policyQualifierId.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -1037,7 +1038,7 @@ struct PolicyQualifierInfo
         static if(__traits(hasMember, typeof(_qualifier), "toString"))
             _qualifier.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -1351,7 +1352,7 @@ struct UserNotice
             static if(__traits(hasMember, typeof(_noticeRef), "toString"))
                 _noticeRef.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -1371,7 +1372,7 @@ struct UserNotice
             static if(__traits(hasMember, typeof(_explicitText), "toString"))
                 _explicitText.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -1534,7 +1535,7 @@ struct NoticeReference
         static if(__traits(hasMember, typeof(_organization), "toString"))
             _organization.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -1546,7 +1547,7 @@ struct NoticeReference
         static if(__traits(hasMember, typeof(_noticeNumbers), "toString"))
             _noticeNumbers.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -1902,7 +1903,7 @@ struct PolicyMappingItem
         static if(__traits(hasMember, typeof(_issuerDomainPolicy), "toString"))
             _issuerDomainPolicy.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -1914,7 +1915,7 @@ struct PolicyMappingItem
         static if(__traits(hasMember, typeof(_subjectDomainPolicy), "toString"))
             _subjectDomainPolicy.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -2918,7 +2919,7 @@ struct AnotherName
         static if(__traits(hasMember, typeof(_type_id), "toString"))
             _type_id.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -2930,7 +2931,7 @@ struct AnotherName
         static if(__traits(hasMember, typeof(_value), "toString"))
             _value.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -3102,7 +3103,7 @@ struct EDIPartyName
             static if(__traits(hasMember, typeof(_nameAssigner), "toString"))
                 _nameAssigner.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -3120,7 +3121,7 @@ struct EDIPartyName
         static if(__traits(hasMember, typeof(_partyName), "toString"))
             _partyName.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -3506,7 +3507,7 @@ struct BasicConstraints
         static if(__traits(hasMember, typeof(_cA), "toString"))
             _cA.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -3520,7 +3521,7 @@ struct BasicConstraints
             static if(__traits(hasMember, typeof(_pathLenConstraint), "toString"))
                 _pathLenConstraint.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -3732,7 +3733,7 @@ struct NameConstraints
             static if(__traits(hasMember, typeof(_permittedSubtrees), "toString"))
                 _permittedSubtrees.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -3752,7 +3753,7 @@ struct NameConstraints
             static if(__traits(hasMember, typeof(_excludedSubtrees), "toString"))
                 _excludedSubtrees.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -4048,7 +4049,7 @@ struct GeneralSubtree
         static if(__traits(hasMember, typeof(_base), "toString"))
             _base.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -4060,7 +4061,7 @@ struct GeneralSubtree
         static if(__traits(hasMember, typeof(_minimum), "toString"))
             _minimum.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -4074,7 +4075,7 @@ struct GeneralSubtree
             static if(__traits(hasMember, typeof(_maximum), "toString"))
                 _maximum.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -4387,7 +4388,7 @@ struct PolicyConstraints
             static if(__traits(hasMember, typeof(_requireExplicitPolicy), "toString"))
                 _requireExplicitPolicy.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -4407,7 +4408,7 @@ struct PolicyConstraints
             static if(__traits(hasMember, typeof(_inhibitPolicyMapping), "toString"))
                 _inhibitPolicyMapping.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -4808,7 +4809,7 @@ struct DistributionPoint
             static if(__traits(hasMember, typeof(_distributionPoint), "toString"))
                 _distributionPoint.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -4828,7 +4829,7 @@ struct DistributionPoint
             static if(__traits(hasMember, typeof(_reasons), "toString"))
                 _reasons.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -4848,7 +4849,7 @@ struct DistributionPoint
             static if(__traits(hasMember, typeof(_cRLIssuer), "toString"))
                 _cRLIssuer.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -5181,6 +5182,7 @@ struct ReasonFlags
         certificateHold = 6,
         privilegeWithdrawn = 7,
         keyCompromise = 1,
+        affiliationChanged = 3,
     }
     private
     {
@@ -5838,7 +5840,7 @@ struct AccessDescription
         static if(__traits(hasMember, typeof(_accessMethod), "toString"))
             _accessMethod.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -5850,7 +5852,7 @@ struct AccessDescription
         static if(__traits(hasMember, typeof(_accessLocation), "toString"))
             _accessLocation.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -6353,7 +6355,7 @@ struct IssuingDistributionPoint
             static if(__traits(hasMember, typeof(_distributionPoint), "toString"))
                 _distributionPoint.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -6371,7 +6373,7 @@ struct IssuingDistributionPoint
         static if(__traits(hasMember, typeof(_onlyContainsUserCerts), "toString"))
             _onlyContainsUserCerts.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -6383,7 +6385,7 @@ struct IssuingDistributionPoint
         static if(__traits(hasMember, typeof(_onlyContainsCACerts), "toString"))
             _onlyContainsCACerts.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -6397,7 +6399,7 @@ struct IssuingDistributionPoint
             static if(__traits(hasMember, typeof(_onlySomeReasons), "toString"))
                 _onlySomeReasons.toString(sink, depth+1);
             else
-                {
+            {
                 putIndent();
                 sink("<no toString impl>\n");
             }
@@ -6415,7 +6417,7 @@ struct IssuingDistributionPoint
         static if(__traits(hasMember, typeof(_indirectCRL), "toString"))
             _indirectCRL.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }
@@ -6427,7 +6429,7 @@ struct IssuingDistributionPoint
         static if(__traits(hasMember, typeof(_onlyContainsAttributeCerts), "toString"))
             _onlyContainsAttributeCerts.toString(sink, depth+1);
         else
-            {
+        {
             putIndent();
             sink("<no toString impl>\n");
         }

@@ -81,7 +81,7 @@ int compileDlangRawCommand(string[] args)
                         source.moduleIr.getModuleName(),
                         source.moduleIr.getModuleVersion(),
                         Asn1AlwaysCrashErrorHandler.instance,
-                    ).setExtension(".d")
+                    ).fixName.setExtension(".d")
                 ),
                 code
             );
