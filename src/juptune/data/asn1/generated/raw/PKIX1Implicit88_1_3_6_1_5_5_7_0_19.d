@@ -961,7 +961,7 @@ struct PolicyQualifierInfo
         bool _isSet_policyQualifierId;
         .PolicyQualifierId _policyQualifierId;
         bool _isSet_qualifier;
-        asn1.Asn1OctetString _qualifier;
+        asn1.Asn1Any _qualifier;
     }
 
     jres.Result setPolicyQualifierId(
@@ -2854,7 +2854,7 @@ struct AnotherName
         bool _isSet_type_id;
         asn1.Asn1ObjectIdentifier _type_id;
         bool _isSet_value;
-        asn1.Asn1OctetString _value;
+        asn1.Asn1Any _value;
     }
 
     jres.Result setType_id(

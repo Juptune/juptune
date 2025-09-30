@@ -39,7 +39,7 @@ struct SMIMECapability
         bool _isSet_capabilityID;
         asn1.Asn1ObjectIdentifier _capabilityID;
         bool _isSet_parameters;
-        asn1.Asn1OctetString _parameters;
+        asn1.Asn1Any _parameters;
     }
 
     jres.Result setCapabilityID(
@@ -70,7 +70,7 @@ struct SMIMECapability
     }
 
     jres.Result setParameters(
-        tcon.Nullable!(asn1.Asn1OctetString) value,
+        tcon.Nullable!(asn1.Asn1Any) value,
     ) @nogc nothrow
     {
         jres.Result result = jres.Result.noError;
@@ -83,7 +83,7 @@ struct SMIMECapability
         return jres.Result.noError;
     }
 
-    tcon.Nullable!(asn1.Asn1OctetString) getParameters(
+    tcon.Nullable!(asn1.Asn1Any) getParameters(
     ) @nogc nothrow
     {
         if(_isSet_parameters)

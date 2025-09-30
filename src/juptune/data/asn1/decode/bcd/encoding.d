@@ -1936,6 +1936,23 @@ struct Asn1UtcTime
     uint second() const pure => this._second;
 }
 
+/// A type like this needs to exist _somewhere_ for DASN.1 to work.
+struct Asn1Any
+{
+    Asn1Identifier identifier;
+    Asn1OctetString value;
+
+    static Result fromDecoding(Asn1Ruleset ruleset)(
+        scope ref MemoryReader mem, 
+        scope out typeof(this) result,
+        const Asn1Identifier ident,
+    )
+    {
+        result.identifier = ident;
+        return Asn1OctetString.fromDecoding!ruleset(mem, result.value, ident);
+    }
+}
+
 /// Represents the decoded identifier and length bytes of an ASN.1 record.
 struct Asn1ComponentHeader
 {

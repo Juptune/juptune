@@ -106,14 +106,14 @@ final class DlangCodeBuilder
             "module ",
             context.baseModuleComponents.joiner("."),
             '.',
-            fixName(getModuleDlangIdentifier(mod.getModuleName(), mod.getModuleVersion(), context.errors)),
+            getModuleDlangIdentifier(mod.getModuleName(), mod.getModuleVersion(), context.errors),
             ";"
         );
 
         mod.getImports().foreachImportByModuleGC((moduleRef, moduleVersion, _){
             import std.algorithm : canFind;
             const dlangId = getModuleDlangIdentifier(moduleRef, moduleVersion, context.errors);
-            if(dlangId.canFind("Dasn1-Intrinsics")) // Don't import intrinsics
+            if(dlangId.canFind("Dasn1_Intrinsics")) // Don't import intrinsics
                 return Result.noError;
             
             putLine(
@@ -122,7 +122,7 @@ final class DlangCodeBuilder
                 " = ",
                 context.baseModuleComponents.joiner("."), // TODO: Alow different modules to have different bases, configurable by the user
                 ".",
-                fixName(dlangId),
+                dlangId,
                 ";"
             );
             return Result.noError;
@@ -324,7 +324,7 @@ string getModuleDlangIdentifier(
         }, errors).resultEnforce;
     }
 
-    return buffer.data.assumeUnique;
+    return fixName(buffer.data.assumeUnique);
 }
 
 /++++ Raw Model Outputter ++++/
@@ -2145,7 +2145,9 @@ private string rawTypeOf(Asn1TypeIr ir, Asn1ModuleIr currentModule, Asn1ErrorHan
 
             auto parentModIr = asn1GetParentModule(ir.getResolvedType());
 
-            if(isIntrinsicAnyType(ir) || isIntrinsicRawBytesType(ir))
+            if(isIntrinsicAnyType(ir))
+                result = ASN1_SHORTHAND~".Asn1Any";
+            else if(isIntrinsicRawBytesType(ir))
                 result = ASN1_SHORTHAND~".Asn1OctetString";
             else if (parentModIr is currentModule)
                 result = fixName("."~ir.typeRef);

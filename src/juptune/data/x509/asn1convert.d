@@ -812,7 +812,6 @@ Result x509HandleNameComponent(
     out const(char)[] text,
 ) @nogc nothrow
 {
-    import std.algorithm : equal;
     import juptune.data.buffer : MemoryReader;
 
     import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18
@@ -848,41 +847,41 @@ Result x509HandleNameComponent(
     import juptune.data.asn1.decode.bcd.encoding
         : asn1DecodeComponentHeader, Asn1Identifier, Asn1Ruleset, Asn1ComponentHeader, Asn1Utf8String;
 
-    auto primitiveId = Asn1Identifier(Asn1Identifier.Class.universal, Asn1Identifier.Encoding.primitive, 0); // Note: Tag and class have no meaning here
-    auto memory = MemoryReader(component.getValue().data);
+    auto memory = MemoryReader(component.getValue().value.data);
+    // TODO: Need to double check the identifier from Dasn1-Any
 
-    auto id = component.getType().get().components;
-    if(id.equal(id_at_countryName().get().components))
+    auto id = component.getType().get();
+    if(id == id_at_countryName().get())
     {
         X520countryName value;
-        if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, primitiveId)) return r;
+        if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, component.getValue().identifier)) return r;
         
         kind = X509Certificate.NameComponentKind.countryName;
         text = value.get().asSlice;
         return Result.noError;
     }
-    if(id.equal(id_at_dnQualifier().get().components))
+    if(id == id_at_dnQualifier().get())
     {
         X520dnQualifier value;
-        if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, primitiveId)) return r;
+        if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, component.getValue().identifier)) return r;
         
         kind = X509Certificate.NameComponentKind.dnQualifier;
         text = value.get().asSlice;
         return Result.noError;
     }
-    if(id.equal(id_at_serialNumber().get().components))
+    if(id == id_at_serialNumber().get())
     {
         X520SerialNumber value;
-        if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, primitiveId)) return r;
+        if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, component.getValue().identifier)) return r;
         
         kind = X509Certificate.NameComponentKind.serialNumber;
         text = value.get().asSlice;
         return Result.noError;
     }
-    if(id.equal(id_domainComponent().get().components))
+    if(id == id_domainComponent().get())
     {
         DomainComponent value;
-        if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, primitiveId)) return r;
+        if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, component.getValue().identifier)) return r;
         
         kind = X509Certificate.NameComponentKind.domainComponent;
         text = value.get().asSlice;
@@ -912,16 +911,10 @@ Result x509HandleNameComponent(
         AttribInfo!(id_at_pseudonym,                X520Pseudonym,              Kind.pseudonym),
     ))
     {
-        if(id.equal(Attrib.id_at().get().components))
+        if(id == Attrib.id_at().get())
         {
-            // Special case: Dasn1-Any currently doesn't support storing CHOICE properly, but luckily this field
-            //               is either a PrintableString or a Utf8String, either of which we can safely just read in as-is.
-            // Ponder: ... Does this open up potential exploits? Since technically this can be anything now (that looks like UTF8)?
-            Asn1Utf8String utf8;
-            if(auto r = Asn1Utf8String.fromDecoding!(Asn1Ruleset.der)(memory, utf8, primitiveId)) return r;
-            
             Attrib.DecodedType value;
-            if(auto r = value.setUtf8String(utf8)) return r;
+            if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, component.getValue().identifier)) return r;
 
             auto result = value.match(
                 (str){ text = str.asSlice; return Result.noError; },
@@ -967,7 +960,6 @@ Result x509HandleNameComponent(
  + ++/
 Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT extension) @nogc nothrow
 {
-    import std.algorithm : equal;
     import juptune.data.buffer : MemoryReader;
 
     import juptune.data.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19
@@ -1014,8 +1006,8 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
     //       roll a gigantic set of switch statements for better speed.
     //
     // Redditors: I'm aware this is trash code, you don't have to inform me thank you.
-    auto id = asn1Extension.getExtnID().components;
-    if(id_ce_authorityKeyIdentifier().components.equal(id))
+    auto id = asn1Extension.getExtnID();
+    if(id == id_ce_authorityKeyIdentifier())
     {
         AuthorityKeyIdentifier value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1030,7 +1022,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = ext;
         return Result.noError;
     }
-    if(id_ce_subjectKeyIdentifier().components.equal(id))
+    if(id == id_ce_subjectKeyIdentifier())
     {
         SubjectKeyIdentifier value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1041,7 +1033,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = ext;
         return Result.noError;
     }
-    if(id_ce_keyUsage().components.equal(id))
+    if(id == id_ce_keyUsage())
     {
         KeyUsage value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1092,7 +1084,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = ext;
         return Result.noError;
     }
-    if(id_ce_policyMappings().components.equal(id))
+    if(id == id_ce_policyMappings())
     {
         Asn1PolicyMappings value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1100,7 +1092,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = value;
         return Result.noError;
     }
-    if(id_ce_subjectAltName().components.equal(id))
+    if(id == id_ce_subjectAltName())
     {
         SubjectAltName value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1111,7 +1103,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = ext;
         return Result.noError;
     }
-    if(id_ce_issuerAltName().components.equal(id))
+    if(id == id_ce_issuerAltName())
     {
         IssuerAltName value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1122,7 +1114,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = ext;
         return Result.noError;
     }
-    if(id_ce_subjectDirectoryAttributes().components.equal(id))
+    if(id == id_ce_subjectDirectoryAttributes())
     {
         Asn1SubjectDirectoryAttributes value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1130,7 +1122,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = value;
         return Result.noError;
     }
-    if(id_ce_basicConstraints().components.equal(id))
+    if(id == id_ce_basicConstraints())
     {
         BasicConstraints value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1149,7 +1141,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = ext;
         return Result.noError;
     }
-    if(id_ce_nameConstraints().components.equal(id))
+    if(id == id_ce_nameConstraints())
     {
         NameConstraints value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1161,7 +1153,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = ext;
         return Result.noError;
     }
-    if(id_ce_policyConstraints().components.equal(id))
+    if(id == id_ce_policyConstraints())
     {
         PolicyConstraints value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1185,7 +1177,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = ext;
         return Result.noError;
     }
-    if(id_ce_extKeyUsage().components.equal(id))
+    if(id == id_ce_extKeyUsage())
     {
         ExtKeyUsageSyntax value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1203,14 +1195,14 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
                 ;
 
             alias UseFlag = X509Extension.ExtendedKeyUsage.Flag;
-            auto useId = element.get().components;
+            auto useId = element.get();
 
-            if(id_kp_serverAuth().components.equal(useId)) { ext._flag |= UseFlag.serverAuth; return Result.noError; }
-            if(id_kp_clientAuth().components.equal(useId)) { ext._flag |= UseFlag.clientAuth; return Result.noError; }
-            if(id_kp_codeSigning().components.equal(useId)) { ext._flag |= UseFlag.codeSigning; return Result.noError; }
-            if(id_kp_emailProtection().components.equal(useId)) { ext._flag |= UseFlag.emailProtection; return Result.noError; } // @suppress(dscanner.style.long_line)
-            if(id_kp_timeStamping().components.equal(useId)) { ext._flag |= UseFlag.timeStamping; return Result.noError; } // @suppress(dscanner.style.long_line)
-            if(id_kp_OCSPSigning().components.equal(useId)) { ext._flag |= UseFlag.ocspSigning; return Result.noError; }
+            if(id_kp_serverAuth() == useId) { ext._flag |= UseFlag.serverAuth; return Result.noError; }
+            if(id_kp_clientAuth() == useId) { ext._flag |= UseFlag.clientAuth; return Result.noError; }
+            if(id_kp_codeSigning() == useId) { ext._flag |= UseFlag.codeSigning; return Result.noError; }
+            if(id_kp_emailProtection() == useId) { ext._flag |= UseFlag.emailProtection; return Result.noError; } // @suppress(dscanner.style.long_line)
+            if(id_kp_timeStamping() == useId) { ext._flag |= UseFlag.timeStamping; return Result.noError; } // @suppress(dscanner.style.long_line)
+            if(id_kp_OCSPSigning() == useId) { ext._flag |= UseFlag.ocspSigning; return Result.noError; }
             
             import std.algorithm : map;
             return Result.make(
@@ -1225,7 +1217,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = ext;
         return Result.noError;
     }
-    if(id_ce_cRLDistributionPoints().components.equal(id))
+    if(id == id_ce_cRLDistributionPoints())
     {
         CRLDistributionPoints value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1236,7 +1228,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = ext;
         return Result.noError;
     }
-    if(id_ce_inhibitAnyPolicy().components.equal(id))
+    if(id == id_ce_inhibitAnyPolicy())
     {
         InhibitAnyPolicy value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1249,7 +1241,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = ext;
         return Result.noError;
     }
-    if(id_ce_freshestCRL().components.equal(id))
+    if(id == id_ce_freshestCRL())
     {
         CRLDistributionPoints value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1260,7 +1252,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = ext;
         return Result.noError;
     }
-    if(id_pe_authorityInfoAccess().components.equal(id))
+    if(id == id_pe_authorityInfoAccess())
     {
         Asn1AuthorityInfoAccessSyntax value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1268,7 +1260,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = value;
         return Result.noError;
     }
-    if(id_pe_subjectInfoAccess().components.equal(id))
+    if(id == id_pe_subjectInfoAccess())
     {
         Asn1SubjectInfoAccessSyntax value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;
@@ -1276,7 +1268,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
         extension = value;
         return Result.noError;
     }
-    if(id_ce_certificatePolicies().components.equal(id))
+    if(id == id_ce_certificatePolicies())
     {
         Asn1CertificatePolicies value;
         if(auto r = value.fromDecoding!(Asn1Ruleset.der)(memory, header.identifier)) return r;

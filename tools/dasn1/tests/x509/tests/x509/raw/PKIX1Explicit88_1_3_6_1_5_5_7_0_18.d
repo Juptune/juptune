@@ -219,7 +219,7 @@ struct AttributeTypeAndValue
         bool _isSet_type;
         .AttributeType _type;
         bool _isSet_value;
-        asn1.Asn1OctetString _value;
+        asn1.Asn1Any _value;
     }
 
     jres.Result setType(
@@ -371,7 +371,7 @@ struct Attribute
         bool _isSet_type;
         .AttributeType _type;
         bool _isSet_values;
-        asn1.Asn1SetOf!(asn1.Asn1OctetString) _values;
+        asn1.Asn1SetOf!(asn1.Asn1Any) _values;
     }
 
     jres.Result setType(
@@ -3335,7 +3335,7 @@ struct AlgorithmIdentifier
         bool _isSet_algorithm;
         asn1.Asn1ObjectIdentifier _algorithm;
         bool _isSet_parameters;
-        asn1.Asn1OctetString _parameters;
+        asn1.Asn1Any _parameters;
     }
 
     jres.Result setAlgorithm(
@@ -3366,7 +3366,7 @@ struct AlgorithmIdentifier
     }
 
     jres.Result setParameters(
-        tcon.Nullable!(asn1.Asn1OctetString) value,
+        tcon.Nullable!(asn1.Asn1Any) value,
     ) @nogc nothrow
     {
         jres.Result result = jres.Result.noError;
@@ -3379,7 +3379,7 @@ struct AlgorithmIdentifier
         return jres.Result.noError;
     }
 
-    tcon.Nullable!(asn1.Asn1OctetString) getParameters(
+    tcon.Nullable!(asn1.Asn1Any) getParameters(
     ) @nogc nothrow
     {
         if(_isSet_parameters)
@@ -7882,7 +7882,7 @@ struct ExtensionAttribute
         bool _isSet_extension_attribute_type;
         asn1.Asn1Integer _extension_attribute_type;
         bool _isSet_extension_attribute_value;
-        asn1.Asn1OctetString _extension_attribute_value;
+        asn1.Asn1Any _extension_attribute_value;
     }
 
     jres.Result setExtension_attribute_type(

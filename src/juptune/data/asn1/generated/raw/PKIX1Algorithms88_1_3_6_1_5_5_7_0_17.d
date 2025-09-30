@@ -1440,7 +1440,7 @@ struct FieldID
         bool _isSet_fieldType;
         asn1.Asn1ObjectIdentifier _fieldType;
         bool _isSet_parameters;
-        asn1.Asn1OctetString _parameters;
+        asn1.Asn1Any _parameters;
     }
 
     jres.Result setFieldType(
@@ -1882,7 +1882,7 @@ struct Characteristic_two
         bool _isSet_basis;
         asn1.Asn1ObjectIdentifier _basis;
         bool _isSet_parameters;
-        asn1.Asn1OctetString _parameters;
+        asn1.Asn1Any _parameters;
     }
 
     jres.Result setM(

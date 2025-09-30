@@ -15,7 +15,7 @@ struct ContentInfo
         bool _isSet_contentType;
         .ContentType _contentType;
         bool _isSet_content;
-        asn1.Asn1OctetString _content;
+        asn1.Asn1Any _content;
     }
 
     jres.Result setContentType(
@@ -1870,7 +1870,7 @@ struct Attribute
         bool _isSet_attrType;
         asn1.Asn1ObjectIdentifier _attrType;
         bool _isSet_attrValues;
-        asn1.Asn1SetOf!(asn1.Asn1OctetString) _attrValues;
+        asn1.Asn1SetOf!(asn1.Asn1Any) _attrValues;
     }
 
     jres.Result setAttrType(
@@ -6244,7 +6244,7 @@ struct OtherRecipientInfo
         bool _isSet_oriType;
         asn1.Asn1ObjectIdentifier _oriType;
         bool _isSet_oriValue;
-        asn1.Asn1OctetString _oriValue;
+        asn1.Asn1Any _oriValue;
     }
 
     jres.Result setOriType(
@@ -8943,7 +8943,7 @@ struct OtherKeyAttribute
         bool _isSet_keyAttrId;
         asn1.Asn1ObjectIdentifier _keyAttrId;
         bool _isSet_keyAttr;
-        asn1.Asn1OctetString _keyAttr;
+        asn1.Asn1Any _keyAttr;
     }
 
     jres.Result setKeyAttrId(
@@ -8974,7 +8974,7 @@ struct OtherKeyAttribute
     }
 
     jres.Result setKeyAttr(
-        tcon.Nullable!(asn1.Asn1OctetString) value,
+        tcon.Nullable!(asn1.Asn1Any) value,
     ) @nogc nothrow
     {
         jres.Result result = jres.Result.noError;
@@ -8987,7 +8987,7 @@ struct OtherKeyAttribute
         return jres.Result.noError;
     }
 
-    tcon.Nullable!(asn1.Asn1OctetString) getKeyAttr(
+    tcon.Nullable!(asn1.Asn1Any) getKeyAttr(
     ) @nogc nothrow
     {
         if(_isSet_keyAttr)
