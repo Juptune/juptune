@@ -1,6 +1,7 @@
 -- Changes:
 --  ANY DEFINED BY -> Dasn1-Any intrinsic
 --  A custom extension was added to the bottom to include RFC 5754, which for some reason doesn't define its own module, but still defines types?
+--  A custom extension was added to the bottom to include SEC 2 v2
 
 PKIX1Algorithms88 { iso(1) identified-organization(3) dod(6)
    internet(1) security(5) mechanisms(5) pkix(7) id-mod(0)
@@ -326,5 +327,19 @@ ecdsa-with-SHA384 OBJECT IDENTIFIER ::= { iso(1) member-body(2)
 
 ecdsa-with-SHA512 OBJECT IDENTIFIER ::= { iso(1) member-body(2)
         us(840) ansi-X9-62(10045) signatures(4) ecdsa-with-SHA2(3) 4 }
+
+-- CUSTOM EXTENSION For https://www.secg.org/sec2-v2.pdf --
+
+--
+-- Curves over prime-order fields:
+--
+secp192k1 OBJECT IDENTIFIER ::= { ellipticCurve 31 }
+secp192r1 OBJECT IDENTIFIER ::= { ansi-X9-62 curves(3) prime(1) 1 }
+secp224k1 OBJECT IDENTIFIER ::= { ellipticCurve 32 }
+secp224r1 OBJECT IDENTIFIER ::= { ellipticCurve 33 }
+secp256k1 OBJECT IDENTIFIER ::= { ellipticCurve 10 }
+secp256r1 OBJECT IDENTIFIER ::= { ansi-X9-62 curves(3) prime(1) 7 }
+secp384r1 OBJECT IDENTIFIER ::= { ellipticCurve 34 }
+secp521r1 OBJECT IDENTIFIER ::= { ellipticCurve 35 }
 
 END

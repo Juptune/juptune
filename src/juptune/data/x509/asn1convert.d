@@ -44,6 +44,8 @@ enum X509Error
     keyUsageTooManyBits, /// The `keyUsage` extension contains more bits than expected.
     keyUsageNoSetBit, /// The `keyUsage` extension must contain at least 1 set bit when used.
     extendedKeyUsageUnknownUsage, /// The `extendedKeyUsage extension` contains an unknown usage OBJECT IDENTIFIER.
+    algorithmMissingParameers, /// A Signing/Key algorithm is missing its required parameters.
+    algorithmHasParameters, /// A Signing/Key algorithm contains parameters when it shouldn't.
 
     criticalExtensionNotHandled, /// (Useful for user code) an extension marked as critical was unable to be handled.
 }
@@ -658,13 +660,39 @@ Result x509IdentifySignatureAlgorithm(
     out X509SignatureAlgorithm.SumT algorithm,
 ) @nogc nothrow
 {
+    import juptune.data.asn1.decode.bcd.encoding : Asn1Identifier;
+    import juptune.data.buffer : MemoryReader;
     import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
         :
             sha256WithRSAEncryption
         ;
 
+    Result ensureNoParams(string AlgorithmName)()
+    {
+        import std.sumtype : match;
+
+        if(asn1Algorithm.getParameters().isNull)
+            return Result.noError;
+
+        const id = asn1Algorithm.getParameters().get.identifier;
+        if(id.class_ == Asn1Identifier.Class.universal 
+            && id.encoding == Asn1Identifier.Encoding.primitive
+            && id.tag == 5 // NULL
+        )
+        {
+            return Result.noError;
+        }
+
+        return Result.make(
+            X509Error.algorithmHasParameters,
+            "when handling signature algorithm "~AlgorithmName~" - no/NULL parameters were expected",
+            String2("parameter identifier was: ", id)
+        );
+    }
+
     if(asn1Algorithm.getAlgorithm() == sha256WithRSAEncryption())
     {
+        if(auto r = ensureNoParams!"Sha256WithRsaEncryption"()) return r;
         algorithm = X509SignatureAlgorithm.Sha256WithRsaEncryption();
         return Result.noError;
     }
@@ -680,17 +708,31 @@ Result x509IdentifyPublicKeyAlgorithm(
 ) @nogc nothrow
 {
     import juptune.data.buffer : MemoryReader;
+    import juptune.data.asn1.decode.bcd.encoding : Asn1Ruleset;
 
     import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
         :
-            id_ecPublicKey
+            id_ecPublicKey,
+            EcpkParameters
         ;
 
     if(asn1Algorithm.getAlgorithm() == id_ecPublicKey())
     {
-        // assert(false, "TODO: Pending support for Dasn1-Any to preserve identifier");
+        if(asn1Algorithm.getParameters().isNull)
+        {
+            return Result.make(
+                X509Error.algorithmMissingParameers,
+                "While handling Public Key Algorithm `EcPublicKey` - the parameters field is null, which is not allowed", // @suppress(dscanner.style.long_line)
+            );
+        }
 
-        algorithm = X509PublicKeyAlgorithm.EcPublicKey();
+        auto asn1Params = asn1Algorithm.getParameters().get;
+        auto memory = MemoryReader(asn1Params.value.data);
+
+        EcpkParameters params;
+        if(auto r = params.fromDecoding!(Asn1Ruleset.der)(memory, asn1Params.identifier)) return r;
+
+        algorithm = X509PublicKeyAlgorithm.EcPublicKey(params);
         return Result.noError;
     }
 
@@ -1720,16 +1762,18 @@ unittest
 
     import std.sumtype : match;
     cert.signatureAlgorithm.match!(
-        (X509SignatureAlgorithm.Sha256WithRsaEncryption _) { },
+        (X509SignatureAlgorithm.Sha256WithRsaEncryption _) {},
         (_) { assert(false); }
     );
 
     cert.subjectPublicKeyAlgorithm.match!(
-        (X509PublicKeyAlgorithm.EcPublicKey _) { /*TODO: Verify parameters*/ },
+        (X509PublicKeyAlgorithm.EcPublicKey epk) {
+            import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
+                : secp256r1;
+            assert(epk.params.getNamedCurve() == secp256r1());
+        },
         (_) { assert(false); }
     );
 
-    // import std : writeln;
-    // writeln(cert.subjectPublicKeyAlgorithm);
     // assert(false);
 }

@@ -4074,3 +4074,99 @@ asn1.Asn1ObjectIdentifier ecdsa_with_SHA512(
     return mainValue;
 
 }
+
+asn1.Asn1ObjectIdentifier secp192k1(
+) @nogc nothrow
+{
+    asn1.Asn1ObjectIdentifier mainValue;
+    static immutable ubyte[] mainValue__value = [
+        /* 840 */ 0x86, 0x48, /* 10045 */ 0xCE, 0x3D, 3, 31, 
+    ];
+    mainValue = asn1.Asn1ObjectIdentifier.fromUnownedBytes(1, 2, mainValue__value);
+    return mainValue;
+
+}
+
+asn1.Asn1ObjectIdentifier secp192r1(
+) @nogc nothrow
+{
+    asn1.Asn1ObjectIdentifier mainValue;
+    static immutable ubyte[] mainValue__value = [
+        /* 840 */ 0x86, 0x48, /* 10045 */ 0xCE, 0x3D, 3, 1, 1, 
+    ];
+    mainValue = asn1.Asn1ObjectIdentifier.fromUnownedBytes(1, 2, mainValue__value);
+    return mainValue;
+
+}
+
+asn1.Asn1ObjectIdentifier secp224k1(
+) @nogc nothrow
+{
+    asn1.Asn1ObjectIdentifier mainValue;
+    static immutable ubyte[] mainValue__value = [
+        /* 840 */ 0x86, 0x48, /* 10045 */ 0xCE, 0x3D, 3, 32, 
+    ];
+    mainValue = asn1.Asn1ObjectIdentifier.fromUnownedBytes(1, 2, mainValue__value);
+    return mainValue;
+
+}
+
+asn1.Asn1ObjectIdentifier secp224r1(
+) @nogc nothrow
+{
+    asn1.Asn1ObjectIdentifier mainValue;
+    static immutable ubyte[] mainValue__value = [
+        /* 840 */ 0x86, 0x48, /* 10045 */ 0xCE, 0x3D, 3, 33, 
+    ];
+    mainValue = asn1.Asn1ObjectIdentifier.fromUnownedBytes(1, 2, mainValue__value);
+    return mainValue;
+
+}
+
+asn1.Asn1ObjectIdentifier secp256k1(
+) @nogc nothrow
+{
+    asn1.Asn1ObjectIdentifier mainValue;
+    static immutable ubyte[] mainValue__value = [
+        /* 840 */ 0x86, 0x48, /* 10045 */ 0xCE, 0x3D, 3, 10, 
+    ];
+    mainValue = asn1.Asn1ObjectIdentifier.fromUnownedBytes(1, 2, mainValue__value);
+    return mainValue;
+
+}
+
+asn1.Asn1ObjectIdentifier secp256r1(
+) @nogc nothrow
+{
+    asn1.Asn1ObjectIdentifier mainValue;
+    static immutable ubyte[] mainValue__value = [
+        /* 840 */ 0x86, 0x48, /* 10045 */ 0xCE, 0x3D, 3, 1, 7, 
+    ];
+    mainValue = asn1.Asn1ObjectIdentifier.fromUnownedBytes(1, 2, mainValue__value);
+    return mainValue;
+
+}
+
+asn1.Asn1ObjectIdentifier secp384r1(
+) @nogc nothrow
+{
+    asn1.Asn1ObjectIdentifier mainValue;
+    static immutable ubyte[] mainValue__value = [
+        /* 840 */ 0x86, 0x48, /* 10045 */ 0xCE, 0x3D, 3, 34, 
+    ];
+    mainValue = asn1.Asn1ObjectIdentifier.fromUnownedBytes(1, 2, mainValue__value);
+    return mainValue;
+
+}
+
+asn1.Asn1ObjectIdentifier secp521r1(
+) @nogc nothrow
+{
+    asn1.Asn1ObjectIdentifier mainValue;
+    static immutable ubyte[] mainValue__value = [
+        /* 840 */ 0x86, 0x48, /* 10045 */ 0xCE, 0x3D, 3, 35, 
+    ];
+    mainValue = asn1.Asn1ObjectIdentifier.fromUnownedBytes(1, 2, mainValue__value);
+    return mainValue;
+
+}
