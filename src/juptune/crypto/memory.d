@@ -208,18 +208,18 @@ struct SecureMemory
             import core.sys.linux.sys.mman     : munmap, munlock, mprotect, PROT_WRITE;
             import juptune.core.internal.linux : linuxErrorAsResult;
 
-            auto result = munlock(this._userMemory.ptr, this._userMemory.length);
-            if(result != 0)
-                linuxErrorAsResult("bug: munlock failed", errno()).resultAssert;
-
             if((this._currentProtection & PROT_WRITE) == 0)
             {
-                result = mprotect(this._userMemory.ptr, this._userMemory.length, PROT_WRITE);
+                auto result = mprotect(this._userMemory.ptr, this._userMemory.length, PROT_WRITE);
                 if(result != 0)
                     linuxErrorAsResult("bug: mprotect failed", errno()).resultAssert;
             }
 
             (cast(ubyte[])this._userMemory)[] = 0;
+
+            auto result = munlock(this._userMemory.ptr, this._userMemory.length);
+            if(result != 0)
+                linuxErrorAsResult("bug: munlock failed", errno()).resultAssert;
 
             result = munmap(this._entireMemory.ptr, this._entireMemory.length);
             if(result != 0)
@@ -409,7 +409,7 @@ struct SecureMemory
      + This is not marked @safe or @trusted since there is no way to prevent the returned slice
      + from outliving the `SecureMemory` struct, so the user code itself can only be @trusted at best.
      + ++/
-    Slice!void opSlice(size_t _)(size_t start, size_t end) return
+    Slice!void opSlice(size_t _ = 0)(size_t start, size_t end) return
         => Slice!void(this.unsafeSlice[start..end]);
 
     /++
@@ -447,6 +447,8 @@ struct SecureMemory
             checkedAdd(offset, length, offset).resultAssert;
         }
     }
+
+    alias opDollar = length;
 
     size_t length() const
     {

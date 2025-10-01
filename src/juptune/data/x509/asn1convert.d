@@ -163,9 +163,6 @@ abstract class X509PublicKeyAlgorithm
             | X509Extension.KeyUsage.Flag.keyCertSign
             | X509Extension.KeyUsage.Flag.cRLSign
         ;
-
-        ulong modulus;
-        ulong publicExponent;
     }
 
     /// DSA (RFC 3279)
@@ -273,7 +270,7 @@ abstract class X509Extension
 
     /// A SumType of all recognised extensions.
     alias SumT = SumType!(
-        Unknown, 
+        Unknown, // NOTE: MUST stay as the 0th option for store.d's metaprogramming to work.
         AuthorityKeyIdentifier,
         SubjectKeyIdentifier,
         KeyUsage,
@@ -486,6 +483,22 @@ struct X509Certificate
         ubyte hour;
         ubyte minute;
         ubyte second;
+
+        bool isBefore(const Time other) @nogc nothrow pure const
+        {
+            if(this.year < other.year) return true;
+            if(this.month < other.month) return true;
+            if(this.day < other.day) return true;
+            if(this.hour < other.hour) return true;
+            if(this.minute < other.minute) return true;
+            if(this.second < other.second) return true;
+            return false;
+        }
+
+        bool isAfter(const Time other) @nogc nothrow pure const
+        {
+            return this != other && !this.isBefore(other);
+        }
     }
 
     // From "Certificate"
@@ -650,6 +663,7 @@ Result x509FromAsn1(Certificate asn1Cert, out X509Certificate cert) @nogc nothro
     cert.subjectPublicKey = tbsCert.getSubjectPublicKeyInfo().getSubjectPublicKey();
     cert.issuer = tbsCert.getIssuer();
     cert.subject = tbsCert.getSubject();
+    cert.signatureValue = asn1Cert.getSignature();
 
     return Result.noError;
 }
@@ -664,7 +678,8 @@ Result x509IdentifySignatureAlgorithm(
     import juptune.data.buffer : MemoryReader;
     import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
         :
-            sha256WithRSAEncryption
+            sha256WithRSAEncryption,
+            sha1WithRSAEncryption
         ;
 
     Result ensureNoParams(string AlgorithmName)()
@@ -697,6 +712,13 @@ Result x509IdentifySignatureAlgorithm(
         return Result.noError;
     }
 
+    if(asn1Algorithm.getAlgorithm() == sha1WithRSAEncryption())
+    {
+        if(auto r = ensureNoParams!"Sha1WithRsaEncryption"()) return r;
+        algorithm = X509SignatureAlgorithm.Sha1WithRsaEncryption();
+        return Result.noError;
+    }
+
     algorithm = X509SignatureAlgorithm.Unknown(asn1Algorithm);
     return Result.noError;
 }
@@ -708,13 +730,37 @@ Result x509IdentifyPublicKeyAlgorithm(
 ) @nogc nothrow
 {
     import juptune.data.buffer : MemoryReader;
-    import juptune.data.asn1.decode.bcd.encoding : Asn1Ruleset;
+    import juptune.data.asn1.decode.bcd.encoding : Asn1Ruleset, Asn1Identifier;
 
     import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
         :
             id_ecPublicKey,
+            rsaEncryption,
             EcpkParameters
         ;
+
+    Result ensureNoParams(string AlgorithmName)()
+    {
+        import std.sumtype : match;
+
+        if(asn1Algorithm.getParameters().isNull)
+            return Result.noError;
+
+        const id = asn1Algorithm.getParameters().get.identifier;
+        if(id.class_ == Asn1Identifier.Class.universal 
+            && id.encoding == Asn1Identifier.Encoding.primitive
+            && id.tag == 5 // NULL
+        )
+        {
+            return Result.noError;
+        }
+
+        return Result.make(
+            X509Error.algorithmHasParameters,
+            "when handling public key algorithm "~AlgorithmName~" - no/NULL parameters were expected",
+            String2("parameter identifier was: ", id)
+        );
+    }
 
     if(asn1Algorithm.getAlgorithm() == id_ecPublicKey())
     {
@@ -733,6 +779,12 @@ Result x509IdentifyPublicKeyAlgorithm(
         if(auto r = params.fromDecoding!(Asn1Ruleset.der)(memory, asn1Params.identifier)) return r;
 
         algorithm = X509PublicKeyAlgorithm.EcPublicKey(params);
+        return Result.noError;
+    }
+    if(asn1Algorithm.getAlgorithm() == rsaEncryption())
+    {
+        if(auto r = ensureNoParams!"RsaEncryption"()) return r;
+        algorithm = X509PublicKeyAlgorithm.RsaEncryption();
         return Result.noError;
     }
 
@@ -1774,6 +1826,4 @@ unittest
         },
         (_) { assert(false); }
     );
-
-    // assert(false);
 }

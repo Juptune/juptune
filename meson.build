@@ -22,6 +22,14 @@ else
     error('No cryptography library found.')
 endif
 
+openssl_dep = dependency('openssl', version: '>=3.5.0') # libsodium doesn't support everything unfortunately (e.g. RSA)
+if openssl_dep.found() # Currently not optional, but just in case in the future.
+    message('Found OpenSSL, enabling Juptune_OpenSSL.')
+    juptune_d_versions += ['Juptune_OpenSSL']
+else
+    error('No secondary cryptography library found.')
+endif
+
 summary({
     'D Versions': juptune_d_versions,
 }, section: 'Dependencies')
@@ -53,6 +61,7 @@ crypto_srcs = files(
     './src/juptune/crypto/memory.d',
     './src/juptune/crypto/package.d',
     './src/juptune/crypto/rng.d',
+    './src/juptune/crypto/rsa.d',
 )
 
 data_srcs = files(
@@ -89,6 +98,7 @@ data_srcs = files(
     
     './src/juptune/data/x509/asn1convert.d',
     './src/juptune/data/x509/package.d',
+    './src/juptune/data/x509/store.d',
     './src/juptune/data/x509/validation.d',
 )
 
@@ -124,7 +134,7 @@ juptune_data_dep = declare_dependency(
 
 juptune_crypto_dep = declare_dependency(
     sources: crypto_srcs,
-    dependencies: [juptune_core_dep, juptune_data_dep, libsodium_dep],
+    dependencies: [juptune_core_dep, juptune_data_dep, libsodium_dep, openssl_dep],
 )
 
 juptune_event_dep = declare_dependency(

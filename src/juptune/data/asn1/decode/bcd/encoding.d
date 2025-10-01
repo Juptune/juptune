@@ -316,7 +316,7 @@ struct Asn1Integer
         return Asn1Integer.fromUnownedBytes(bytes);
     }
 
-    const(ubyte)[] rawBytes() => this._value;
+    const(ubyte)[] rawBytes() @nogc nothrow const => this._value;
 
     /++ 
      + Constructs an `Asn1Integer` using a slice to external memory - this memory containing the raw bytes
