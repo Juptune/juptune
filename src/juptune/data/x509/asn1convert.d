@@ -486,12 +486,27 @@ struct X509Certificate
 
         bool isBefore(const Time other) @nogc nothrow pure const
         {
-            if(this.year < other.year) return true;
-            if(this.month < other.month) return true;
-            if(this.day < other.day) return true;
-            if(this.hour < other.hour) return true;
-            if(this.minute < other.minute) return true;
-            if(this.second < other.second) return true;
+            if(this.year < other.year) { return true; }
+            else if(this.year == other.year)
+            {
+                if(this.month < other.month) { return true; }
+                else if(this.month == other.month)
+                {
+                    if(this.day < other.day) { return true; }
+                    else if(this.day == other.day)
+                    {
+                        if(this.hour < other.hour) { return true; }
+                        else if(this.hour == other.hour)
+                        {
+                            if(this.minute < other.minute) { return true; }
+                            else if(this.minute == other.minute)
+                            {
+                                if(this.second < other.second) { return true; }
+                            }
+                        }
+                    }
+                }
+            }
             return false;
         }
 

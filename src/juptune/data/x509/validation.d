@@ -9,7 +9,7 @@ module juptune.data.x509.validation;
 import juptune.core.util : Result;
 import juptune.data.x509.asn1convert : X509Certificate;
 import juptune.data.x509.store : X509ExtensionStore;
-import juptune.data.asn1.generated.raw.CryptographicMessageSyntaxAlgorithms_1_2_840_113549_1_9_16_0_16;
+import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : Name;
 
 enum X509ValidationError
 {
@@ -22,7 +22,7 @@ enum X509ValidationError
     signatureCouldNotBeValidated,
     certificateHasExpired,
     certificateNotValidYet,
-    issuerMismatch,
+    namesDontMatch,
 }
 
 struct X509CertificateValidationInfo
@@ -33,7 +33,7 @@ struct X509CertificateValidationInfo
 
 Result x509ValidatePath(
     scope X509CertificateValidationInfo[] certPath,
-    scope ref X509CertificateValidationInfo trustAnchor,
+    scope X509CertificateValidationInfo trustAnchor,
     X509Certificate.Time pointInTimeUtc,
 ) @nogc nothrow
 {
@@ -73,7 +73,7 @@ Result x509ValidatePath(
         }
 
         // RFC 5280 6.1.3.a.2 - TODO: Lookup how to handle when pointInTimeUtc is == to either date?
-        if(cert.notValidAfter.isBefore(pointInTimeUtc))
+        if(pointInTimeUtc.isAfter(cert.notValidAfter))
         {
             return Result.make(
                 X509ValidationError.certificateHasExpired,
@@ -81,7 +81,7 @@ Result x509ValidatePath(
                 String2("Certificate was certPath[", i, "] with notValidAfter of ", cert.notValidAfter)
             );
         }
-        if(cert.notValidBefore.isAfter(pointInTimeUtc))
+        if(pointInTimeUtc.isBefore(cert.notValidBefore))
         {
             return Result.make(
                 X509ValidationError.certificateNotValidYet,
@@ -94,21 +94,9 @@ Result x509ValidatePath(
         // TODO: Support CRLs
 
         // RFC 5280 6.1.3.a.4
-        // WARY: This is highly dependent on Dasn1's output not somehow generating unique fields for otherwise identical inputs.
-        // NOTE: Because of DER and the fact that names are hierarchical, a byte-wise comparison should be correct?
-        const trustIssuer = cast(ubyte[])(&workingIssuerName)[0..1];
-        const subjectIssuer = cast(ubyte[])(&cert.issuer)[0..1];
-        if(trustIssuer != subjectIssuer)
-        {
-            return Result.make(
-                X509ValidationError.issuerMismatch,
-                "Certificate's issuer is not the same as its parent's issuer",
-                String2(
-                    "Certificate was certPath[", i, "] with issuer of (TODO format) ", subjectIssuer, 
-                    " and parent issuer of (TODO format) ", trustIssuer,
-                )
-            );
-        }
+        result = x509AreNamesEqual(workingIssuerName, cert.issuer);
+        if(result.isError)
+            return result.wrapError("when comparing issuer names:"); // TODO: Probably helpful to add the cert index to the String2 context.
 
         // RFC 5280 6.1.3.b
         // TODO: Support Permitted Subtrees
@@ -283,7 +271,127 @@ Result x509VerifySignature(
     return Result.noError;
 }
 
-@("TEMP")
+Result x509AreNamesEqual(Name a, Name b) @nogc nothrow
+{
+    import juptune.core.ds : Array, String2;
+    import juptune.data.buffer : MemoryReader;
+    import juptune.data.asn1.decode.bcd.encoding : Asn1Ruleset, Asn1Identifier, Asn1Ia5String, Asn1PrintableString;
+    import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : AttributeTypeAndValue;
+
+    Result toArray(Name name, out Array!AttributeTypeAndValue array)
+    {
+        return name.getRdnSequence().get().foreachElementAuto((rdn){
+            return rdn.get().foreachElementAuto((typeAndValue){
+                array.put(typeAndValue);
+                return Result.noError;
+            });
+        });
+    }
+
+    Array!AttributeTypeAndValue aNames;
+    Array!AttributeTypeAndValue bNames;
+    if(auto r = toArray(a, aNames)) return r;
+    if(auto r = toArray(b, bNames)) return r;
+
+    if(aNames.length != bNames.length)
+    {
+        return Result.make(
+            X509ValidationError.namesDontMatch,
+            "names do not match: names contain a different amount of components",
+            String2("name A contains ", aNames.length, " components; name B contains ", bNames.length, " components")
+        );
+    }
+
+    foreach(i, aComp; aNames[])
+    {
+        auto bComp = bNames[i];
+
+        if(aComp.getType() != bComp.getType())
+        {
+            import std.algorithm : map;
+            return Result.make(
+                X509ValidationError.namesDontMatch,
+                "names do not match: component types do not match",
+                String2(
+                    "component #", i, 
+                    " for name A is of type ", aComp.getType().get().components.map!(b => b.isNull ? -1 : b.get),
+                    "; for name B is of type ", bComp.getType().get().components.map!(b => b.isNull ? -1 : b.get)
+                )
+            );
+        }
+
+        if(aComp.getValue().identifier != bComp.getValue().identifier)
+        {
+            return Result.make(
+                X509ValidationError.namesDontMatch,
+                "names cannot be compared: component values are different ASN.1 types (this is actually a Juptune limitation TODO: fix)", // @suppress(dscanner.style.long_line)
+                String2(
+                    "component #", i, 
+                    " for name A is of value type ", aComp.getValue().identifier,
+                    "; for name B is of value type ", bComp.getValue().identifier
+                )
+            );
+        }
+
+        // Technically some of the options break the primitive assumption, but for now they're unsupported, so having this catch-all is useful.
+        const id = aComp.getValue().identifier;
+        if(id.class_ != Asn1Identifier.Class.universal || id.encoding != Asn1Identifier.Encoding.primitive)
+        {
+            return Result.make(
+                X509ValidationError.namesDontMatch,
+                "names cannot be compared: expected component to be of a UNIVERSAL tag and primitively constructed",
+                String2("component #", i, " for both names have an identifier of ", id)
+            );
+        }
+
+        auto aMem = MemoryReader(aComp.getValue().value.data);
+        auto bMem = MemoryReader(bComp.getValue().value.data);
+
+        Result getAs(T)(out T a, out T b)
+        {
+            if(auto r = T.fromDecoding!(Asn1Ruleset.der)(aMem, a, id)) return r;
+            return T.fromDecoding!(Asn1Ruleset.der)(bMem, b, id);
+        }
+
+        Result simpleCompare(T)()
+        {
+            T aStr, bStr;
+            if(auto r = getAs(aStr, bStr)) return r;
+            if(aStr.asSlice != bStr.asSlice)
+            {
+                return Result.make(
+                    X509ValidationError.namesDontMatch,
+                    "names do not match: components are not equal",
+                    String2("component #", i, " for name A is `", aStr.asSlice, "`; for name B is `", bStr.asSlice, "`") // @suppress(dscanner.style.long_line)
+                );
+            }
+            return Result.noError;
+        }
+
+        // TODO: Implement RFC 5280 7.1 properly (remember to include RFC 9549)
+        switch(id.tag)
+        {
+            // TODO: I should really find a central place to store ASN.1's UNIVERSAL tags
+            case 22: // IA5String
+                if(auto r = simpleCompare!Asn1Ia5String()) return r;
+                break;
+
+            case 19: // PrintableString
+                if(auto r = simpleCompare!Asn1PrintableString()) return r;
+                break;
+
+            default: return Result.make(
+                X509ValidationError.namesDontMatch,
+                "names cannot be compared: components are of an unknown/unsupported type",
+                String2("component #", i, " for both names have an identifier of ", id)
+            );
+        }
+    }
+
+    return Result.noError;
+}
+
+@("validation.d - General megatest")
 unittest
 {
     import std.file : fileRead = read, exists;
@@ -349,4 +457,10 @@ unittest
     X509ExtensionStore selfSignedExt, signedRsaExt;
     X509ExtensionStore.fromCertificate(selfSigned, selfSignedExt).resultAssert;
     X509ExtensionStore.fromCertificate(signedRsa, signedRsaExt).resultAssert;
+
+    x509ValidatePath(
+        [X509CertificateValidationInfo(&signedRsa, &signedRsaExt)],
+        X509CertificateValidationInfo(&selfSigned, &selfSignedExt),
+        X509Certificate.Time(2004, 10, 1, 1, 1, 1)
+    ).resultAssert;
 }

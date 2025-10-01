@@ -1942,6 +1942,24 @@ struct Asn1Any
     Asn1Identifier identifier;
     Asn1OctetString value;
 
+    void toString(SinkT)(scope SinkT sink, int depth = 0) // @suppress(dscanner.suspicious.object_const)
+    {
+        import juptune.core.util : resultAssert, toBase10, IntToCharBuffer;
+
+        void putIndent() { foreach(i; 0..depth) sink("  "); }
+        putIndent();
+        sink("[Asn1Any]\n");
+        putIndent();
+
+        import juptune.core.util.conv : toBase10, IntToCharBuffer;
+        IntToCharBuffer buffer;
+        sink("  tag: ");
+        sink(toBase10(this.identifier.tag, buffer));
+        sink("\n");
+
+        this.value.toString(sink, depth+1);
+    }
+
     static Result fromDecoding(Asn1Ruleset ruleset)(
         scope ref MemoryReader mem, 
         scope out typeof(this) result,
