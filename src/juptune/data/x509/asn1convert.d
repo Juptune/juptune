@@ -551,6 +551,9 @@ struct X509Certificate
  +  This leads to a slightly awkward design where user code must call auxilary functions such as `x509ForeachNameComponent` to deal
  +  with array types, for the tradeoff of allowing the user code to have maximum flexbility around how to deal with its own memory.
  +
+ +  The lifetime of `cert` is directly tied to `asn1Cert`, which in turn is tied to the underlying `ubyte[]` that it was decoded from.
+ +  You MUST keep the original underlying `ubyte[]` allocated and unmodified while using either form of the x509 certificate.
+ +
  + Params:
  +  asn1Cert = The ASN.1 model of the x.509 to convert.
  +  cert     = The result.

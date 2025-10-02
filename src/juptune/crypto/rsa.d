@@ -24,7 +24,11 @@ enum RsaPadding
 enum RsaSignatureAlgorithm
 {
     FAILSAFE,
-    sha1
+    sha1,
+    sha224,
+    sha256,
+    sha384,
+    sha512,
 }
 
 version(Juptune_OpenSSL)
@@ -72,6 +76,10 @@ version(Juptune_OpenSSL)
         int EVP_PKEY_CTX_set_rsa_padding(EVP_PKEY_CTX* ctx, int pad_mode);
         int EVP_PKEY_CTX_set_signature_md(EVP_PKEY_CTX* ctx, const(EVP_MD)* md);
         const(EVP_MD)* EVP_sha1();
+        const(EVP_MD)* EVP_sha224();
+        const(EVP_MD)* EVP_sha256();
+        const(EVP_MD)* EVP_sha384();
+        const(EVP_MD)* EVP_sha512();
 
         int EVP_PKEY_encrypt_init(EVP_PKEY_CTX* ctx);
         int EVP_PKEY_encrypt(EVP_PKEY_CTX* ctx, ubyte* out_, size_t* outlen, const(ubyte)* in_, size_t inlen);
@@ -84,6 +92,9 @@ version(Juptune_OpenSSL)
 
         int EVP_PKEY_sign_init(EVP_PKEY_CTX* ctx);
         int EVP_PKEY_sign(EVP_PKEY_CTX* ctx, ubyte* sig, size_t* siglen, const(ubyte)* tbs, size_t tbslen);
+
+
+
 
         ulong ERR_get_error();
         void ERR_error_string_n(ulong e, char* buf, size_t len);
@@ -263,6 +274,10 @@ version(Juptune_OpenSSL)
             case FAILSAFE: assert(false, "bug: FAILSAFE");
 
             case sha1: return EVP_sha1();
+            case sha224: return EVP_sha224();
+            case sha256: return EVP_sha256();
+            case sha384: return EVP_sha384();
+            case sha512: return EVP_sha512();
         }
     }
 

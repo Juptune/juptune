@@ -51,6 +51,8 @@ Result x509ValidatePath(
         assert(cert !is null, "user bug: certificate in certPath was null");
         assert(extStore !is null, "user bug: extensions store for certificate in certPath was null");
 
+        // TODO: Some extensions need to be checked here (e.g. check for CA flag in BasicConstraints)
+
         // RFC 5280 6.1.3.a.1
         bool couldVerify;
         auto result = x509VerifySignature(
@@ -78,7 +80,10 @@ Result x509ValidatePath(
             return Result.make(
                 X509ValidationError.certificateHasExpired,
                 "Certificate has expired",
-                String2("Certificate was certPath[", i, "] with notValidAfter of ", cert.notValidAfter)
+                String2(
+                    "Certificate was certPath[", i, "] with notValidAfter of ", cert.notValidAfter,
+                    " and pointOfTimeUtc of ", pointInTimeUtc
+                )
             );
         }
         if(pointInTimeUtc.isBefore(cert.notValidBefore))
@@ -86,7 +91,10 @@ Result x509ValidatePath(
             return Result.make(
                 X509ValidationError.certificateNotValidYet,
                 "Certificate is not yet valid",
-                String2("Certificate was certPath[", i, "] with notValidBefore of ", cert.notValidBefore)
+                String2(
+                    "Certificate was certPath[", i, "] with notValidBefore of ", cert.notValidBefore,
+                    " and pointOfTimeUtc of ", pointInTimeUtc
+                )
             );
         }
 
@@ -181,7 +189,7 @@ Result x509VerifySignature(
     scope out bool couldVerify,
 ) @nogc nothrow
 {
-    import std.digest.sha : sha1Of;
+    import std.digest.sha : sha1Of, sha224Of, sha256Of, sha384Of, sha512Of;
     import std.sumtype : match;
 
     import juptune.core.ds : String2;
@@ -223,6 +231,10 @@ Result x509VerifySignature(
         union Hash
         {
             ubyte[20] sha1;
+            ubyte[28] sha224;
+            ubyte[32] sha256;
+            ubyte[48] sha384;
+            ubyte[64] sha512;
         }
 
         Hash hashBuffer;
@@ -234,6 +246,30 @@ Result x509VerifySignature(
                 sigAlgorithm = RsaSignatureAlgorithm.sha1;
                 hashBuffer.sha1 = sha1Of(subjectTbsRawDer);
                 subjectHash = hashBuffer.sha1[];
+                return Result.noError;
+            },
+            (X509SignatureAlgorithm.Sha244WithRsaEncryption _){
+                sigAlgorithm = RsaSignatureAlgorithm.sha224;
+                hashBuffer.sha224 = sha224Of(subjectTbsRawDer);
+                subjectHash = hashBuffer.sha224[];
+                return Result.noError;
+            },
+            (X509SignatureAlgorithm.Sha256WithRsaEncryption _){
+                sigAlgorithm = RsaSignatureAlgorithm.sha256;
+                hashBuffer.sha256 = sha256Of(subjectTbsRawDer);
+                subjectHash = hashBuffer.sha256[];
+                return Result.noError;
+            },
+            (X509SignatureAlgorithm.Sha384WithRsaEncryption _){
+                sigAlgorithm = RsaSignatureAlgorithm.sha384;
+                hashBuffer.sha384 = sha384Of(subjectTbsRawDer);
+                subjectHash = hashBuffer.sha384[];
+                return Result.noError;
+            },
+            (X509SignatureAlgorithm.Sha512WithRsaEncryption _){
+                sigAlgorithm = RsaSignatureAlgorithm.sha512;
+                hashBuffer.sha512 = sha512Of(subjectTbsRawDer);
+                subjectHash = hashBuffer.sha512[];
                 return Result.noError;
             },
             (_) => Result.make(
