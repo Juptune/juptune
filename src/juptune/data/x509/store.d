@@ -284,6 +284,9 @@ struct X509CertificateStore
     /++
      + Looks up a certificate by its subjectKeyIdentifier, or null if no certificate was found.
      +
+     + Notes:
+     +  For your own good, please do not modify any of the data in returned pointer.
+     +
      + Params:
      +  sujectKeyId = The subject key identifier to lookup.
      +

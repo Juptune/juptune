@@ -7,7 +7,7 @@
 module juptune.data.x509.validation;
 
 import juptune.core.util : Result;
-import juptune.data.x509.asn1convert : X509Certificate;
+import juptune.data.x509.asn1convert : X509Certificate, X509Extension;
 import juptune.data.x509.store : X509ExtensionStore;
 import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : Name;
 
@@ -23,6 +23,10 @@ enum X509ValidationError
     certificateHasExpired,
     certificateNotValidYet,
     namesDontMatch,
+    certificateIsNotCa,
+    certificateCannotSignCerts,
+    certificateIsInvalid,
+    tooManyCertificates,
 }
 
 struct X509CertificateValidationInfo
@@ -39,10 +43,14 @@ Result x509ValidatePath(
 {
     import juptune.core.ds : String2;
 
+    // Vars defined by the RFC 5280 6.1 algorithm
     auto workingPublicKeyAlgorithm = trustAnchor.certificate.subjectPublicKeyAlgorithm;
     auto workingPublicKey = trustAnchor.certificate.subjectPublicKey;
     auto workingIssuerName = trustAnchor.certificate.issuer;
     auto maxPathLength = certPath.length;
+
+    // Custom vars
+    auto workingCertInfo = trustAnchor;
 
     foreach(i, certInfo; certPath)
     {
@@ -51,7 +59,68 @@ Result x509ValidatePath(
         assert(cert !is null, "user bug: certificate in certPath was null");
         assert(extStore !is null, "user bug: extensions store for certificate in certPath was null");
 
-        // TODO: Some extensions need to be checked here (e.g. check for CA flag in BasicConstraints)
+        // RFC 5280 6.1.4.k - Intentionally moved to the start since we operate on `i-1` here instead of `i`.
+        //                    This was done so that some checks could also be performed on the trust anchor.
+        const workingKeyUsage = workingCertInfo.extensions.getOrNull!(X509Extension.KeyUsage);
+        const workingBasicConstraints = workingCertInfo.extensions.getOrNull!(X509Extension.BasicConstraints);
+        if(!workingBasicConstraints.isNull)
+        {
+            if(!workingBasicConstraints.get.ca)
+            {
+                return Result.make(
+                    X509ValidationError.certificateIsNotCa,
+                    "Parent certificate is not a CA certificate - it cannot be used for verifying signatures",
+                    String2("Child certificate was certPath[", i, "]")
+                );
+            }
+
+            if(!workingKeyUsage.isNull && !workingKeyUsage.get.keyCertSign)
+            {
+                return Result.make(
+                    X509ValidationError.certificateCannotSignCerts,
+                    "Parent certificate does not have the keyCertSign usage bit set - it cannot sign certificates let alone be used for verification", // @suppress(dscanner.style.long_line)
+                    String2("Child certificate was certPath[", i, "]")
+                );
+            }
+
+            if(!workingBasicConstraints.get.pathLenConstraint.isNull && workingKeyUsage.isNull)
+            {
+                return Result.make(
+                    X509ValidationError.certificateIsInvalid,
+                    "Parent certificate has a pathLenConstraint set but does not have a keyUsage extension - this is not a valid certificate", // @suppress(dscanner.style.long_line)
+                    String2("Child certificate was certPath[", i, "]")
+                );
+            }
+        }
+        else if(workingCertInfo.certificate.version_ == X509Certificate.Version.v3)
+        {
+            // If the basic constraints extension is not present in a version 3 certificate [...] then the certified public key MUST NOT be used to verify certificate signatures
+            return Result.make(
+                X509ValidationError.certificateIsNotCa,
+                "Parent certificate is not a CA certificate - it cannot be used for verifying signatures",
+                String2("Child certificate was certPath[", i, "]")
+            );
+        }
+
+        // RFC 5280 6.1.4.m - Intentionally Moved
+        if(
+            !workingBasicConstraints.isNull 
+            && !workingBasicConstraints.get.pathLenConstraint.isNull
+            && workingBasicConstraints.get.pathLenConstraint.get < maxPathLength
+        )
+        {
+            maxPathLength = workingBasicConstraints.get.pathLenConstraint.get;
+        }
+
+        // RFC 5280 6.1.4.n - Intentionally Moved
+        if(!workingKeyUsage.isNull && !workingKeyUsage.get.keyCertSign)
+        {
+            return Result.make(
+                X509ValidationError.certificateCannotSignCerts,
+                "Parent certificate does not have the keyCertSign usage bit set - it cannot sign certificates let alone be used for verification", // @suppress(dscanner.style.long_line)
+                String2("Child certificate was certPath[", i, "]")
+            );
+        }
 
         // RFC 5280 6.1.3.a.1
         bool couldVerify;
@@ -150,6 +219,30 @@ Result x509ValidatePath(
 
         // RFC 5280 6.1.4.i
         // TODO: Support Policy Constraints
+
+        // RFC 5280 6.1.4.j
+        // TODO: Support inhibitAnyPolicy
+
+        // RFC 5280 6.1.4.l
+        bool isSelfSigned = false; // TODO: Figure out how to detect
+        if(!isSelfSigned)
+        {
+            if(maxPathLength == 0)
+            {
+                return Result.make(
+                    X509ValidationError.tooManyCertificates,
+                    "Too many certificates were checked, likely due to the trust anchor/an intermidary certificate setting a pathLenConstraint", // @suppress(dscanner.style.long_line)
+                    String2("Certificate was certPath[", i, "]")
+                );
+            }
+            maxPathLength--;
+        }
+
+        // RFC 5280 6.1.4.o
+        // TODO: Support Policy Constraints
+
+        // Custom
+        workingCertInfo = certInfo;
     }
 
     auto finalCert = certPath[$-1].certificate;
