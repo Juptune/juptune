@@ -12,5 +12,6 @@ public import
     juptune.data.buffer,
     juptune.data.json,
     juptune.data.utf8,
+    juptune.data.pem,
     juptune.data.x509
 ;
