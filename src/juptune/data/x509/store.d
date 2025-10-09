@@ -18,6 +18,7 @@ enum X509StoreError
 
     duplicateSubjectKeyId,  /// A certificate with the given subjectKeyIdentifier has already been loaded into an `X509CertificateStore`
     trustAnchorNotFound,    /// A certificate's trust anchor could not be found during validation within an `X509CertificateStore`
+    wrongPemLabel,          /// A certificate within a PEM encoded file contains the wrong label.
 }
 
 /++
@@ -191,6 +192,16 @@ struct X509CertificateStore
         @disable this(this);
     }
 
+    static struct SecurityPolicy
+    {
+        /// Please see the documentation for `validateChainFromCopyingDerBytes`.
+        bool allowSelfSignedChain = false;
+
+        @safe @nogc nothrow:
+
+        typeof(this) withAllowSelfSignedChain(bool allow) return { this.allowSelfSignedChain = allow; return this; } // @suppress(dscanner.style.long_line)
+    }
+
     private
     {
         alias HashedKey = ubyte[16];
@@ -282,6 +293,294 @@ struct X509CertificateStore
     }
 
     /++
+     + A helper function that combines `PemParser` and `loadFromCopyingDerBytes` together. Please
+     + refer to each of their documentation for any real details.
+     +
+     + Notes:
+     +  Certificates in PEM may not actually be DER encoded (but instead BER). Currently this code
+     +  hard assumes that the certificate is DER encoded.
+     +
+     + Throws:
+     +  Anything that `PemParser.parseNext` can throw.
+     +
+     +  Anything that `loadFromCopyingDerBytes` can throw.
+     +
+     +  `X509StoreError.wrongPemLabel` if any item within the PEM data is not a "CERTIFICATE".
+     +
+     + Returns:
+     +  A `Result` indicating if an error occurred or not.
+     +
+     + See_Also:
+     +  `PemParser.parseNext`, `loadFromCopyingDerBytes`.
+     + ++/
+    Result loadFromPem(scope const(char)[] pem, bool hasImplicitTrust = false) @nogc nothrow
+    {
+        import juptune.core.ds : ArrayNonShrink;
+        import juptune.data.pem : PemParser;
+
+        ArrayNonShrink!ubyte buffer;
+
+        auto parser = PemParser(pem);
+        auto result = parser.parseNext(
+            onStart: (label){
+                if(label != "CERTIFICATE")
+                {
+                    return Result.make(
+                        X509StoreError.wrongPemLabel,
+                        "expected data boundary in PEM to have label CERTIFICATE",
+                        String2("got label '", label, "'")
+                    );
+                }
+
+                return Result.noError; 
+            },
+            onData: (scope data){
+                buffer.put(data);
+                return Result.noError; 
+            },
+            onEnd: () => Result.noError,
+        );
+        if(result.isError)
+            return result;
+
+        return this.loadFromCopyingDerBytes(buffer.slice, hasImplicitTrust: hasImplicitTrust);
+    }
+
+    /++
+     + Loads a certificate bundle from the given PEM encoded data.
+     +
+     + Notes:
+     +  This function is not fully atomic (yet at least), if a certificate generates an error, any previous certificates
+     +  will have been succesfully loaded into the store, and any following certificates will not be loaded.
+     +
+     +  Since unfortunately not all certificates in a bundle will be DER encoded (but instead BER), you may set
+     +  `ignoreAsn1DecodingErrors` to true in order to continue loading certificates even if some certificates in the bundle
+     +   are not DER encoded.
+     +
+     +  This function does not expect nor detect certificate chains within the given bundle - it will load (and optionally validate)
+     +  all certificates as individual, standalone certificates.
+     +
+     +  Data from `pem` is copied - the caller is allowed to free/reuse `pem` after this function without fear.
+     +
+     + Params:
+     +  pem                         = The raw PEM encoding.
+     +  ignoreAsn1DecodingErrors    = If true, then any error of type `Asn1DecodeError` will be completely ignored.
+     +  hasImplicitTrust            = If true, then the certificates will not be validated. If false, then the certificates will be validated.
+     +
+     + Throws:
+     +  Anything that `loadFromCopyingDerBytes` can throw.
+     +
+     +  Anything that `PemParser.parseNext` can throw.
+     +
+     +  `X509StoreError.wrongPemLabel` if any item within the PEM data is not a "CERTIFICATE".
+     + 
+     + Returns:
+     +  A `Result` indicating if an error occurred or not.
+     + ++/
+    Result loadBundleFromPem(
+        scope const(char)[] pem, 
+        bool ignoreAsn1DecodingErrors = false,
+        bool hasImplicitTrust = false,
+    ) @nogc nothrow
+    in(pem.length > 0, "pem is empty")
+    {
+        import juptune.core.ds : ArrayNonShrink;
+        import juptune.data.asn1.decode.bcd.encoding : Asn1DecodeError;
+        import juptune.data.pem : PemParser;
+
+        ArrayNonShrink!ubyte buffer;
+        auto parser = PemParser(pem);
+        while(!parser.eof)
+        {
+            auto result = parser.parseNext(
+                onStart: (label){
+                    if(label != "CERTIFICATE")
+                    {
+                        return Result.make(
+                            X509StoreError.wrongPemLabel,
+                            "expected data boundary in PEM to have label CERTIFICATE",
+                            String2("got label '", label, "'")
+                        );
+                    }
+
+                    return Result.noError; 
+                },
+                onData: (scope data){
+                    buffer.put(data);
+                    return Result.noError; 
+                },
+                onEnd: () => Result.noError,
+            );
+            if(result.isError)
+                return result;
+
+            result = this.loadFromCopyingDerBytes(buffer.slice, hasImplicitTrust: hasImplicitTrust);
+            if(result.isError)
+            {
+                if(!(result.isErrorType!Asn1DecodeError && ignoreAsn1DecodingErrors))
+                    return result;
+            }
+
+            buffer.length = 0;
+        }
+
+        return Result.noError;
+    }
+
+    /++
+     + A helper function that combines `PemParser` and `validateChainFromCopyingDerBytes` together. Please
+     + refer to each of their documentation for any real details.
+     +
+     + Notes:
+     +  Certificates in PEM may not actually be DER encoded (but instead BER). Currently this code
+     +  hard assumes that the certificate is DER encoded.
+     +
+     + Throws:
+     +  Anything that `PemParser.parseNext` can throw.
+     +
+     +  Anything that `validateChainFromCopyingDerBytes` can throw.
+     +
+     +  `X509StoreError.wrongPemLabel` if any item within the PEM data is not a "CERTIFICATE".
+     +
+     + Returns:
+     +  A `Result` indicating if an error occurred or not.
+     +
+     + See_Also:
+     +  `PemParser.parseNext`, `validateChainFromCopyingDerBytes`.
+     + ++/
+    Result validateChainFromPem(scope const(char)[] pem, const SecurityPolicy policy)
+    {
+        import juptune.core.ds : ArrayNonShrink;
+        import juptune.data.pem : PemParser;
+
+        ArrayNonShrink!ubyte buffer;
+        auto parser = PemParser(pem);
+
+        return this.validateChainFromCopyingDerBytes(
+            (scope out derBytes, scope out success){
+                if(parser.eof)
+                    return Result.noError;
+
+                buffer.length = 0;
+                auto result = parser.parseNext(
+                    onStart: (label){
+                        if(label != "CERTIFICATE")
+                        {
+                            return Result.make(
+                                X509StoreError.wrongPemLabel,
+                                "expected data boundary in PEM to have label CERTIFICATE",
+                                String2("got label '", label, "'")
+                            );
+                        }
+
+                        return Result.noError; 
+                    },
+                    onData: (scope data){
+                        buffer.put(data);
+                        return Result.noError; 
+                    },
+                    onEnd: () => Result.noError,
+                );
+                if(result.isError)
+                    return result;
+                
+                derBytes = buffer.slice;
+                success = true;
+                return Result.noError;
+            },
+            policy: policy,
+            reverseChain: true
+        );
+    }
+
+    /++
+     + Validates a chain of certificates (or a "chain" with a single certificate) from the given raw DER encoded bytes.
+     + These certificates are not loaded into the store, and are immediately freed upon exit of this function.
+     +
+     + Notes:
+     +  When the `nextInChain` parameter returns `true`, it must populate its parameter with a byte slice of a DER encoded ASN.1 x.509 `Certificate` structure.
+     +  This memory is immediately copied, so `nextInChain` is free to reuse any internal buffers it exposes to this function.
+     +
+     +  When `nextInChain` is unable to provide another certificate, it must return `false`. It should leave its parameter as `null` in this case.
+     +
+     + Security Policy:
+     +  **allowSelfSignedChain** = If the first certificate in the chain is self-signed; this value is `false`, and the self-signed certificate has not
+     +                             been previously loaded into the store, then the chain is rejected.
+     +                             However if this value is `true`, the chain will continue to be validated using the first certificate as the trust anchor
+     +                             if the first certificate is self-signed.
+     +
+     + Params:
+     +  nextInChain  = A user-provided callback for accessing the next certificate in the chain, please see Notes for important info.
+     +  policy       = The security policy to apply to this function, please see "Security Policy" for important info.
+     +  reverseChain = If true, then the chain will be reversed before being validated. This is useful for when `nextInChain` is handling PEM input,
+     +                 as PEM certificates store chains in reverse order.
+     + Throws:
+     +  Anything that the underlying ASN.1 decoder functions can throw (`Asn1DecodeError`).
+     +
+     +  Anything that `x509FromAsn1` can throw.
+     +
+     +  Anything that `X509ExtensionStore.fromCertificate` can throw.
+     +
+     +  Anything that `x509ValidatePath` can throw.
+     +
+     +  `X509StoreError.trustAnchorNotFound` if a trust anchor could not be determined, and if the first certificate in the chain could not
+     +  be used as the trust anchor (see Security Policy).
+     +
+     + Returns:
+     +  A `Result` indicating if an error occurred or not.
+     + ++/
+    alias validateChainFromCopyingDerBytes = validateChainFromCopyingDerBytesImpl!(Result delegate(scope out const(ubyte)[] derBytes, scope out bool success) @nogc nothrow); // @suppress(dscanner.style.long_line)
+    alias validateChainFromCopyingDerBytesGC = validateChainFromCopyingDerBytesImpl!(Result delegate(scope out const(ubyte)[] derBytes, scope out bool success)); // @suppress(dscanner.style.long_line)
+
+    private Result validateChainFromCopyingDerBytesImpl(NextT)(
+        scope NextT nextInChain, 
+        const SecurityPolicy policy, 
+        bool reverseChain = false
+    )
+    in(nextInChain !is null, "nextInChain is null")
+    {
+        import core.stdc.stdlib : calloc, free;
+        import core.exception : onOutOfMemoryErrorNoGC;
+
+        Array!(Cert*) stagingCerts;
+
+        scope(exit) foreach(cert; stagingCerts)
+        {
+            (*cert).__xdtor();
+            free(cert);
+        }
+
+        bool success;
+        const(ubyte)[] derBytes;
+        
+        auto result = nextInChain(derBytes, success);
+        if(result.isError)
+            return result;
+
+        while(success)
+        {
+            auto certPtr = cast(Cert*)calloc(1, Cert.sizeof);
+            if(certPtr is null)
+                onOutOfMemoryErrorNoGC();
+            certPtr.underlyingBytes.put(derBytes);
+
+            result = this.loadCert(certPtr);
+            if(result.isError)
+                return result;
+
+            stagingCerts.put(certPtr);
+
+            result = nextInChain(derBytes, success);
+            if(result.isError)
+                return result;
+        }
+
+        return (stagingCerts.length > 1) 
+            ? this.validateCertChain(stagingCerts.slice, policy, reverseChain)
+            : this.validateSingleCert(stagingCerts[0]);
+    }
+
+    /++
      + Looks up a certificate by its subjectKeyIdentifier, or null if no certificate was found.
      +
      + Notes:
@@ -332,6 +631,62 @@ struct X509CertificateStore
         return x509ValidatePath(
             [X509CertificateValidationInfo(&cert.certificate, &cert.extensions)], 
             X509CertificateValidationInfo(&trustAnchor.certificate, &trustAnchor.extensions),
+            pointInTimeUtc
+        );
+    }
+
+    private Result validateCertChain(scope Cert*[] chain, const SecurityPolicy policy, bool reverseChain) @nogc nothrow
+    in(chain.length > 0, "chain is empty?")
+    in(chain.length > 1, "chain is only one cert long?")
+    {
+        import juptune.core.ds : ArrayNonShrink;
+        import juptune.data.x509.validation : x509IsSelfSigned, x509ValidatePath, X509CertificateValidationInfo;
+
+        auto firstCert = chain[reverseChain ? chain.length-1 : 0]; // @suppress(dscanner.suspicious.length_subtraction)
+
+        // Find the trust anchor, or fallback to using a self-signed cert if allowed.
+        Cert* trustAnchor;
+        auto result = this.findTrustAnchor(firstCert, trustAnchor);
+        if(result.isError(X509StoreError.trustAnchorNotFound) && policy.allowSelfSignedChain)
+        {
+            bool isSelfSigned;
+            auto selfSignedResult = x509IsSelfSigned(
+                X509CertificateValidationInfo(&firstCert.certificate, &firstCert.extensions),
+                isSelfSigned
+            );
+            if(selfSignedResult.isError)
+                return selfSignedResult;
+
+            if(!isSelfSigned)
+                return result.wrapError("first certificate in chain is also not self signed:");
+                
+            trustAnchor = firstCert;
+            chain = (reverseChain) ? chain[0..$-1] : chain[1..$];
+        }
+        else if(result.isError)
+            return result;
+
+        // Build up the chain, reversing it if requested.
+        ArrayNonShrink!X509CertificateValidationInfo info;
+        info.reserve(chain.length);
+
+        if(reverseChain)
+        {
+            import std.range : retro;
+            foreach(cert; chain.retro)
+                info.put(X509CertificateValidationInfo(&cert.certificate, &cert.extensions));
+        }
+        else
+        {
+            foreach(cert; chain)
+                info.put(X509CertificateValidationInfo(&cert.certificate, &cert.extensions));
+        }
+
+        // Perform validation.
+        const pointInTimeUtc = this.currTime();
+        return x509ValidatePath(
+            info.slice, 
+            X509CertificateValidationInfo(&trustAnchor.certificate, &trustAnchor.extensions), 
             pointInTimeUtc
         );
     }
@@ -478,4 +833,19 @@ unittest
     ]);
     assert(selfSigned !is null);
     assert(selfSigned.extensions.getOrNull!(X509Extension.BasicConstraints).get.ca);
+}
+
+@("DEBUG")
+unittest
+{
+    import std.file : fileRead = read;
+    import juptune.core.util : resultAssert;
+    
+    X509CertificateStore store;
+
+    const pem = cast(const(char)[])fileRead("/etc/ssl/ca-bundle.pem");
+    store.loadBundleFromPem(pem, hasImplicitTrust: true, ignoreAsn1DecodingErrors: true).resultAssert;
+    
+    const cert = cast(const(char)[])fileRead("/home/bradley/Downloads/google-com.pem");
+    store.validateChainFromPem(cert, X509CertificateStore.SecurityPolicy()).resultAssert;
 }

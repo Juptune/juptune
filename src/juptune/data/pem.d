@@ -35,17 +35,17 @@ struct PemParser
     }
 
     Result parseNext(
-        Result delegate(const(char)[] label) @nogc nothrow onStart,
-        Result delegate(scope const(ubyte)[] data) @nogc nothrow onData,
-        Result delegate() @nogc nothrow onEnd,
+        scope Result delegate(const(char)[] label) @nogc nothrow onStart,
+        scope Result delegate(scope const(ubyte)[] data) @nogc nothrow onData,
+        scope Result delegate() @nogc nothrow onEnd,
     ) @nogc nothrow
         => this.parseNextImpl(onStart, onData, onEnd);
 
     /// ditto
     Result parseNextGC(
-        Result delegate(const(char)[] label) onStart,
-        Result delegate(scope const(ubyte)[] data) onData,
-        Result delegate() onEnd,
+        scope Result delegate(const(char)[] label) onStart,
+        scope Result delegate(scope const(ubyte)[] data) onData,
+        scope Result delegate() onEnd,
     )
         => this.parseNextImpl(onStart, onData, onEnd);
 
@@ -59,6 +59,24 @@ struct PemParser
     in(onEnd !is null, "onEnd is null")
     {
         import juptune.data.base : Base64Decoder, Base64Rfc4648Alphabet;
+
+        while(!this.eof && this._input[this._cursor] != '-')
+        {
+            While: while(!this.eof)
+            {
+                const ch = this._input[this._cursor];
+                switch(ch)
+                {
+                    case '\n', '\r':
+                        this.eatNewLine();
+                        break While;
+
+                    default:
+                        this._cursor++;
+                        break;
+                }
+            }
+        }
 
         const(char)[] label;
         auto result = this.readDataBoundaryLine!("-----BEGIN ", PemError.invalidStartBoundary, true)(label);

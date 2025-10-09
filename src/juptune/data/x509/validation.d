@@ -520,6 +520,32 @@ Result x509AreNamesEqual(Name a, Name b) @nogc nothrow
     return Result.noError;
 }
 
+Result x509IsSelfSigned(scope X509CertificateValidationInfo info, scope out bool isSelfSigned) @nogc nothrow
+in(info.certificate !is null)
+in(info.extensions !is null)
+{
+    // Check 1: See if the key identifiers match.
+    auto subjectKey = info.extensions.getOrNull!(X509Extension.SubjectKeyIdentifier);
+    auto authorityKey = info.extensions.getOrNull!(X509Extension.AuthorityKeyIdentifier);
+    if(!subjectKey.isNull && !authorityKey.isNull && subjectKey.get.keyIdentifier == authorityKey.get.keyIdentifier)
+    {
+        isSelfSigned = true;
+        return Result.noError;
+    }
+
+    // Check 2: See if the issuer and subject match.
+    auto result = x509AreNamesEqual(info.certificate.issuer, info.certificate.subject);
+    if(result.isError && !result.isError(X509ValidationError.namesDontMatch))
+        return result;
+    else if(!result.isError)
+    {
+        isSelfSigned = true;
+        return Result.noError;
+    }
+
+    return Result.noError;
+}
+
 @("validation.d - General megatest")
 unittest
 {

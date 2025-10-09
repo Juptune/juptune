@@ -402,8 +402,6 @@ struct JsonBuilder(SinkT)
 
     private Result put()(scope const(char)[] str)
     {
-        import juptune.data.utf8 : utf8DecodeNext;
-
         auto result = this._sink(`"`);
         if(result.isError)
             return result;
