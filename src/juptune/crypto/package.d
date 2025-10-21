@@ -9,6 +9,7 @@ module juptune.crypto;
 
 public import
     juptune.crypto.aead,
+    juptune.crypto.keyexchange,
     juptune.crypto.memory,
     juptune.crypto.rng,
     juptune.crypto.rsa

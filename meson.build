@@ -59,6 +59,8 @@ crypto_srcs = files(
     './src/juptune/crypto/aead.d',
     './src/juptune/crypto/libsodium.di',
     './src/juptune/crypto/memory.d',
+    './src/juptune/crypto/keyexchange.d',
+    './src/juptune/crypto/openssl.d',
     './src/juptune/crypto/package.d',
     './src/juptune/crypto/rng.d',
     './src/juptune/crypto/rsa.d',
@@ -145,7 +147,7 @@ juptune_event_dep = declare_dependency(
 
 juptune_http_dep = declare_dependency(
     sources: http_srcs,
-    dependencies: [juptune_core_dep, juptune_crypto_dep, juptune_event_dep],
+    dependencies: [juptune_core_dep, juptune_crypto_dep, juptune_data_dep, juptune_event_dep],
 )
 
 juptune_all_dep = declare_dependency(

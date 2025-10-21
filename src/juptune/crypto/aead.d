@@ -304,7 +304,13 @@ version (Juptune_LibSodium)
         crypto_aead_chacha20poly1305_abytes,
         crypto_aead_chacha20poly1305_keybytes,
         crypto_aead_chacha20poly1305_encrypt,
-        crypto_aead_chacha20poly1305_decrypt
+        crypto_aead_chacha20poly1305_decrypt,
+
+        crypto_aead_aes256gcm_npubbytes,
+        crypto_aead_aes256gcm_abytes,
+        crypto_aead_aes256gcm_keybytes,
+        crypto_aead_aes256gcm_encrypt,
+        crypto_aead_aes256gcm_decrypt
     ;
 
     alias AeadChacha20Poly1305 = SodiumAead!(
@@ -323,7 +329,15 @@ version (Juptune_LibSodium)
         crypto_aead_chacha20poly1305_ietf_decrypt
     );
 
-    private alias ALL_AEAD_ALGORITHMS = AliasSeq!(AeadChacha20Poly1305, AeadIetfChacha20Poly1305);
+    alias AeadAes256Gcm = SodiumAead!(
+        12, crypto_aead_aes256gcm_npubbytes,
+        32, crypto_aead_aes256gcm_keybytes,
+        16, crypto_aead_aes256gcm_abytes,
+        crypto_aead_aes256gcm_encrypt,
+        crypto_aead_aes256gcm_decrypt
+    );
+
+    private alias ALL_AEAD_ALGORITHMS = AliasSeq!(AeadChacha20Poly1305, AeadIetfChacha20Poly1305, AeadAes256Gcm);
 }
 else
 {

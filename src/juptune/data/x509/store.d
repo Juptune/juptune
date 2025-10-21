@@ -176,6 +176,27 @@ struct X509ExtensionStore
  +  *authorityKeyIdentifier* - If the target certificate contains the authorityKeyIdentifier extension, then a lookup for a certficate
  +  that has a matching subjectKeyIdentifier extension is performed. If the identifiers match, then the looked up certificate 
  +  is used as the trust anchor.
+ +
+ + Lifetimes:
+ +  This store is mainly designed for higher level use, and as such it will freely allocate memory.
+ +
+ +  This store will always create copies of any input data. This means any resulting output will have its lifetime tied
+ +  to the store itself. So as long as `X509CertificateStore` stays alive, all of its output will stay alive.
+ +
+ + Thread Safety:
+ +  Currently this store is _not_ thread safe. However once Juptune's event loop has been refactored - ideally with a built-in concept of
+ +  mutexes - then thread safety will likely be implemented either directly or indirectly.
+ +
+ +  For now it's recommended to:
+ +   1. Perform all loads at program start.
+ +   2. ONLY use validation functions from multiple threads.
+ +   3. (The above _should_ be thread safe for a while).
+ +
+ +  Or:
+ +   1. Use an external mutex solution - this isn't ideal since it won't integrate properly with Juptune's event loop.
+ +
+ +  Or:
+ +   1. Just make one store per thread.
  + ++/
 struct X509CertificateStore
 {
@@ -293,60 +314,6 @@ struct X509CertificateStore
     }
 
     /++
-     + A helper function that combines `PemParser` and `loadFromCopyingDerBytes` together. Please
-     + refer to each of their documentation for any real details.
-     +
-     + Notes:
-     +  Certificates in PEM may not actually be DER encoded (but instead BER). Currently this code
-     +  hard assumes that the certificate is DER encoded.
-     +
-     + Throws:
-     +  Anything that `PemParser.parseNext` can throw.
-     +
-     +  Anything that `loadFromCopyingDerBytes` can throw.
-     +
-     +  `X509StoreError.wrongPemLabel` if any item within the PEM data is not a "CERTIFICATE".
-     +
-     + Returns:
-     +  A `Result` indicating if an error occurred or not.
-     +
-     + See_Also:
-     +  `PemParser.parseNext`, `loadFromCopyingDerBytes`.
-     + ++/
-    Result loadFromPem(scope const(char)[] pem, bool hasImplicitTrust = false) @nogc nothrow
-    {
-        import juptune.core.ds : ArrayNonShrink;
-        import juptune.data.pem : PemParser;
-
-        ArrayNonShrink!ubyte buffer;
-
-        auto parser = PemParser(pem);
-        auto result = parser.parseNext(
-            onStart: (label){
-                if(label != "CERTIFICATE")
-                {
-                    return Result.make(
-                        X509StoreError.wrongPemLabel,
-                        "expected data boundary in PEM to have label CERTIFICATE",
-                        String2("got label '", label, "'")
-                    );
-                }
-
-                return Result.noError; 
-            },
-            onData: (scope data){
-                buffer.put(data);
-                return Result.noError; 
-            },
-            onEnd: () => Result.noError,
-        );
-        if(result.isError)
-            return result;
-
-        return this.loadFromCopyingDerBytes(buffer.slice, hasImplicitTrust: hasImplicitTrust);
-    }
-
-    /++
      + Loads a certificate bundle from the given PEM encoded data.
      +
      + Notes:
@@ -355,7 +322,7 @@ struct X509CertificateStore
      +
      +  Since unfortunately not all certificates in a bundle will be DER encoded (but instead BER), you may set
      +  `ignoreAsn1DecodingErrors` to true in order to continue loading certificates even if some certificates in the bundle
-     +   are not DER encoded.
+     +  are not DER encoded.
      +
      +  This function does not expect nor detect certificate chains within the given bundle - it will load (and optionally validate)
      +  all certificates as individual, standalone certificates.
@@ -833,19 +800,4 @@ unittest
     ]);
     assert(selfSigned !is null);
     assert(selfSigned.extensions.getOrNull!(X509Extension.BasicConstraints).get.ca);
-}
-
-@("DEBUG")
-unittest
-{
-    import std.file : fileRead = read;
-    import juptune.core.util : resultAssert;
-    
-    X509CertificateStore store;
-
-    const pem = cast(const(char)[])fileRead("/etc/ssl/ca-bundle.pem");
-    store.loadBundleFromPem(pem, hasImplicitTrust: true, ignoreAsn1DecodingErrors: true).resultAssert;
-    
-    const cert = cast(const(char)[])fileRead("/home/bradley/Downloads/google-com.pem");
-    store.validateChainFromPem(cert, X509CertificateStore.SecurityPolicy()).resultAssert;
 }

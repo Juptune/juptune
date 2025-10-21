@@ -125,6 +125,35 @@ struct MemoryReader
     /// ditto
     alias enforcePeekBytes = enforceBytes!(false);
 
+    bool tryIntegral24(Endian endian, bool advanceCursor)(out scope uint value) @safe @nogc nothrow
+    {
+        const(ubyte)[] bytes;
+        const success = this.tryBytes!advanceCursor(3, bytes);
+        if(!success)
+            return false;
+
+        static if(endian == Endian.littleEndian)
+        {
+            value = (
+                (bytes[2] << 16) |
+                (bytes[1] << 8) |
+                bytes[0]
+            );
+        }
+        else
+        {
+            value = (
+                (bytes[0] << 16) |
+                (bytes[1] << 8) |
+                bytes[2]
+            );
+        }
+
+        return true;
+    }
+    alias readU24BE = tryIntegral24!(Endian.bigEndian, true);
+    alias readU24LE = tryIntegral24!(Endian.littleEndian, true);
+
     /++
      + Attempts to read an integral type from the buffer; automatically converting it from big/little endian
      + into the native endianess, and then optionally advances the cursor.
@@ -190,6 +219,19 @@ struct MemoryReader
     /// ditto
     alias readU64(Endian endian) = tryIntegral!(ulong, endian, true);
     /// ditto
+    alias readI16BE = tryIntegral!(short, Endian.bigEndian, true);
+    /// ditto
+    alias readU16BE = tryIntegral!(ushort, Endian.bigEndian, true);
+    /// ditto
+    alias readI32BE = tryIntegral!(int, Endian.bigEndian, true);
+    /// ditto
+    alias readU32BE = tryIntegral!(uint, Endian.bigEndian, true);
+    /// ditto
+    alias readI64BE = tryIntegral!(long, Endian.bigEndian, true);
+    /// ditto
+    alias readU64BE = tryIntegral!(ulong, Endian.bigEndian, true);
+
+    /// ditto
     alias peekI8 = tryIntegral!(byte, Endian.littleEndian, false);
     /// ditto
     alias peekU8 = tryIntegral!(ubyte, Endian.littleEndian, false);
@@ -251,6 +293,197 @@ struct MemoryReader
 
     /// Returns: The underlying buffer passed to the constructor.
     const(ubyte)[] buffer() const @safe @nogc nothrow pure => this._buffer;
+
+    /// Returns: The number of bytes left in the buffer, for the current cursor position.
+    size_t bytesLeft() const @safe @nogc nothrow pure
+    in(this._cursor <= this._buffer.length, "bug: cursor is somehow out of bounds?")
+    {
+        return this._buffer.length - this._cursor;
+    }
+
+    /// Returns: The current cursor position.
+    size_t cursor() const @safe @nogc nothrow pure => this._cursor;
+
+    /++
+     + Sets the cursor position.
+     +
+     + Params:
+     +  newCursor: The new cursor position.
+     + ++/
+    void cursor(size_t newCursor) @safe @nogc nothrow
+    { 
+        this._cursor = newCursor; 
+    }
+}
+
+struct MemoryWriter
+{
+    import std.traits : isIntegral;
+
+    private
+    {
+        ubyte[] _buffer;
+        size_t _cursor;
+    }
+
+    @disable this(this); // Prevent accidental copying - helps enforce byRef usage
+
+
+    this(ubyte[] buffer, size_t initialCursor = 0) @nogc @safe nothrow pure
+    {
+        this._buffer = buffer;
+        this._cursor = initialCursor;
+    }
+
+    /++
+     + Advances the cursor by the given number of bytes.
+     +
+     + Assertions:
+     +  This function will assert if the cursor would overflow.
+     +
+     + Params:
+     +  count = The number of bytes to advance the cursor by.
+     + ++/
+    void goForward(size_t count) @safe @nogc nothrow
+    in(count <= size_t.max - this._cursor, "bug: integer overflow")
+    {
+        this._cursor += count;
+    }
+
+    /++
+     + Moves the cursor back by the given number of bytes.
+     +
+     + Assertions:
+     +  This function will assert if the cursor would underflow.
+     +
+     + Params:
+     +  count = The number of bytes to move the cursor back by.
+     + ++/
+    void goBack(size_t count) @safe @nogc nothrow
+    in(count <= this._cursor, "bug: integer underflow")
+    {
+        this._cursor -= count;
+    }
+
+    bool tryBytes(const(ubyte)[] bytes) @safe @nogc nothrow
+    in(bytes.length > 0, "bytes cannot be empty")
+    {
+        if(this.bytesLeft < bytes.length)
+            return false;
+
+        this._buffer[this._cursor..this._cursor+bytes.length] = bytes;
+        this._cursor += bytes.length;
+        return true;
+    }
+
+    const(ubyte)[] putBytesPartial(const(ubyte)[] bytes) @safe @nogc nothrow
+    {
+        import std.algorithm : min;
+        const toWrite = min(bytes.length, this.bytesLeft);
+        if(toWrite != 0)
+        {
+            this._buffer[this._cursor..this._cursor+toWrite] = bytes[0..toWrite];
+            this._cursor += toWrite;
+        }
+
+        return toWrite < bytes.length ? bytes[toWrite..$] : null;
+    }
+
+    bool putU24(Endian endian)(uint value) @safe @nogc nothrow
+    {
+        import std.bitmanip : nativeToBigEndian, nativeToLittleEndian;
+
+        if(this.bytesLeft < 3)
+            return false;
+
+        static if(endian == Endian.bigEndian)
+        {
+            const bytes = nativeToBigEndian(value);
+            const slice = bytes[1..$];
+            assert(bytes[0] == 0, "bug: value is larger than 24-bits");
+        }
+        else
+        {
+            const bytes = nativeToLittleEndian(value);
+            const slice = bytes[0..3];
+            assert(bytes[3] == 0, "bug: value is larger than 24-bits");
+        }
+
+        this._buffer[this._cursor..this._cursor+slice.length] = slice;
+        this._cursor += slice.length;
+        return true;
+    }
+    alias putU24BE = putU24!(Endian.bigEndian);
+    alias putU24LE = putU24!(Endian.littleEndian);
+
+    /++
+     + Attempts to write an integral type into the buffer; automatically converting it from big/little endian
+     + into the native endianess, and then advances the cursor.
+     +
+     + Notes:
+     +  If the given `IntT` is only a byte long, then the endian parameter is ignored.
+     +
+     +  `IntT` can be anything supported by `std.traits.isIntegral`, this includes numeric enums.
+     +
+     +  Generally, you should use the `write*` aliases instead of this function directly.
+     +
+     +  If you're in @gc code, then you can also use the `enforce*` functions instead.
+     +
+     +  If there's not enough space in the buffer, then the buffer (and cursor) are left unmodified.
+     +
+     + Params:
+     +  IntT = The integral type to write.
+     +  endian = The endianess of the integral type to store within the buffer.
+     +
+     + Returns:
+     +  `true` if there's enough space to write the value, `false` otherwise.
+     + ++/
+    bool tryIntegral(IntT, Endian endian)(IntT value) @safe @nogc nothrow
+    if(isIntegral!IntT)
+    {
+        import std.bitmanip : nativeToBigEndian, nativeToLittleEndian;
+
+        static if(IntT.sizeof == 1)
+        {
+            if(this.bytesLeft == 0)
+                return false;
+            this._buffer[this._cursor++] = cast(ubyte)value;
+            return true;
+        }
+        else
+        {
+            if(this.bytesLeft < IntT.sizeof)
+                return false;
+
+            static if(endian == Endian.bigEndian)
+                const bytes = nativeToBigEndian(value);
+            else
+                const bytes = nativeToLittleEndian(value);
+            this._buffer[this._cursor..this._cursor+bytes.length] = bytes;
+            this._cursor += bytes.length;
+            return true;
+        }
+    }
+
+    alias putU8 = tryIntegral!(ubyte, Endian.littleEndian);
+    alias putI8 = tryIntegral!(byte, Endian.littleEndian);
+    alias putU16LE = tryIntegral!(ushort, Endian.littleEndian);
+    alias putU16BE = tryIntegral!(ushort, Endian.bigEndian);
+    alias putU32LE = tryIntegral!(uint, Endian.littleEndian);
+    alias putU32BE = tryIntegral!(uint, Endian.bigEndian);
+    alias putU64LE = tryIntegral!(ulong, Endian.littleEndian);
+    alias putU64BE = tryIntegral!(ulong, Endian.bigEndian);
+    alias putI16LE = tryIntegral!(short, Endian.littleEndian);
+    alias putI16BE = tryIntegral!(short, Endian.bigEndian);
+    alias putI32LE = tryIntegral!(int, Endian.littleEndian);
+    alias putI32BE = tryIntegral!(int, Endian.bigEndian);
+    alias putI64LE = tryIntegral!(long, Endian.littleEndian);
+    alias putI64BE = tryIntegral!(long, Endian.bigEndian);
+
+    /// Returns: The underlying buffer passed to the constructor.
+    ubyte[] buffer() @safe @nogc nothrow pure => this._buffer;
+
+    ubyte[] usedBuffer() @safe @nogc nothrow => this._buffer[0..this._cursor];
 
     /// Returns: The number of bytes left in the buffer, for the current cursor position.
     size_t bytesLeft() const @safe @nogc nothrow pure
