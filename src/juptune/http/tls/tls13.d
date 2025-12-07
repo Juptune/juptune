@@ -259,6 +259,10 @@ struct TlsSocket(UnderlyingSocketT)
     Result send(scope const(void)[] buffer, scope out size_t bytesSent, Duration timeout = Duration.zero) @nogc nothrow
     in(this._state.mustBeIn(State.applicationData))
     {
+        import std;
+        debug stderr.writeln(cast(string)buffer);
+        debug stderr.flush();
+
         if(timeout == Duration.zero && this._config.alwaysTimeout)
             timeout = this._config.writeTimeout;
 
@@ -310,6 +314,12 @@ struct TlsSocket(UnderlyingSocketT)
         }
 
         return Result.noError;
+    }
+
+    Result put(const(void)[] buffer, Duration timeout = Duration.zero) @nogc nothrow
+    {
+        size_t _;
+        return this.send(buffer, _, timeout);
     }
 
     /++ Helpers ++/
@@ -702,53 +712,32 @@ debug unittest
     import juptune.event.io : TcpSocket;
     import juptune.core.util : resultAssert;
     import juptune.event;
-    import juptune.data.x509;
 
     import std.exception;
     import std.file : readText;
 
     auto loop = EventLoop(EventLoopConfig());
     loop.addGCThread((){
-        TcpSocket client;
-        client.open().resultAssert;
+        import juptune.http;
 
-        bool _;
-        client.connect("142.250.129.138", _, 443).resultAssert;
+        IpAddress ip;
+        IpAddress.parse(ip, "142.250.129.138", 443).resultAssert;
 
-        X509CertificateStore certStore;
-        certStore.loadBundleFromPem(
-            readText("/etc/ssl/ca-bundle.pem").assumeWontThrow,
-            ignoreAsn1DecodingErrors: true,
-            hasImplicitTrust: true
-        ).resultAssert;
+        auto client = HttpClient(HttpClientConfig());
+        client.connectTls(ip, "www.google.com").resultAssert;
 
-        auto config = TlsConfig();
-        auto tls = TlsTcpSocket(&client, new ubyte[1024 * 17], new ubyte[1024 * 17], new ubyte[1024 * 32], config);
-
-        TlsClientHelloOutSettings clientHello;
-        clientHello.serverNameIndicator = "www.google.com";
-
-        TlsServerHelloInSettings serverHello;
-        serverHello.certStore = &certStore;
-
-        tls.handshakeAsClient(clientHello, serverHello).resultAssert;
+        HttpRequest req;
+        req.withMethod("GET");
+        req.withPath("/");
+        req.setHeader("User-Agent", "test/1.0.0");
+        req.setHeader("Accept", "*/*");
         
-        const req = "GET / HTTP/1.1\r\nHost: www.google.com\r\nUser-Agent: test/1.0.0\r\nAccept: */*\r\n\r\n";
-        size_t bytes;
-        tls.send(req, bytes).resultAssert;
-        assert(bytes == req.length);
+        HttpResponse resp;
+        client.request(req, resp).resultAssert;
 
-        ubyte[8000] buffer;
-        for(int i = 0; i < 100; i++)
-        {
-            void[] slice;
-            tls.recieve(buffer, slice).resultAssert;
-            import std;
-            debug stderr.writeln(cast(string)slice);
-            debug stderr.flush();
-        }
-        assert(false);
+        import std.file : write;
+        write("test.html", cast(string)resp.body.slice);
     });
     loop.join();
-    // assert(false);
 }
+

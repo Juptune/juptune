@@ -768,6 +768,41 @@ struct X509CertificateStore
     }
 }
 
+private __gshared X509CertificateStore g_platformDefaultStore;
+shared static this()
+{
+    import std.file : readText;
+    import juptune.core.util : resultAssert;
+
+    version(linux)
+    {
+        const pem = readText("/etc/ssl/ca-bundle.pem");
+    }
+    else static assert(false, "TODO: add platform");
+
+    g_platformDefaultStore.loadBundleFromPem(pem, ignoreAsn1DecodingErrors: true, hasImplicitTrust: true).resultAssert;
+}
+
+/++
+ + Retrieves the default certificate store for the host platform.
+ +
+ + Notes:
+ +  This store is actually loaded during application startup, so this function is very cheap to call.
+ +
+ +  While the return value isn't marked as const (since D's const is a massive PITA to get correct), please
+ +  note that **the return value must never have new certificates loaded into it** as this instance is shared
+ +  across all threads... and well, X509CertificateStore currently isn't thread-safe.
+ +
+ +  _Only_ stick to using this for the validateChain functionality.
+ +
+ + Returns:
+ +  A pointer to the global X509CertificateStore instance, with the current platform's default certificates already loaded in.
+ + ++/
+X509CertificateStore* x509GetPlatformDefaultStore() @nogc nothrow
+{
+    return &g_platformDefaultStore;
+}
+
 @("store.d - General megatest")
 unittest
 {

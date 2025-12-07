@@ -1,5 +1,6 @@
 module juptune.http.client;
 
+import juptune.core.ds   : String2;
 import juptune.core.util : Result;
 
 /++
@@ -14,6 +15,9 @@ enum HttpClientVersion
 
     /// HTTP/1.1
     http1,
+
+    /// HTTP/1.1 over TLS
+    https1
 }
 
 /++
@@ -21,11 +25,15 @@ enum HttpClientVersion
  + ++/
 struct HttpClientConfig
 {
-    import core.time       : seconds;
-    import juptune.http.v1 : Http1Config;
+    import core.time        : seconds;
+    import juptune.http.v1  : Http1Config;
+    import juptune.http.tls : TlsConfig;
 
     /// Configuration for HTTP/1.1 - this defaults to a 30 second timeout for both reading and writing.
     Http1Config http1 = Http1Config().withReadTimeout(30.seconds).withWriteTimeout(30.seconds);
+
+    /// Configuration for TLS sockets - this defaults to a 30 second timeout for both reading and writing.
+    TlsConfig tls = TlsConfig().withWriteTimeout(30.seconds).withReadTimeout(30.seconds).withMaxFragmentReadAttempts(2);
 
     /// Which version of HTTP to use when connecting to a server.
     HttpClientVersion httpVersion = HttpClientVersion.automatic;
@@ -35,6 +43,7 @@ struct HttpClientConfig
 
     @safe @nogc nothrow pure:
 
+    HttpClientConfig withTlsConfig(TlsConfig v) return { this.tls = v; return this; }
     HttpClientConfig withHttp1Config(Http1Config v) return { this.http1 = v; return this; }
     HttpClientConfig withHttpVersion(HttpClientVersion v) return { this.httpVersion = v; return this; }
     HttpClientConfig withReadBufferSize(size_t v) return { this.readBufferSize = v; return this; }
@@ -140,6 +149,7 @@ struct HttpClient
     import juptune.event.io     : TcpSocket, IpAddress;
     import juptune.http.common  : HttpRequest, HttpResponse;
     import juptune.http.uri     : Uri;
+    import juptune.http.tls     : TlsTcpSocket;
 
     /// A function provided by `HttpClient` which can be used to push data into the request body.
     alias PutBodyFunc = Result delegate(scope const ubyte[] bodyChunk) @nogc nothrow;
@@ -176,15 +186,22 @@ struct HttpClient
     private
     {
         // Config + Impls
-        HttpClientConfig _config;
-        Http1ClientImpl  _http1;
+        HttpClientConfig                _config;
+        Http1ClientImpl!TcpSocket       _http1;
+        Http1ClientImpl!TlsTcpSocket    _https1;
         
         // Static state
-        TcpSocket   _socket;
-        Array!ubyte _readBufferStorage;
-        Array!ubyte _writeBufferStorage;
-        ubyte[]     _readBuffer;
-        ubyte[]     _writeBuffer;
+        TcpSocket       _socket;
+        Array!ubyte     _readBufferStorage;
+        Array!ubyte     _writeBufferStorage;
+        ubyte[]         _readBuffer;
+        ubyte[]         _writeBuffer;
+
+        // Static state (TLS)
+        TlsTcpSocket    _tlsSocket;
+        Array!ubyte     _tlsWriteStorage;
+        Array!ubyte     _tlsReadStorage;
+        Array!ubyte     _tlsStagingStorage;
 
         // Dynamic state
         bool                _isConnected;
@@ -224,7 +241,7 @@ struct HttpClient
 
         client = HttpClient(config);
         move(socket, client._socket);
-        client._http1 = Http1ClientImpl(config, &client._socket, client._writeBuffer, client._readBuffer);
+        client._http1 = Http1ClientImpl!TcpSocket(config, &client._socket, client._writeBuffer, client._readBuffer);
         client._selectedVersion = HttpClientVersion.http1;
         client._isConnected = true;
     }
@@ -248,27 +265,7 @@ struct HttpClient
     Result connect(IpAddress ip, scope const char[] host = null) @nogc nothrow
     in(!this._isConnected, "This client is already connected")
     {
-        Array!char hostName;
-
-        if(host.length == 0)
-        {
-            hostName.reserve(64);
-            ip.toString(hostName);
-        }
-        else
-        {
-            hostName.reserve(host.length + 16);
-            hostName.put(host);
-
-            if(ip.port != 80)
-            {
-                import juptune.core.util : IntToCharBuffer, toBase10;
-                IntToCharBuffer port;
-                hostName.put(":");
-                hostName.put(toBase10(ip.port, port));
-            }
-        }
-        this._hostName = String2.fromDestroyingArray(hostName);
+        this._hostName = setIpHostname(ip, host);
 
         if(!this._socket.isOpen)
         {
@@ -281,9 +278,76 @@ struct HttpClient
         if(result.isError)
             return result;
         
-        this._http1 = Http1ClientImpl(this._config, &this._socket, this._writeBuffer, this._readBuffer);
+        this._http1 = Http1ClientImpl!TcpSocket(this._config, &this._socket, this._writeBuffer, this._readBuffer);
         this._selectedVersion = HttpClientVersion.http1;
         this._isConnected = true;
+        return Result.noError;
+    }
+
+    /++
+     + Connects this client to the given IP address over TLS.
+     +
+     + Assertions:
+     +  The client must not already be connected.
+     +
+     +  `host` must not be null or empty.
+     +
+     + Notes:
+     +  Currently, most TLS settings (buffer size; certificate store) are handled automatically.
+     +
+     + Params:
+     +  ip   = The IP address to connect to.
+     +  host = The hostname to use for the `Host` header. If this is null, then the IP address will be used.
+     +
+     + Throws:
+     +  Anything that `TlsTcpSocket.connect` can throw.
+     +
+     + Returns:
+     +  A `Result` indicating whether the connection was successful or not.
+     + ++/
+    Result connectTls(IpAddress ip, scope const char[] host) @nogc nothrow
+    in(!this._isConnected, "This client is already connected")
+    in(host.length > 0, "Host must not be null")
+    {
+        import juptune.data.x509 : x509GetPlatformDefaultStore;
+        import juptune.http.tls  : TlsClientHelloOutSettings, TlsServerHelloInSettings;
+
+        this._hostName = setIpHostname(ip, host);
+
+        if(!this._socket.isOpen)
+        {
+            auto result = this._socket.open();
+            if(result.isError)
+                return result;
+        }
+
+        auto result = this._socket.connect(ip);
+        if(result.isError)
+            return result;
+
+        this._tlsWriteStorage.length    = 1024 * 8;
+        this._tlsReadStorage.length     = 1024 * 17;
+        this._tlsStagingStorage.length  = 1024 * 32;
+        
+        this._tlsSocket = TlsTcpSocket(&this._socket, this._tlsWriteStorage[], this._tlsReadStorage[], this._tlsStagingStorage[], this._config.tls); // @suppress(dscanner.style.long_line)
+        this._https1 = Http1ClientImpl!TlsTcpSocket(this._config, &this._tlsSocket, this._writeBuffer, this._readBuffer); // @suppress(dscanner.style.long_line)
+        this._isConnected = true;
+        this._selectedVersion = HttpClientVersion.https1;
+        
+        TlsClientHelloOutSettings clientHello;
+        clientHello.serverNameIndicator = host;
+
+        TlsServerHelloInSettings serverHello;
+        serverHello.certStore = x509GetPlatformDefaultStore();
+
+        result = this._tlsSocket.handshakeAsClient(clientHello, serverHello);
+        if(result.isError)
+        {
+            cast(void)this.close();
+            return result;
+        }
+        this._tlsStagingStorage.length = 0; // The staging buffer is only needed during a handshake.
+        
         return Result.noError;
     }
 
@@ -309,6 +373,10 @@ struct HttpClient
         this._selectedVersion = HttpClientVersion.FAILSAFE;
         this._writeBuffer[] = 0;
         this._readBuffer[] = 0;
+        this._tlsSocket = TlsTcpSocket.init;
+        this._tlsWriteStorage.length = 0;
+        this._tlsReadStorage.length = 0;
+        this._tlsStagingStorage.length = 0;
 
         if(closeResult.isError)
             return closeResult;
@@ -488,6 +556,8 @@ struct HttpClient
         {
             case http1:
                 return mixin("this._http1." ~ func ~ "(args)");
+            case https1:
+                return mixin("this._https1." ~ func ~ "(args)");
 
             case automatic:
             case FAILSAFE:
@@ -496,26 +566,53 @@ struct HttpClient
     }
 }
 
-private struct Http1ClientImpl
+private String2 setIpHostname(IpAddress ip, scope const(char)[] host = null) @nogc nothrow
 {
-    import juptune.core.ds      : String2;
+    import juptune.core.ds : Array;
+
+    Array!char hostName;
+
+    if(host.length == 0)
+    {
+        hostName.reserve(64);
+        ip.toString(hostName);
+    }
+    else
+    {
+        hostName.reserve(host.length + 16);
+        hostName.put(host);
+
+        if(ip.port != 80 && ip.port != 443)
+        {
+            import juptune.core.util : IntToCharBuffer, toBase10;
+            IntToCharBuffer port;
+            hostName.put(":");
+            hostName.put(toBase10(ip.port, port));
+        }
+    }
+
+    return String2.fromDestroyingArray(hostName);
+}
+
+private struct Http1ClientImpl(SocketT)
+{
     import juptune.event.io     : TcpSocket;
     import juptune.http.common  : HttpRequest, HttpResponse;
     
     import juptune.http.v1 : 
         Http1Version, Http1MessageSummary, Http1ResponseLine, Http1Header, 
-        Http1BodyChunk, Http1ReadResponseConfig, Http1Writer, Http1Reader;
+        Http1BodyChunk, Http1ReadResponseConfig, Http1WriterBase, Http1ReaderBase;
 
-    Http1Writer writer;
-    Http1Reader reader;
+    Http1WriterBase!SocketT writer;
+    Http1ReaderBase!SocketT reader;
     
     nothrow:
 
-    this(HttpClientConfig config, TcpSocket* socket, ubyte[] writeBuffer, ubyte[] readBuffer) @nogc
+    this(HttpClientConfig config, SocketT* socket, ubyte[] writeBuffer, ubyte[] readBuffer) @nogc
     in(socket !is null, "socket is null")
     {
-        this.writer = Http1Writer(socket, writeBuffer, config.http1);
-        this.reader = Http1Reader(socket, readBuffer, config.http1);
+        this.writer = typeof(writer)(socket, writeBuffer, config.http1);
+        this.reader = typeof(reader)(socket, readBuffer, config.http1);
     }
 
     Result close() @nogc => Result.noError;
@@ -526,14 +623,14 @@ private struct Http1ClientImpl
         scope ref const String2 defaultHost,
         scope out bool closeConnection,
     ) @nogc
-    in(writer != Http1Writer.init, "Http1Writer is not initialized")
-    in(reader != Http1Reader.init, "Http1Reader is not initialized")
+    in(writer != typeof(writer).init, "Http1Writer is not initialized")
+    in(reader != typeof(reader).init, "Http1Reader is not initialized")
     {
         Http1ReadResponseConfig readConfig;
         if(request.method == "HEAD")
             readConfig = readConfig.withIsBodyless(true);
 
-        auto result = this.sendHead(request, defaultHost);
+        auto result = this.sendHead(request, defaultHost, assumeHasBody: false);
         if(result.isError)
             return result;
 
@@ -564,14 +661,14 @@ private struct Http1ClientImpl
         scope ref const String2 defaultHost,
         scope out bool closeConnection,
     )
-    in(writer != Http1Writer.init, "Http1Writer is not initialized")
-    in(reader != Http1Reader.init, "Http1Reader is not initialized")
+    in(writer != typeof(writer).init, "Http1Writer is not initialized")
+    in(reader != typeof(reader).init, "Http1Reader is not initialized")
     {
         Http1ReadResponseConfig readConfig;
         if(request.method == "HEAD")
             readConfig = readConfig.withIsBodyless(true);
 
-        auto result = this.sendHead(request, defaultHost);
+        auto result = this.sendHead(request, defaultHost, assumeHasBody: true);
         if(result.isError)
             return result;
 
@@ -596,7 +693,8 @@ private struct Http1ClientImpl
 
     Result sendHead(
         scope ref const HttpRequest request,
-        scope ref const String2 defaultHost
+        scope ref const String2 defaultHost,
+        bool assumeHasBody,
     ) @nogc
     {
         auto result = this.writer.putRequestLine(
@@ -624,7 +722,7 @@ private struct Http1ClientImpl
                 hasHostHeader = true;
         }
 
-        if(!hasEncodingHeader)
+        if(!hasEncodingHeader && (request.body.length != 0 || assumeHasBody))
         {
             result = this.writer.putHeader("Transfer-Encoding", "chunked");
             if(result.isError)
@@ -650,11 +748,14 @@ private struct Http1ClientImpl
         scope out bool closeConnection,
     ) @nogc
     {
-        auto result = this.writer.putBody(request.body[]);
-        if(result.isError)
-            return result;
+        if(request.body.length != 0)
+        {
+            auto result = this.writer.putBody(request.body[]);
+            if(result.isError)
+                return result;
+        }
 
-        result = this.writer.finishBody();
+        auto result = this.writer.finishBody();
         if(result.isError)
             return result;
 
@@ -845,7 +946,7 @@ import juptune.http.v1     : Http1Writer, Http1Reader, Http1Config;
 
 HttpRequest collectRequest(scope ref Http1Writer writer, scope ref Http1Reader reader) @nogc nothrow
 {
-    import juptune.core.ds : String2, Array;
+    import juptune.core.ds : Array;
     import juptune.http.v1;
 
     HttpRequest request;
