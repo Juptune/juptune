@@ -500,7 +500,7 @@ in(state.mustBeIn(State.readEncryptedServerHello))
                 isFirst = false;
 
                 auto derMem = MemoryReader(derBytes);
-                
+
                 Asn1ComponentHeader header;
                 result = asn1DecodeComponentHeader!(Asn1Ruleset.der)(derMem, header);
                 if(result.isError)
@@ -609,7 +609,6 @@ in(state.mustBeIn(State.readEncryptedServerHello))
 {
     import std.digest.hmac : HMAC;
     import std.digest.sha : SHA256;
-    import juptune.crypto.ecdsa : EcdsaGroupName, EcdsaPublicKey, EcdsaSignatureAlgorithm;
 
     auto transcriptCopy = encryption.transcript;
     const transcriptHash = transcriptCopy.finish();
@@ -628,5 +627,44 @@ in(state.mustBeIn(State.readEncryptedServerHello))
     if(expectedHash != gotHash)
         return Result.make(TlsError.alertDecryptError, "HMAC mismatch when processing ServerHello's Finished");
 
+    state.mustTransition!(State.readEncryptedServerHello, State.writeClientChangeCipherSpec);
     return Result.noError;
+}
+
+/++ Outgoing Finished ++/
+
+static immutable ubyte[] CHANGE_CIPHER_SPEC = [0x14, 0x03, 0x03, 0x00, 0x01, 0x01];
+
+Result writeClientFinished(
+    scope ref TlsStateMachine state,
+    scope ref EncryptionContext encryption,
+    scope Result delegate(TlsPlaintext.ContentType type, scope const(ubyte)[] bytes) @nogc nothrow sendAsCiphertextRecords, // @suppress(dscanner.style.long_line)
+) @nogc nothrow
+in(state.mustBeIn(State.writeClientChangeCipherSpec))
+{
+    import std.digest.hmac : HMAC;
+    import std.digest.sha : SHA256;
+
+    auto transcriptCopy = encryption.transcript;
+    const transcriptHash = transcriptCopy.finish();
+
+    ubyte[32] finishedKey;
+    auto result = encryption.hkdfExpandLabel(finishedKey, "finished", null, encryption.clientTrafficSecret_sha256); // @suppress(dscanner.style.long_line)
+    if(result.isError)
+        return result;
+
+    auto h = HMAC!SHA256(finishedKey);
+    h.put(transcriptHash);
+    const gotHash = h.finish();
+
+    ubyte[TlsHandshake.HEADER_SIZE + typeof(gotHash).length] payload;
+    payload[$-gotHash.length..$] = gotHash;
+    payload[0] = cast(ubyte)TlsHandshake.Type.finished;
+    
+    auto lengthWriter = MemoryWriter(payload[1..4]);
+    const success = lengthWriter.putU24BE(gotHash.length);
+    assert(success);
+
+    state.mustTransition!(State.writeClientChangeCipherSpec, State.applicationData);
+    return sendAsCiphertextRecords(TlsPlaintext.ContentType.handshake, payload);
 }

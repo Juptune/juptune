@@ -193,20 +193,20 @@ struct TlsHandshake // It's a bit too annoying to use the auto encoder/decoder f
     }
 
     static immutable SUPPORTED_SIGNATURE_SCHEMES = [
-        SignatureScheme.rsa_pkcs1_sha256,
-        SignatureScheme.rsa_pkcs1_sha384,
-        SignatureScheme.rsa_pkcs1_sha512,
+        // SignatureScheme.rsa_pkcs1_sha256,
+        // SignatureScheme.rsa_pkcs1_sha384,
+        // SignatureScheme.rsa_pkcs1_sha512,
         SignatureScheme.ecdsa_secp256r1_sha256,
-        SignatureScheme.ecdsa_secp384r1_sha384,
-        SignatureScheme.ecdsa_secp521r1_sha512,
-        SignatureScheme.ed448,
-        SignatureScheme.ed25519,
-        SignatureScheme.rsa_pss_pss_sha256,
-        SignatureScheme.rsa_pss_pss_sha384,
-        SignatureScheme.rsa_pss_pss_sha512,
-        SignatureScheme.rsa_pss_rsae_sha256,
-        SignatureScheme.rsa_pss_rsae_sha384,
-        SignatureScheme.rsa_pss_rsae_sha512,
+        // SignatureScheme.ecdsa_secp384r1_sha384,
+        // SignatureScheme.ecdsa_secp521r1_sha512,
+        // SignatureScheme.ed448,
+        // SignatureScheme.ed25519,
+        // SignatureScheme.rsa_pss_pss_sha256,
+        // SignatureScheme.rsa_pss_pss_sha384,
+        // SignatureScheme.rsa_pss_pss_sha512,
+        // SignatureScheme.rsa_pss_rsae_sha256,
+        // SignatureScheme.rsa_pss_rsae_sha384,
+        // SignatureScheme.rsa_pss_rsae_sha512,
     ];
 
     static union Message // SumType is heavy, and since TlsHandshake will pretty much never be used by user code, I don't care about it being safer to use.

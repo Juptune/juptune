@@ -6,6 +6,8 @@
  */
 module juptune.http.tls.tls13;
 
+import core.time : Duration;
+
 import std.typecons : Nullable;
 
 import juptune.core.util : Result;
@@ -39,6 +41,8 @@ struct TlsSocket(UnderlyingSocketT)
         MemoryReader _recordReader;
         MemoryWriter _recordWriter;
         MemoryWriter _stagingBuffer;
+
+        size_t _leftToRead;
     }
 
     this(
@@ -75,7 +79,8 @@ struct TlsSocket(UnderlyingSocketT)
             handleEncryptedExtensions,
             handleServerHelloCertificate,
             handleServerHelloCertificateVerify,
-            handleServerHelloFinished
+            handleServerHelloFinished,
+            writeClientFinished
         ;
 
         // Send ClientHello (and add it into the transcript)
@@ -178,6 +183,9 @@ struct TlsSocket(UnderlyingSocketT)
                     messageMask |= typeIndex;
                 }
 
+                if((typeIndex & enumIndexOf(TlsHandshake.messageType.finished)) != 0)
+                    return Result.make(TlsError.alertUnexpectedMessage, "no messages after Finished should appear");
+
                 switch(message.messageType) with(TlsHandshake.Type)
                 {
                     case encryptedExtensions:
@@ -218,7 +226,17 @@ struct TlsSocket(UnderlyingSocketT)
         if(result.isError)
             return result;
 
-        // Finalise encryption state
+        // Finish the client side of the handshake
+
+        result = writeClientFinished(
+            this._state, 
+            this._encryptContext, 
+            &this.sendAsCiphertextRecords!true
+        );
+        if(result.isError)
+            return result;
+
+        // Finalise encryption state, then we're ready to write!
         
         result = this._encryptContext.deriveApplicationSecrets();
         if(result.isError)
@@ -227,6 +245,69 @@ struct TlsSocket(UnderlyingSocketT)
         result = this._encryptContext.deriveTrafficKeys();
         if(result.isError)
             return result;
+
+        this._stagingBuffer = MemoryWriter.init; // No longer needed ^_^
+        return Result.noError;
+    }
+
+    /++ Driver interface ++/
+
+    bool isOpen() @nogc nothrow => this._socket.isOpen;
+
+    Result close() @nogc nothrow => this._socket.close();
+
+    Result send(scope const(void)[] buffer, scope out size_t bytesSent, Duration timeout = Duration.zero) @nogc nothrow
+    in(this._state.mustBeIn(State.applicationData))
+    {
+        if(timeout == Duration.zero && this._config.alwaysTimeout)
+            timeout = this._config.writeTimeout;
+
+        bytesSent = buffer.length;
+        return this.sendAsCiphertextRecords!true(TlsPlaintext.ContentType.applicationData, cast(const(ubyte)[])buffer);
+    }
+
+    Result recieve(void[] buffer, out void[] sliceWithData, Duration timeout = Duration.zero) @nogc nothrow
+    in(this._state.mustBeIn(State.applicationData))
+    {
+        import std.algorithm : min;
+
+        if(this._leftToRead > 0)
+        {            
+            const length = min(buffer.length, this._leftToRead);
+            buffer[0..length] = cast(void[])this._recordReader.buffer[this._recordReader.cursor..this._recordReader.cursor+length];
+            this._recordReader.goForward(length);
+            sliceWithData = buffer[0..length];
+
+            this._leftToRead -= length;
+            return Result.noError;
+        }
+
+        if(timeout == Duration.zero && this._config.alwaysTimeout)
+            timeout = this._config.readTimeout;
+
+        TlsCiphertext.InnerPlaintext plaintext;
+        MemoryReader reader;
+        auto result = this.fetchAndDecryptSingleCiphertextRecordIntoReadBuffer(plaintext, reader, allowCompaction: true); // @suppress(dscanner.style.long_line)
+        if(result.isError)
+            return result;
+        if(plaintext.type != TlsPlaintext.ContentType.applicationData)
+            return Result.make(TlsError.none, "TODOTODOTODO: Need to handle alerts");
+
+        const length = min(buffer.length, reader.bytesLeft);
+        if(length != reader.bytesLeft)
+        {
+            buffer[0..$] = cast(void[])reader.buffer[reader.cursor..reader.cursor+length];
+            reader.goForward(length);
+            this._leftToRead = reader.bytesLeft;
+            this._recordReader = MemoryReader(reader.buffer, reader.cursor); // It's fine, once it's empty it'll get set correctly by fetchIntoReadBuffer.
+
+            sliceWithData = buffer[0..$];
+        }
+        else
+        {
+            buffer[0..length] = cast(void[])reader.buffer[0..$];
+            sliceWithData = buffer[0..length];
+        }
 
         return Result.noError;
     }
@@ -306,6 +387,60 @@ struct TlsSocket(UnderlyingSocketT)
                 return result.wrapError("when sending plaintext records:");
 
             bytes = bytes[length..$];
+        }
+
+        return Result.noError;
+    }
+
+    private Result sendAsCiphertextRecords(bool asClient)(TlsPlaintext.ContentType type, scope const(ubyte)[] bytes) @nogc nothrow
+    {
+        import std.algorithm : min;
+        import juptune.crypto.libsodium : crypto_aead_chacha20poly1305_ietf_abytes;
+
+        const startCursor = this._recordWriter.cursor;
+        const overhead = TlsCiphertext.HEADER_SIZE + crypto_aead_chacha20poly1305_ietf_abytes() + 1; // + 1 for the content type byte we have to append.
+        const bytesPerRecord = this._recordReader.bytesLeft - overhead;
+
+        if(overhead >= this._recordWriter.bytesLeft)
+            return Result.make(TlsError.dataExceedsBuffer, "ran out of buffer space when fragmenting data into TlsCiphertext records"); // @suppress(dscanner.style.long_line)
+
+        while(bytes.length > 0)
+        {
+            const toSend = min(bytesPerRecord, bytes.length);
+
+            auto success = this._recordWriter.tryBytes(bytes[0..toSend]);
+            assert(success, "bug: this shouldn't happen?");
+            success = this._recordWriter.putU8(cast(ubyte)type);
+            assert(success, "bug: this shouldn't happen?");
+            bytes = bytes[toSend..$];
+
+            const plaintext = this._recordWriter.buffer[startCursor..this._recordWriter.cursor];
+            auto inPlaceWriter = MemoryWriter(this._recordWriter.buffer[startCursor..$]);
+
+            auto result = this._encryptContext.encryptRecord(
+                inPlaceWriter,
+                plaintext,
+                (asClient) ? this._encryptContext.clientIv_sha256 : this._encryptContext.serverIv_sha256,
+                (asClient) ? this._encryptContext.clientKey_sha256 : this._encryptContext.serverKey_sha256,
+                writerIsInPlace: true
+            );
+            if(result.isError)
+                return result;
+
+            const ciphertext = inPlaceWriter.usedBuffer;
+
+            ubyte[TlsCiphertext.HEADER_SIZE] header;
+            header[0] = cast(ubyte)TlsPlaintext.ContentType.applicationData;
+            header[1] = 0x03;
+            header[2] = 0x03;
+            
+            auto lengthWriter = MemoryWriter(header[3..$]);
+            success = lengthWriter.putU16BE(cast(ushort)ciphertext.length);
+            assert(success);
+            
+            result = this._socket.putScattered([header[], ciphertext], this._config.writeTimeout);
+            if(result.isError)
+                return result.wrapError("when sending ciphertext records:");
         }
 
         return Result.noError;
@@ -447,7 +582,7 @@ struct TlsSocket(UnderlyingSocketT)
             {
                 success = this._stagingBuffer.tryBytes(fragment);
                 if(!success)
-                    return Result.make(TlsError.dataExceedsBuffer, "not enough space in staging buffer to store record fragment"); // @suppress(dscanner.style.
+                    return Result.make(TlsError.dataExceedsBuffer, "not enough space in staging buffer to store record fragment"); // @suppress(dscanner.style.long_line)
             }
             
             const bytesInStaging = this._stagingBuffer.cursor - stagingCursorStart;
@@ -597,6 +732,22 @@ debug unittest
         serverHello.certStore = &certStore;
 
         tls.handshakeAsClient(clientHello, serverHello).resultAssert;
+        
+        const req = "GET / HTTP/1.1\r\nHost: www.google.com\r\nUser-Agent: test/1.0.0\r\nAccept: */*\r\n\r\n";
+        size_t bytes;
+        tls.send(req, bytes).resultAssert;
+        assert(bytes == req.length);
+
+        ubyte[8000] buffer;
+        for(int i = 0; i < 100; i++)
+        {
+            void[] slice;
+            tls.recieve(buffer, slice).resultAssert;
+            import std;
+            debug stderr.writeln(cast(string)slice);
+            debug stderr.flush();
+        }
+        assert(false);
     });
     loop.join();
     // assert(false);

@@ -44,6 +44,8 @@ struct TlsConfig
     Duration writeTimeout = Duration.zero; /// The default timeout for writing data
     Duration readTimeout = Duration.zero; /// The default timeout for reading data
 
+    bool alwaysTimeout = true; /// Whether the generic driver interface should _always_ timeout, even when Duration.zero is passed into it.
+
     ubyte maxFragmentReadAttempts = ubyte.max; /// How many attempts are made to fully read in a record's fragment data before an error is thrown
 
     @safe @nogc nothrow pure:
@@ -51,6 +53,7 @@ struct TlsConfig
     TlsConfig withReadTimeout(Duration v) { this.readTimeout = v; return this; }
     TlsConfig withWriteTimeout(Duration v) { this.writeTimeout = v; return this; }
     TlsConfig withMaxFragmentReadAttempts(ubyte v) { this.maxFragmentReadAttempts = v; return this; }
+    TlsConfig withAlwaysTimeout(bool v) { this.alwaysTimeout = v; return this; }
 }
 
 package:
@@ -61,6 +64,8 @@ alias TlsStateMachine = Machine.Static!([
     Machine.Transition(State.startClientHello,              State.writeClientHelloExtensions),
     Machine.Transition(State.writeClientHelloExtensions,    State.readServerHello),
     Machine.Transition(State.readServerHello,               State.readEncryptedServerHello),
+    Machine.Transition(State.readEncryptedServerHello,      State.writeClientChangeCipherSpec),
+    Machine.Transition(State.writeClientChangeCipherSpec,   State.applicationData),
 ]);
 
 enum State
@@ -73,6 +78,10 @@ enum State
     writeClientHelloExtensions,
     readServerHello,
     readEncryptedServerHello,
+    writeClientChangeCipherSpec,
+
+    // Common states
+    applicationData,
 
     // Special states
     fatalAlert,
@@ -85,6 +94,7 @@ struct EncryptionContext
     import juptune.core.util : Result;
     import juptune.crypto.aead : AeadIetfChacha20Poly1305;
     import juptune.crypto.keyexchange : X25519PublicKey, X25519PrivateKey;
+    import juptune.data.buffer : MemoryWriter;
     import juptune.http.tls.models : TlsHandshake, TlsExtension, TlsCiphertext, TlsPlaintext;
 
     static immutable HKDF_EXPAND_LABEL_PREFIX = "tls13 ";
@@ -98,7 +108,8 @@ struct EncryptionContext
 
     ubyte[32] clientHello_serverHello_transcriptHash;
 
-    size_t sequenceNumber;
+    size_t sequenceWriteNumber;
+    size_t sequenceReadNumber;
 
     union
     {
@@ -144,7 +155,8 @@ struct EncryptionContext
         if(result.isError)
             return result;
 
-        this.sequenceNumber = 0;
+        this.sequenceWriteNumber = 0;
+        this.sequenceReadNumber = 0;
         return Result.noError;
     }
 
@@ -157,6 +169,7 @@ struct EncryptionContext
 
         ubyte[32] salt;
         ubyte[32] psk;
+        ubyte[32] zeroes;
 
         //              0
         //              |
@@ -220,7 +233,7 @@ struct EncryptionContext
         //                  |
         //                  v
         // 0 -> HKDF-Extract = Master Secret
-        result = hkdfExtractSha256(this.masterSecret_sha256, earlySecret, emptySha);
+        result = hkdfExtractSha256(this.masterSecret_sha256, earlySecret, zeroes);
         if(result.isError)
             return result;
 
@@ -233,7 +246,8 @@ struct EncryptionContext
 
         assert(this.cipherSuite == TlsHandshake.CipherSuite.TLS_CHACHA20_POLY1305_SHA256, "TODO: Support non-SHA256 cipher suites"); // @suppress(dscanner.style.long_line)
 
-        auto finalHash = this.transcript.finish();
+        auto transcriptCopy = this.transcript;
+        auto finalHash = transcriptCopy.finish();
 
         //                            Master Secret
         //                                  |
@@ -247,7 +261,7 @@ struct EncryptionContext
         //                                  |
         //                                  v
         // Derive-Secret(., "s ap traffic", ClientHello...server Finished)
-        result = this.hkdfExpandLabel(this.serverTrafficSecret_sha256, "c ap traffic", finalHash, this.masterSecret_sha256); // @suppress(dscanner.style.long_line)
+        result = this.hkdfExpandLabel(this.serverTrafficSecret_sha256, "s ap traffic", finalHash, this.masterSecret_sha256); // @suppress(dscanner.style.long_line)
         if(result.isError)
             return result;
 
@@ -266,7 +280,6 @@ struct EncryptionContext
     in(context.length <= 255, "context is too large")
     {
         import juptune.crypto.hkdf : hkdfExpandSha256;
-        import juptune.data.buffer : MemoryWriter;
 
         ubyte[514] buffer;
         auto writer = MemoryWriter(buffer[]);
@@ -299,14 +312,13 @@ struct EncryptionContext
     ) @nogc nothrow
     {
         import juptune.crypto.aead : AeadIetfChacha20Poly1305, AeadEncryptionContext;
-        import juptune.data.buffer : MemoryWriter;
 
         assert(this.cipherSuite == TlsHandshake.CipherSuite.TLS_CHACHA20_POLY1305_SHA256, "TODO: support other cipher suites"); // @suppress(dscanner.style.long_line)
         
         // Setup nonce
         ubyte[AeadIetfChacha20Poly1305.NONCE_LENGTH] nonce;
         auto writer = MemoryWriter(nonce[$-8..$]);
-        auto success = writer.putU64BE(this.sequenceNumber++);
+        auto success = writer.putU64BE(this.sequenceReadNumber++);
         assert(success);
         foreach(i, ref byte_; nonce)
             byte_ ^= writerIv[i];
@@ -379,6 +391,84 @@ struct EncryptionContext
             case changeCipherSpec, alert, handshake, applicationData:
                 break;
         }
+
+        return Result.noError;
+    }
+
+    Result encryptRecord(
+        scope ref MemoryWriter encryptedWriter,
+        scope const ubyte[] plaintextRecord, 
+        scope const ubyte[] writerIv, 
+        scope const ubyte[] writerKey,
+        bool writerIsInPlace = false,
+    ) @nogc nothrow
+    {
+        import juptune.crypto.aead : AeadIetfChacha20Poly1305, AeadEncryptionContext;
+
+        import juptune.crypto.libsodium 
+            : 
+                crypto_aead_chacha20poly1305_ietf_encrypt,
+                crypto_aead_chacha20poly1305_ietf_keybytes,
+                crypto_aead_chacha20poly1305_ietf_npubbytes,
+                crypto_aead_chacha20poly1305_ietf_abytes
+            ;
+
+        assert(this.cipherSuite == TlsHandshake.CipherSuite.TLS_CHACHA20_POLY1305_SHA256, "TODO: support other cipher suites"); // @suppress(dscanner.style.long_line)
+        
+        // Setup nonce
+        ubyte[AeadIetfChacha20Poly1305.NONCE_LENGTH] nonce;
+        auto writer = MemoryWriter(nonce[$-8..$]);
+        auto success = writer.putU64BE(this.sequenceWriteNumber++);
+        assert(success);
+        foreach(i, ref byte_; nonce)
+            byte_ ^= writerIv[i];
+
+        // Setup additional data
+        ubyte[1 + 2 + 2] additionalData; // opaque_type + legacy_record_version + length
+        additionalData[0] = TlsPlaintext.ContentType.applicationData;
+        additionalData[1] = 0x03;
+        additionalData[2] = 0x03;
+        writer = MemoryWriter(additionalData[3..5]);
+        success = writer.putU16BE(cast(ushort)(plaintextRecord.length + crypto_aead_chacha20poly1305_ietf_abytes()));
+        assert(success);
+
+        // Decrypt in place
+        // (I'm still not sure if it's a fluke or an intended feature that crypto_aead_chacha20poly1305_ietf_decrypt can decrypt in-place)
+        // TODO: I think juptune.crypto.aead needs a refactor, since it tries to take control of the nonce (and uses SecureMemory - which is really annoying to deal with in regards to ulimits).
+        //       Generally the attack vector of memory being scanned on the local machine is not considered by Juptune, and I think that's for the best (for my sanity, not for security).
+        assert(nonce.length == crypto_aead_chacha20poly1305_ietf_npubbytes());
+        assert(writerKey.length == crypto_aead_chacha20poly1305_ietf_keybytes());
+
+        const startCursor = encryptedWriter.cursor;
+        if(!writerIsInPlace)
+        {
+            success = encryptedWriter.tryBytes(plaintextRecord);
+            if(!success)
+                return Result.make(TlsError.dataExceedsBuffer, "ran out of space in buffer when preparing to encrypt data"); // @suppress(dscanner.style.long_line)
+        }
+
+        if(encryptedWriter.bytesLeft < crypto_aead_chacha20poly1305_ietf_abytes)
+            return Result.make(TlsError.dataExceedsBuffer, "ran out of space in buffer (for additional data) when preparing to encrypt data"); // @suppress(dscanner.style.long_line)
+
+        ulong length = startCursor;
+        const ret = crypto_aead_chacha20poly1305_ietf_encrypt(
+            cast(ubyte*)&encryptedWriter.buffer[startCursor],
+            &length, // NOTE: value gets overwritten
+            &plaintextRecord[0],
+            plaintextRecord.length,
+            &additionalData[0],
+            additionalData.length,
+            null,
+            &nonce[0],
+            &writerKey[0],
+        );
+        if(ret == -1)
+            return Result.make(TlsError.alertBadRecordMac, "failed to encrypt TlsCipher text data");
+        if(length == 0)
+            assert(false, "TODO: handle this");
+
+        encryptedWriter.cursor = startCursor;
+        encryptedWriter.goForward(length);
 
         return Result.noError;
     }

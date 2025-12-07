@@ -9,7 +9,7 @@ module juptune.http;
 public import 
     juptune.http.common,
     juptune.http.client,
-    juptune.http.tls13,
+    juptune.http.tls,
     juptune.http.uri,
     juptune.http.v1
 ;
