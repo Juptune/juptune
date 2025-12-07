@@ -1,0 +1,603 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * Author: Bradley Chatha
+ */
+module juptune.http.tls.tls13;
+
+import std.typecons : Nullable;
+
+import juptune.core.util : Result;
+import juptune.data.x509 : X509CertificateStore, X509Certificate;
+import juptune.http.tls.common, juptune.http.tls.models; // Intentionally everything
+
+struct TlsClientHelloOutSettings
+{
+    const(char)[] serverNameIndicator;
+}
+
+struct TlsServerHelloInSettings
+{
+    X509CertificateStore* certStore;
+    X509CertificateStore.SecurityPolicy certPolicy;
+}
+
+struct TlsSocket(UnderlyingSocketT)
+{
+    import juptune.data.buffer : MemoryReader, MemoryWriter;
+
+    private
+    {
+        UnderlyingSocketT* _socket;
+
+        TlsStateMachine     _state;
+        EncryptionContext   _encryptContext;
+        TlsConfig           _config;
+
+        ubyte[]      _readBuffer;
+        MemoryReader _recordReader;
+        MemoryWriter _recordWriter;
+        MemoryWriter _stagingBuffer;
+    }
+
+    this(
+        UnderlyingSocketT* socket, 
+        ubyte[] readBuffer,
+        ubyte[] writeBuffer,
+        ubyte[] stagingBuffer,
+        TlsConfig config,
+    ) @nogc nothrow
+    in(socket !is null, "socket is null")
+    in(readBuffer.length > 0, "readBuffer is empty")
+    in(writeBuffer.length > 0, "writeBuffer is empty")
+    in(stagingBuffer.length > 0, "stagingBuffer is empty")
+    {
+        this._socket = socket;
+        this._readBuffer = readBuffer;
+        this._recordWriter = MemoryWriter(writeBuffer);
+        this._stagingBuffer = MemoryWriter(stagingBuffer);
+        this._config = config;
+        this._state = TlsStateMachine(State.waitingToStart);
+    }
+
+    Result handshakeAsClient(
+        scope const ref TlsClientHelloOutSettings chSettings,
+        scope ref TlsServerHelloInSettings shSettings,
+    ) @nogc nothrow
+    {
+        import juptune.http.tls.client_messages : 
+            putClientHello, 
+            putServerNameIndicatorExtension,
+            putKeyShareExtension,
+            putSignatureAlgorithmsExtension,
+            readServerHello,
+            handleEncryptedExtensions,
+            handleServerHelloCertificate,
+            handleServerHelloCertificateVerify,
+            handleServerHelloFinished
+        ;
+
+        // Send ClientHello (and add it into the transcript)
+
+        auto result = putClientHello(this._stagingBuffer, this._state,
+            putExtensions: (){
+                auto result = putKeyShareExtension(this._stagingBuffer, this._state, this._encryptContext);
+                if(result.isError)
+                    return result;
+
+                result = putSignatureAlgorithmsExtension(this._stagingBuffer, this._state);
+                if(result.isError)
+                    return result;
+
+                if(chSettings.serverNameIndicator.length > 0)
+                {
+                    result = putServerNameIndicatorExtension(
+                        this._stagingBuffer, 
+                        this._state, 
+                        chSettings.serverNameIndicator
+                    );
+                    if(result.isError)
+                        return result;
+                }
+
+                return Result.noError;
+            }
+        );
+        if(result.isError)
+            return result;
+
+        result = this.sendAsPlaintextRecords(TlsPlaintext.ContentType.handshake, this._stagingBuffer.usedBuffer);
+        if(result.isError)
+            return result;
+        this._encryptContext.transcript.put(this._stagingBuffer.usedBuffer);
+        this._stagingBuffer.cursor = 0;
+
+        // Read unencrypted ServerHello
+
+        TlsHandshake serverHello;
+        MemoryReader serverHelloReader; // NOTE: Subset of _stagingBuffer
+        result = this.fetchPlaintextHandshakeRecordsIntoStaging(serverHello, serverHelloReader, allowCompaction: true);
+        if(result.isError)
+            return result;
+        if(serverHello.messageType != TlsHandshake.Type.serverHello)
+            return Result.make(TlsError.alertUnexpectedMessage, "expected incoming ServerHello following outgoing ClientHello"); // @suppress(dscanner.style.long_line)
+
+        result = readServerHello(serverHelloReader, this._state, this._encryptContext);
+        if(result.isError)
+            return result;
+        if(serverHelloReader.bytesLeft != 0)
+            return Result.make(TlsError.tooManyBytes, "when reading ServerHello, not all bytes needed to be read?");
+        this._stagingBuffer.cursor = 0;
+
+        // Setup encryption state
+
+        ubyte[4] reconstructedHeader; // fetchPlaintextHandshakeRecordsIntoStaging doesn't include a few header bytes, so we have to reconstruct the header and feed it into the transcript
+        auto reconstructedWriter = MemoryWriter(reconstructedHeader);
+        with(reconstructedWriter)
+        {
+            putU8(TlsHandshake.Type.serverHello);
+            putU24BE(cast(uint)serverHelloReader.buffer.length);
+        }
+        this._encryptContext.transcript.put(reconstructedHeader[]);
+        this._encryptContext.transcript.put(serverHelloReader.buffer);
+        
+        auto tempTranscript = this._encryptContext.transcript;
+        this._encryptContext.clientHello_serverHello_transcriptHash = tempTranscript.finish();
+
+        result = this._encryptContext.deriveSharedSecret();
+        if(result.isError)
+            return result;
+
+        result = this._encryptContext.deriveHandshakeSecrets();
+        if(result.isError)
+            return result;
+
+        result = this._encryptContext.deriveTrafficKeys();
+        if(result.isError)
+            return result;
+
+        // Check for and ignore changeCipherSpec
+
+        result = this.ignoreChangeCipherSpec(allowCompaction: true);
+        if(result.isError)
+            return result;
+
+        // Read encrypted ServerHello
+        
+        ulong messageMask;
+        X509Certificate peerCert;
+
+        result = this.fetchEncryptedHandshakeMessagesUntilFinished( // NOTE: This also adds each message to the transcript AFTER the callback is called
+            (TlsHandshake message, scope ref MemoryReader messageReader){
+                const typeIndex = 1 << enumIndexOf(message.messageType);
+                if(typeIndex != -1)
+                {
+                    if((messageMask & typeIndex) != 0)
+                        return Result.make(TlsError.alertUnexpectedMessage, "duplicate encrypted handshake messages found"); // @suppress(dscanner.style.long_line)
+                    messageMask |= typeIndex;
+                }
+
+                switch(message.messageType) with(TlsHandshake.Type)
+                {
+                    case encryptedExtensions:
+                        return handleEncryptedExtensions(messageReader.buffer, this._state);
+
+                    case certificate:
+                        return handleServerHelloCertificate(
+                            messageReader, 
+                            this._state,
+                            peerCert,
+                            shSettings.certStore,
+                            shSettings.certPolicy
+                        );
+
+                    case certificateVerify:
+                        auto verifyTranscript = this._encryptContext.transcript;
+                        auto verifyHash = verifyTranscript.finish();
+                        return handleServerHelloCertificateVerify(
+                            messageReader,
+                            this._state,
+                            peerCert,
+                            verifyHash
+                        );
+
+                    case finished:
+                        return handleServerHelloFinished(
+                            messageReader,
+                            this._state,
+                            this._encryptContext
+                        );
+
+                    default: break;
+                }
+                return Result.noError;
+            }, 
+            allowCompaction: true
+        );
+        if(result.isError)
+            return result;
+
+        // Finalise encryption state
+        
+        result = this._encryptContext.deriveApplicationSecrets();
+        if(result.isError)
+            return result;
+
+        result = this._encryptContext.deriveTrafficKeys();
+        if(result.isError)
+            return result;
+
+        return Result.noError;
+    }
+
+    /++ Helpers ++/
+
+    private Result ignoreChangeCipherSpec(bool allowCompaction) @nogc nothrow
+    {
+        if(this._recordReader.bytesLeft < TlsPlaintext.HEADER_SIZE)
+        {
+            if(allowCompaction)
+                this.compactReadBuffer();
+
+            size_t _;
+            auto result = this.fetchIntoReadBuffer(_);
+            if(result.isError)
+                return result.wrapError("when peeking changeCipherSpec record:");
+            if(this._recordReader.bytesLeft < TlsPlaintext.HEADER_SIZE)
+                return Result.make(TlsError.peerTooSlow, "when peeking changeCipherSpec record, peer is sending data way too slowly to comfortably process"); // @suppress(dscanner.style.long_line)
+        }
+
+        ubyte contentTypeByte;
+        auto success = this._recordReader.peekU8(contentTypeByte);
+        assert(success, "bug: how did success fail?");
+
+        if(contentTypeByte != TlsPlaintext.ContentType.changeCipherSpec)
+            return Result.noError;
+
+        // Move past it without going into the staging buffer first.
+        ushort recordVersion;
+        ushort length;
+        const(ubyte)[] fragment;
+        
+        with(this._recordReader)
+        {
+            success = readU8(contentTypeByte);
+            assert(success, "bug: how did success fail?");
+            success = readU16BE(recordVersion);
+            assert(success, "bug: how did success fail?");
+            success = readU16BE(length);
+            assert(success, "bug: how did success fail?");
+        }
+
+        if(recordVersion != TLS_VERSION_12)
+            return Result.make(TlsError.alertIllegalParameter, "expected changeCipherSpec version to be set to TLS 1.2 (0x0303)"); // @suppress(dscanner.style.long_line)
+        if(length > 1)
+            return Result.make(TlsError.alertRecordOverflow, "changeCipherSpec record fragment length is too large");
+
+        success = this._recordReader.readBytes(length, fragment);
+        if(!success)
+            return Result.make(TlsError.eof, "peer is trolling");
+
+        return Result.noError;
+    }
+
+    /++ Socket I/O ++/
+
+    private Result sendAsPlaintextRecords(TlsPlaintext.ContentType type, scope const(ubyte)[] bytes) @nogc nothrow
+    {
+        import std.algorithm : min;
+
+        while(bytes.length > 0)
+        {
+            const length = min(bytes.length, TlsPlaintext.MAX_LENGTH);
+
+            ubyte[TlsPlaintext.HEADER_SIZE] header;
+            header[0] = cast(ubyte)type;
+            header[1] = 0x03;
+            header[2] = 0x03;
+            
+            auto lengthWriter = MemoryWriter(header[3..$]);
+            const success = lengthWriter.putU16BE(cast(ushort)length);
+            assert(success);
+
+            auto result = this._socket.putScattered([header[], bytes[0..length]], this._config.writeTimeout);
+            if(result.isError)
+                return result.wrapError("when sending plaintext records:");
+
+            bytes = bytes[length..$];
+        }
+
+        return Result.noError;
+    }
+
+    private Result fetchEncryptedHandshakeMessagesUntilFinished(
+        scope Result delegate(TlsHandshake, scope ref MemoryReader) @nogc nothrow onMessage,
+        bool allowCompaction = false,
+    ) @nogc nothrow
+    {
+        // FOR NOW I'm hard assuming there's only one encrypted ServerHello ciphertext so I don't lose my mind.
+        // TODO: Handle this properly (robustly)
+
+        TlsCiphertext.InnerPlaintext plain;
+        MemoryReader plainReader;
+
+        auto result = this.fetchAndDecryptSingleCiphertextRecordIntoReadBuffer(
+            plain,
+            plainReader,
+            allowCompaction
+        );
+        if(result.isError)
+            return result;
+
+        while(plainReader.bytesLeft > 0)
+        {
+            const startCursor = plainReader.cursor;
+
+            ubyte contentTypeByte;
+            uint length;
+            const(ubyte)[] data;
+
+            auto success = plainReader.readU8(contentTypeByte);
+            assert(success, "bug: how did success fail?");
+
+            success = plainReader.readU24BE(length);
+            if(!success)
+                return Result.make(TlsError.eof, "ran out of bytes when reading length of encrypted handshake message");
+
+            success = plainReader.readBytes(length, data);
+            if(!success)
+                return Result.make(TlsError.eof, "ran out of bytes when reading body of encrypted handshake message");
+
+            TlsHandshake handshake;
+            handshake.messageType = cast(TlsHandshake.Type)contentTypeByte;
+            auto dataReader = MemoryReader(data);
+
+            result = onMessage(handshake, dataReader);
+            if(result.isError)
+                return result;
+            this._encryptContext.transcript.put(plainReader.buffer[startCursor..plainReader.cursor]);
+        }
+
+        return Result.noError;
+    }
+
+    private Result fetchPlaintextHandshakeRecordsIntoStaging(
+        scope out TlsHandshake record,
+        scope out MemoryReader reader,
+        bool allowCompaction = false,
+    ) @nogc nothrow
+    {
+        bool isFirst = true;
+        const stagingCursorStart = this._stagingBuffer.cursor;
+        while(true) // Handshake records can still get fragmented, so we'll have to keep reading in records until we're done
+        {
+            if(this._recordReader.bytesLeft < TlsPlaintext.HEADER_SIZE)
+            {
+                if(allowCompaction)
+                    this.compactReadBuffer();
+
+                size_t _;
+                auto result = this.fetchIntoReadBuffer(_);
+                if(result.isError)
+                    return result.wrapError("when reading plaintext handshake record:");
+                if(this._recordReader.bytesLeft < TlsPlaintext.HEADER_SIZE)
+                    return Result.make(TlsError.peerTooSlow, "when reading plaintext handshake record, peer is sending data way too slowly to comfortably process"); // @suppress(dscanner.style.long_line)
+            }
+
+            ubyte contentTypeByte;
+            ushort recordVersion;
+            ushort length;
+            const(ubyte)[] fragment;
+            
+            with(this._recordReader)
+            {
+                auto success = readU8(contentTypeByte);
+                assert(success, "bug: how did success fail?");
+                success = readU16BE(recordVersion);
+                assert(success, "bug: how did success fail?");
+                success = readU16BE(length);
+                assert(success, "bug: how did success fail?");
+            }
+
+            if(cast(TlsPlaintext.ContentType)contentTypeByte != TlsPlaintext.ContentType.handshake)
+                return Result.make(TlsError.alertUnexpectedMessage, "expected handshake record when fetching plaintext handshake"); // @suppress(dscanner.style.long_line)
+            if(recordVersion != TLS_VERSION_12)
+                return Result.make(TlsError.alertIllegalParameter, "expected plaintext record version to be set to TLS 1.2 (0x0303)"); // @suppress(dscanner.style.long_line)
+            if(length > TlsPlaintext.MAX_LENGTH)
+                return Result.make(TlsError.alertRecordOverflow, "plaintext record fragment length is too large");
+
+            const maxBytesLeft = this._readBuffer.length - this._recordReader.cursor;
+            if(maxBytesLeft < length)
+                return Result.make(TlsError.dataExceedsBuffer, "not enough space in read buffer to store record fragment"); // @suppress(dscanner.style.long_line)
+
+            uint attempts;
+            while(this._recordReader.bytesLeft < length)
+            {
+                scope(exit) attempts++;
+
+                if(attempts > this._config.maxFragmentReadAttempts)
+                    return Result.make(TlsError.peerTooSlow, "when reading plaintext handshake fragment, peer took too many read attempts to send the full fragment body"); // @suppress(dscanner.style.long_line)
+
+                size_t _;
+                auto result = this.fetchIntoReadBuffer(_);
+                if(result.isError)
+                    return result;
+            }
+
+            auto success = this._recordReader.readBytes(length, fragment);
+            assert(success, "bug: how did success fail?");
+
+            if(isFirst)
+            {
+                if(fragment.length < TlsHandshake.HEADER_SIZE)
+                    return Result.make(TlsError.alertUnexpectedMessage, "expected plaintext record length to be at least 4 for plaintext handshake initial fragment"); // @suppress(dscanner.style.long_line)
+
+                record.messageType = cast(TlsHandshake.Type)fragment[0];
+                success = MemoryReader(fragment[1..4]).readU24BE(record.length);
+                assert(success, "bug: how did success fail?");
+
+                success = this._stagingBuffer.tryBytes(fragment[4..$]);
+                if(!success)
+                    return Result.make(TlsError.dataExceedsBuffer, "not enough space in staging buffer to store record fragment"); // @suppress(dscanner.style.long_line)
+
+                isFirst = false;
+            }
+            else
+            {
+                success = this._stagingBuffer.tryBytes(fragment);
+                if(!success)
+                    return Result.make(TlsError.dataExceedsBuffer, "not enough space in staging buffer to store record fragment"); // @suppress(dscanner.style.
+            }
+            
+            const bytesInStaging = this._stagingBuffer.cursor - stagingCursorStart;
+            if(bytesInStaging == record.length)
+            {
+                reader = MemoryReader(this._stagingBuffer.usedBuffer[stagingCursorStart..$]);
+                return Result.noError;
+            }
+        }
+    }
+
+    private Result fetchAndDecryptSingleCiphertextRecordIntoReadBuffer(
+        scope out TlsCiphertext.InnerPlaintext record,
+        scope out MemoryReader reader,
+        bool allowCompaction = false,
+    ) @nogc nothrow
+    {
+        import std.traits : EnumMembers;
+        import juptune.core.ds : String2;
+
+        if(this._recordReader.bytesLeft < TlsCiphertext.HEADER_SIZE)
+        {
+            if(allowCompaction)
+                this.compactReadBuffer();
+
+            size_t _;
+            auto result = this.fetchIntoReadBuffer(_);
+            if(result.isError)
+                return result.wrapError("when reading ciphertext record:");
+            if(this._recordReader.bytesLeft < TlsPlaintext.HEADER_SIZE)
+                return Result.make(TlsError.peerTooSlow, "when reading ciphertext, peer is sending data way too slowly to comfortably process"); // @suppress(dscanner.style.long_line)
+        }
+
+        ubyte type;
+        ushort version_;
+        ushort fragmentLength;
+
+        auto success = this._recordReader.readU8(type);
+        assert(success, "bug: success shouldn't be able to be false here?");
+        success = this._recordReader.readU16BE(version_);
+        assert(success, "bug: success shouldn't be able to be false here?");
+        success = this._recordReader.readU16BE(fragmentLength);
+        assert(success, "bug: success shouldn't be able to be false here?");
+
+        if(type != TlsPlaintext.ContentType.applicationData)
+            return Result.make(TlsError.alertIllegalParameter, "TlsCiphertext record is not set to applicationData");
+        if(version_ != TLS_VERSION_12)
+            return Result.make(TlsError.alertIllegalParameter, "TlsCiphertext record contains an invalid version field - it MUST be 0x0303 when using TLS 1.3"); // @suppress(dscanner.style.long_line)
+        if(fragmentLength > TlsCiphertext.MAX_LENGTH)
+            return Result.make(TlsError.alertRecordOverflow, "TlsCiphertext record contains a payload greater than 2^14 + 256 in length"); // @suppress(dscanner.style.long_line)
+
+        uint attempts;
+        while(this._recordReader.bytesLeft < fragmentLength)
+        {
+            scope(exit) attempts++;
+
+            if(attempts > this._config.maxFragmentReadAttempts)
+                return Result.make(TlsError.peerTooSlow, "when reading ciphertext fragment, peer took too many read attempts to send the full fragment body"); // @suppress(dscanner.style.long_line)
+
+            size_t _;
+            auto result = this.fetchIntoReadBuffer(_);
+            if(result.isError)
+                return result;
+        }
+
+        const(ubyte)[] encryptedRecord;
+        success = this._recordReader.readBytes(fragmentLength, encryptedRecord);
+        assert(success, "bug: success shouldn't be able to be false here?");
+
+        auto result = this._encryptContext.decryptRecordInPlace(
+            encryptedRecord,
+            this._encryptContext.serverIv_sha256,
+            this._encryptContext.serverKey_sha256,
+            record
+        );
+        if(result.isError)
+            return result;
+        
+        reader = MemoryReader(record.content); // now unencrypted
+        return Result.noError;
+    }
+
+    // Socket -> Read Buffer
+    private Result fetchIntoReadBuffer(out size_t bytesFetched) @nogc nothrow
+    {
+        const cursor = this._recordReader.buffer.length;
+        if(cursor >= this._readBuffer.length)
+            return Result.make(TlsError.dataExceedsBuffer, "attempted to fetch record data while buffer is full - in-process record is too large for the provided buffer"); // @suppress(dscanner.style.long_line)
+
+        void[] got;
+        auto result = this._socket.recieve(this._readBuffer[cursor..$], got, this._config.readTimeout);
+        if(result.isError)
+            return result;
+
+        bytesFetched = got.length;
+        this._recordReader = MemoryReader(this._readBuffer[0..cursor + got.length], this._recordReader.cursor);
+        return Result.noError;
+    }
+
+    private void compactReadBuffer() @nogc nothrow
+    {
+        if(this._recordReader.cursor == 0)
+            return;
+
+        const newLength = this._recordReader.buffer.length - this._recordReader.cursor;
+        foreach(i, b; this._recordReader.buffer[this._recordReader.cursor..$])
+            this._readBuffer[i] = b;
+        this._recordReader = MemoryReader(this._readBuffer[0..newLength]);
+    }
+}
+
+import juptune.event.io : TcpSocket;
+alias TlsTcpSocket = TlsSocket!TcpSocket;
+
+debug unittest
+{
+    import juptune.event.io : TcpSocket;
+    import juptune.core.util : resultAssert;
+    import juptune.event;
+    import juptune.data.x509;
+
+    import std.exception;
+    import std.file : readText;
+
+    auto loop = EventLoop(EventLoopConfig());
+    loop.addGCThread((){
+        TcpSocket client;
+        client.open().resultAssert;
+
+        bool _;
+        client.connect("142.250.129.138", _, 443).resultAssert;
+
+        X509CertificateStore certStore;
+        certStore.loadBundleFromPem(
+            readText("/etc/ssl/ca-bundle.pem").assumeWontThrow,
+            ignoreAsn1DecodingErrors: true,
+            hasImplicitTrust: true
+        ).resultAssert;
+
+        auto config = TlsConfig();
+        auto tls = TlsTcpSocket(&client, new ubyte[1024 * 17], new ubyte[1024 * 17], new ubyte[1024 * 32], config);
+
+        TlsClientHelloOutSettings clientHello;
+        clientHello.serverNameIndicator = "www.google.com";
+
+        TlsServerHelloInSettings serverHello;
+        serverHello.certStore = &certStore;
+
+        tls.handshakeAsClient(clientHello, serverHello).resultAssert;
+    });
+    loop.join();
+    // assert(false);
+}

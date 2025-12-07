@@ -42,7 +42,7 @@ out(r; r !is null, "bug: result is null?")
         return BN_new();
 
     IntToHexCharBuffer buffer;
-    char[] hexBuffer = (cast(char*)allocHexBuffer((bytes.length * 2) + 1))[0..(bytes.length * 2) + 1];
+    char[] hexBuffer = (cast(char*)allocHexBuffer((bytes.length*  2) + 1))[0..(bytes.length*  2) + 1];
     scope(exit) freeHexBuffer(hexBuffer.ptr);
 
     foreach(i, byte_; bytes)
@@ -85,7 +85,7 @@ struct BIGNUM {}
 
 // For public keys
 BIGNUM* BN_new();
-void BN_free(BIGNUM *a);
+void BN_free(BIGNUM* a);
 
 // For private keys
 BIGNUM* BN_secure_new();
@@ -102,7 +102,8 @@ OSSL_PARAM_BLD* OSSL_PARAM_BLD_new();
 void OSSL_PARAM_BLD_free(OSSL_PARAM_BLD* bld);
 OSSL_PARAM* OSSL_PARAM_BLD_to_param(OSSL_PARAM_BLD* bld);
 int OSSL_PARAM_BLD_push_BN(OSSL_PARAM_BLD* bld, const(char)* key, const(BIGNUM)* bn);
-
+int OSSL_PARAM_BLD_push_utf8_string(OSSL_PARAM_BLD *bld, const char *key, const char *buf, size_t bsize);
+int OSSL_PARAM_BLD_push_octet_string(OSSL_PARAM_BLD *bld, const char *key, const void *buf, size_t bsize);
 
 
 struct EVP_PKEY_CTX {}
@@ -114,8 +115,9 @@ enum EVP_PKEY_PUBLIC_KEY = 0x04 | 0x80 | 0x02;
 EVP_PKEY_CTX* EVP_PKEY_CTX_new(EVP_PKEY* pkey, void* e);
 EVP_PKEY_CTX* EVP_PKEY_CTX_new_from_name(void* libctx, const(char)* name, const(char)* propquery);
 EVP_PKEY* EVP_PKEY_new_raw_public_key_ex(void* libctx, const char* keytype, const char* propq, const(ubyte)* key, size_t keylen);
+EVP_PKEY* EVP_PKEY_new_raw_private_key_ex(void* libctx, const char* keytype, const char* propq, const(ubyte)* key, size_t keylen);
 void EVP_PKEY_CTX_free(EVP_PKEY_CTX* ctx);
-int EVP_PKEY_fromdata_init(EVP_PKEY_CTX *ctx);
+int EVP_PKEY_fromdata_init(EVP_PKEY_CTX* ctx);
 int EVP_PKEY_fromdata(EVP_PKEY_CTX* ctx, EVP_PKEY** ppkey, int selection, OSSL_PARAM* param);
 void EVP_PKEY_free(EVP_PKEY* pkey);
 int EVP_PKEY_get_bits(const(EVP_PKEY)* pkey);
@@ -147,3 +149,9 @@ int EVP_PKEY_get_raw_public_key(const EVP_PKEY* pkey, ubyte* pub, size_t* len);
 
 ulong ERR_get_error();
 void ERR_error_string_n(ulong e, char* buf, size_t len);
+
+int EVP_PKEY_derive_init(EVP_PKEY_CTX* ctx);
+int EVP_PKEY_derive_set_peer(EVP_PKEY_CTX* ctx, EVP_PKEY* peer);
+int EVP_PKEY_derive(EVP_PKEY_CTX* ctx, ubyte* key, size_t* keylen);
+
+EVP_PKEY* EVP_EC_gen(const(char)* curve);

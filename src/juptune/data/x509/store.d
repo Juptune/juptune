@@ -19,6 +19,7 @@ enum X509StoreError
     duplicateSubjectKeyId,  /// A certificate with the given subjectKeyIdentifier has already been loaded into an `X509CertificateStore`
     trustAnchorNotFound,    /// A certificate's trust anchor could not be found during validation within an `X509CertificateStore`
     wrongPemLabel,          /// A certificate within a PEM encoded file contains the wrong label.
+    noCertificates,         /// Edge case error when no certificates are provided for an operation where at least one certificate is required.
 }
 
 /++
@@ -493,6 +494,8 @@ struct X509CertificateStore
      +  `X509StoreError.trustAnchorNotFound` if a trust anchor could not be determined, and if the first certificate in the chain could not
      +  be used as the trust anchor (see Security Policy).
      +
+     +  `X509StoreError.noCertificates` if `nextInChain` doesn't generate any certificates.
+     +
      + Returns:
      +  A `Result` indicating if an error occurred or not.
      + ++/
@@ -541,6 +544,9 @@ struct X509CertificateStore
             if(result.isError)
                 return result;
         }
+
+        if(stagingCerts.length == 0)
+            return Result.make(X509StoreError.noCertificates, "no certificates were provided by nextInChain?");
 
         return (stagingCerts.length > 1) 
             ? this.validateCertChain(stagingCerts.slice, policy, reverseChain)

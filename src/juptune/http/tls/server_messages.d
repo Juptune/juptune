@@ -4,13 +4,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
-module juptune.core.ds;
+module juptune.http.tls.server_messages;
 
-public import 
-    juptune.core.ds.string,
-    juptune.core.ds.string2,
-    juptune.core.ds.alloc,
-    juptune.core.ds.array,
-    juptune.core.ds.block,
-    juptune.core.ds.hashmap,
-    juptune.core.ds.pointer;
+package:

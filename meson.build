@@ -14,7 +14,7 @@ project(
 
 juptune_d_versions = []
 
-libsodium_dep = dependency('libsodium', version: '>=1.0.18')
+libsodium_dep = dependency('libsodium', version: '>=1.0.20')
 if libsodium_dep.found() # Currently not optional, but just in case in the future.
     message('Found libsodium, enabling Juptune_LibSodium.')
     juptune_d_versions += ['Juptune_LibSodium']
@@ -42,6 +42,7 @@ core_srcs = files(
     './src/juptune/core/ds/block.d',
     './src/juptune/core/ds/hashmap.d',
     './src/juptune/core/ds/package.d',
+    './src/juptune/core/ds/pointer.d',
     './src/juptune/core/ds/string.d',
     './src/juptune/core/ds/string2.d',
 
@@ -57,8 +58,10 @@ core_srcs = files(
 
 crypto_srcs = files(
     './src/juptune/crypto/aead.d',
+    './src/juptune/crypto/ecdsa.d',
     './src/juptune/crypto/libsodium.di',
     './src/juptune/crypto/memory.d',
+    './src/juptune/crypto/hkdf.d',
     './src/juptune/crypto/keyexchange.d',
     './src/juptune/crypto/openssl.d',
     './src/juptune/crypto/package.d',
@@ -120,6 +123,15 @@ http_srcs = files(
     './src/juptune/http/tls13.d',
     './src/juptune/http/uri.d',
     './src/juptune/http/v1.d',
+
+    './src/juptune/http/tls/client_messages.d',
+    './src/juptune/http/tls/common.d',
+    './src/juptune/http/tls/decode.d',
+    './src/juptune/http/tls/encode.d',
+    './src/juptune/http/tls/models.d',
+    './src/juptune/http/tls/package.d',
+    './src/juptune/http/tls/server_messages.d',
+    './src/juptune/http/tls/tls13.d',
 )
 
 #### Dependencies ####

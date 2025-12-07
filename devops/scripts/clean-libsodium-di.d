@@ -43,6 +43,8 @@ void main()
     {
         const line = lines[i];
 
+        import std.stdio : writeln;
+
         if(
             line.canFind("extern __gshared")
             || line.canFind("static __gshared")
@@ -51,7 +53,8 @@ void main()
             continue;
         }
         else if(
-            line.canFind("__gshared")
+            line.canFind(";")
+            && !line.canFind("struct")
             && (line.canFind(" crypto_") || line.canFind(" sodium_") || line.canFind(" randombytes_"))
         ) // A libsodium function declaration
         {
@@ -60,6 +63,7 @@ void main()
         }
         else if(
             line.canFind("struct")
+            && !line.canFind(";")
             && (line.canFind(" crypto_") || line.canFind(" sodium_") || line.canFind(" randombytes_"))
         ) // A libsodium struct
         {

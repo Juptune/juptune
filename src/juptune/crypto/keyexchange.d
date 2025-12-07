@@ -48,6 +48,17 @@ version(Juptune_OpenSSL)
             return Result.noError;
         }
 
+        static Result fromCopyingBytes(scope const(ubyte)[] bytes, ref X25519PrivateKey key) @nogc nothrow
+        {
+            key = typeof(key).init;
+
+            key._pkey = EVP_PKEY_new_raw_private_key_ex(null, "X25519", null, &bytes[0], bytes.length);
+            if(key._pkey is null)
+                return opensslErrorToResult("when calling EVP_PKEY_new_raw_private_key_ex for X25519 private key");
+
+            return Result.noError;
+        }
+
         Result getPublicKey(scope ubyte[] keyBytes) @nogc nothrow
         in(keyBytes.length == 32, "keyBytes must be 32 bytes in length")
         {
@@ -55,6 +66,28 @@ version(Juptune_OpenSSL)
             auto ret = EVP_PKEY_get_raw_public_key(this._pkey, &keyBytes[0], &length);
             if(ret != 1)
                 return opensslErrorToResult("when calling EVP_PKEY_get_raw_public_key for X25519 private key");
+            return Result.noError;
+        }
+
+        Result deriveSharedSecret(scope ref X25519PublicKey peer, scope ubyte[] keyBytes) @nogc nothrow
+        in(keyBytes.length == 32, "keyBytes must be 32 bytes in length")
+        {
+            auto ctx = EVP_PKEY_CTX_new(this._pkey, null);
+            scope(exit) EVP_PKEY_CTX_free(ctx);
+
+            auto ret = EVP_PKEY_derive_init(ctx);
+            if(ret != 1)
+                return opensslErrorToResult("when calling EVP_PKEY_derive_init");
+
+            ret = EVP_PKEY_derive_set_peer(ctx, peer._pkey);
+            if(ret != 1)
+                return opensslErrorToResult("when calling EVP_PKEY_derive_set_peer");
+
+            size_t length = keyBytes.length;
+            ret = EVP_PKEY_derive(ctx, &keyBytes[0], &length);
+            if(ret != 1)
+                return opensslErrorToResult("when calling EVP_PKEY_derive_set_peer");
+
             return Result.noError;
         }
     }
@@ -77,7 +110,7 @@ version(Juptune_OpenSSL)
             }
         }
 
-        static Result fromBytes(scope const(ubyte)[] bytes, ref X25519PublicKey key) @nogc nothrow
+        static Result fromCopyingBytes(scope const(ubyte)[] bytes, ref X25519PublicKey key) @nogc nothrow
         {
             key = typeof(key).init;
 

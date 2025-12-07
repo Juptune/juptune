@@ -814,6 +814,52 @@ struct GenericIoDriver
     }
 
     /++
+     + Writes an entire set of buffers.
+     +
+     + This is a high level helper around the `writev` function.
+     +
+     + Notes:
+     +  This function can sometimes modify the entries of `buffers` during partial write scenarios, so please
+     +  treat `buffers` as completely ephermeral.
+     +
+     + Params:
+     +  buffers = The buffers to write.
+     +
+     + Throws:
+     +  Any error that the platform's underlying `writev` command returns. (e.g. `LinuxError` on Linux)
+     +
+     + Returns:
+     +  A `Result`
+     + ++/
+    Result putScattered(scope const(void)[][] buffers, Duration timeout = Duration.zero) @nogc
+    {
+        while(buffers.length > 0)
+        {
+            size_t bytesWritten;
+            auto result = this._driver.writev(buffers, bytesWritten, timeout);
+            if(result.isError)
+                return result;
+
+            while(bytesWritten > 0)
+            {
+                assert(buffers.length > 0);
+                if(buffers[0].length <= bytesWritten)
+                {
+                    bytesWritten -= buffers[0].length;
+                    buffers = buffers[1..$];
+                }
+                else
+                {
+                    buffers[0] = buffers[0][bytesWritten..$];
+                    bytesWritten -= buffers[0].length;
+                }
+            }
+        }
+
+        return Result.noError;
+    }
+
+    /++
      + Continues to read data into a buffer until no bytes are left to read.
      +
      + If the buffer needs to be grown, then the `growFunc` is called.
@@ -925,7 +971,7 @@ private struct PosixGenericIoDriver
     import core.sys.posix.sys.uio : iovec;
 
     @disable this(this){}
-    enum IOVEC_STATIC_SIZE = 32;
+    enum IOVEC_STATIC_SIZE = 4;
 
     private
     {
@@ -1007,7 +1053,7 @@ private struct PosixGenericIoDriver
         return this.vectorMBAImpl!IoUringWritev(buffers, bytesRead, timeout);
     }
 
-    Result writev(scope void[][] buffers, ref size_t bytesRead, Duration timeout = Duration.zero)
+    Result writev(scope const void[][] buffers, ref size_t bytesRead, Duration timeout = Duration.zero)
     {
         return this.vectorVoidArrayImpl!IoUringWritev(buffers, bytesRead, timeout);
     }
@@ -1044,7 +1090,7 @@ private struct PosixGenericIoDriver
     }
 
     private Result vectorVoidArrayImpl(alias OpT)(
-        scope void[][] buffers, 
+        scope const void[][] buffers, 
         ref size_t bytesRead, 
         Duration timeout = Duration.zero
     )
@@ -1052,7 +1098,7 @@ private struct PosixGenericIoDriver
         return this.vectorIoImpl!OpT((iovecs) @nogc nothrow {
             foreach(i, buffer; buffers)
             {
-                iovecs[i].iov_base = buffer.ptr;
+                iovecs[i].iov_base = cast(void*)buffer.ptr;
                 iovecs[i].iov_len = buffer.length;
             }
         }, buffers.length, bytesRead, timeout);
@@ -1246,8 +1292,9 @@ unittest
             foreach(i; 0..buf3.length)
                 buf3[i] = cast(ubyte)(i + buf1.length + buf2.length);
 
-            socket.writev([buf1[], buf2[], buf3[]], bytesSent).resultAssert;
-            assert(bytesSent == buf1.length + buf2.length + buf3.length);
+            // socket.writev([buf1[], buf2[], buf3[]], bytesSent).resultAssert;
+            // assert(bytesSent == buf1.length + buf2.length + buf3.length);
+            socket.putScattered([buf1[], buf2[], buf3[]]).resultAssert;
         }, pairs[0], &asyncMoveSetter!TcpSocket).resultAssert;
 
         async((){
