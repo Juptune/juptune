@@ -347,7 +347,7 @@ struct HttpClient
             cast(void)this.close();
             return result;
         }
-        this._tlsStagingStorage.length = 0; // The staging buffer is only needed during a handshake.
+        this._tlsStagingStorage.__xdtor(); // The staging buffer is only needed during a handshake.
         
         return Result.noError;
     }

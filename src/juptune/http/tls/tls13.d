@@ -262,10 +262,6 @@ struct TlsSocket(UnderlyingSocketT)
     Result send(scope const(void)[] buffer, scope out size_t bytesSent, Duration timeout = Duration.zero) @nogc nothrow
     in(this._state.mustBeIn(State.applicationData))
     {
-        import std;
-        debug stderr.writeln(cast(string)buffer);
-        debug stderr.flush();
-
         if(timeout == Duration.zero && this._config.alwaysTimeout)
             timeout = this._config.writeTimeout;
 
@@ -312,11 +308,12 @@ struct TlsSocket(UnderlyingSocketT)
             // This will _usually_ be the server sending us a session ticket after the initial handshake.
             // Handling this is honestly really annoying, so _for now_ I'll just blindly ignore handshake messages, even though
             // that's not completely correct behaviour.
-            return recieve(buffer, sliceWithData, timeout); // I really hope this does tail call optimisation lol.
+            return recieve(buffer, sliceWithData, timeout); // I really hope this triggers tail call optimisation lol.
         }
         else if(plaintext.type != TlsPlaintext.ContentType.applicationData)
             return Result.make(TlsError.alertUnexpectedMessage, "when receiving ciphertext record, record has unexpected message type"); // @suppress(dscanner.style.long_line)
 
+        // Either give the entire buffer to the user, or give a partial buffer back and mess with internal state to signal there's leftover data.
         const length = min(buffer.length, reader.bytesLeft);
         if(length != reader.bytesLeft)
         {
@@ -426,6 +423,7 @@ struct TlsSocket(UnderlyingSocketT)
         import std.algorithm : min;
         import juptune.crypto.libsodium : crypto_aead_chacha20poly1305_ietf_abytes;
 
+        // Check whether we have enough buffer space left.
         const startCursor = this._recordWriter.cursor;
         const overhead = TlsCiphertext.HEADER_SIZE + crypto_aead_chacha20poly1305_ietf_abytes() + 1; // + 1 for the content type byte we have to append.
         const bytesPerRecord = this._recordReader.bytesLeft - overhead;
@@ -435,6 +433,7 @@ struct TlsSocket(UnderlyingSocketT)
 
         while(bytes.length > 0)
         {
+            // Write either a partial amount, or the rest of the remaining bytes, with the type byte suffixed.
             const toSend = min(bytesPerRecord, bytes.length);
 
             auto success = this._recordWriter.tryBytes(bytes[0..toSend]);
@@ -446,6 +445,7 @@ struct TlsSocket(UnderlyingSocketT)
             const plaintext = this._recordWriter.buffer[startCursor..this._recordWriter.cursor];
             auto inPlaceWriter = MemoryWriter(this._recordWriter.buffer[startCursor..$]);
 
+            // Encrypted the inner plaintext payload
             auto result = this._encryptContext.encryptRecord(
                 inPlaceWriter,
                 plaintext,
@@ -458,6 +458,7 @@ struct TlsSocket(UnderlyingSocketT)
 
             const ciphertext = inPlaceWriter.usedBuffer;
 
+            // Setup unencrypted ciphertext header
             ubyte[TlsCiphertext.HEADER_SIZE] header;
             header[0] = cast(ubyte)TlsPlaintext.ContentType.applicationData;
             header[1] = 0x03;
@@ -467,6 +468,7 @@ struct TlsSocket(UnderlyingSocketT)
             success = lengthWriter.putU16BE(cast(ushort)ciphertext.length);
             assert(success);
             
+            // Write the unencrypted header + encrypted inner payload
             result = this._socket.putScattered([header[], ciphertext], this._config.writeTimeout);
             if(result.isError)
                 return result.wrapError("when sending ciphertext records:");
@@ -480,6 +482,10 @@ struct TlsSocket(UnderlyingSocketT)
         bool allowCompaction = false,
     ) @nogc nothrow
     {
+        // NOTE: This function currently assumes that messages are not split between record boundaries.
+        // TODO: Something more robust.
+
+        // Fetch the next encrypted record
         TlsCiphertext.InnerPlaintext plain;
         MemoryReader plainReader;
 
@@ -491,6 +497,7 @@ struct TlsSocket(UnderlyingSocketT)
         if(result.isError)
             return result.wrapError("when fetching encrypted handshake messages from socket:");
 
+        // The record can hold multiple messages, so keep reading until we run out of bytes.
         while(plainReader.bytesLeft > 0)
         {
             const startCursor = plainReader.cursor;
@@ -533,6 +540,7 @@ struct TlsSocket(UnderlyingSocketT)
         const stagingCursorStart = this._stagingBuffer.cursor;
         while(true) // Handshake records can still get fragmented, so we'll have to keep reading in records until we're done
         {
+            // Ensure we have enough bytes for the header.
             if(this._recordReader.bytesLeft < TlsPlaintext.HEADER_SIZE)
             {
                 if(allowCompaction)
@@ -546,6 +554,7 @@ struct TlsSocket(UnderlyingSocketT)
                     return Result.make(TlsError.peerTooSlow, "when reading plaintext handshake record, peer is sending data way too slowly to comfortably process"); // @suppress(dscanner.style.long_line)
             }
 
+            // Parse the header, and perform some sanity/spec-related checks.
             ubyte contentTypeByte;
             ushort recordVersion;
             ushort length;
@@ -568,6 +577,7 @@ struct TlsSocket(UnderlyingSocketT)
             if(length > TlsPlaintext.MAX_LENGTH)
                 return Result.make(TlsError.alertRecordOverflow, "plaintext record fragment length is too large");
 
+            // Figure out if we have enough space left to store the payload, and perform any additional socket reads until we have enough bytes.
             const maxBytesLeft = this._readBuffer.length - this._recordReader.cursor;
             if(maxBytesLeft < length)
                 return Result.make(TlsError.dataExceedsBuffer, "not enough space in read buffer to store record fragment"); // @suppress(dscanner.style.long_line)
@@ -589,6 +599,7 @@ struct TlsSocket(UnderlyingSocketT)
             auto success = this._recordReader.readBytes(length, fragment);
             assert(success, "bug: how did success fail?");
 
+            // The first read attempt should also contain some extra header information, every other read attempt is just for body data.
             if(isFirst)
             {
                 if(fragment.length < TlsHandshake.HEADER_SIZE)
@@ -611,6 +622,7 @@ struct TlsSocket(UnderlyingSocketT)
                     return Result.make(TlsError.dataExceedsBuffer, "not enough space in staging buffer to store record fragment"); // @suppress(dscanner.style.long_line)
             }
             
+            // Once we've read in enough bytes, pass everything back to the caller.
             const bytesInStaging = this._stagingBuffer.cursor - stagingCursorStart;
             if(bytesInStaging == record.length)
             {
@@ -629,6 +641,7 @@ struct TlsSocket(UnderlyingSocketT)
         import std.traits : EnumMembers;
         import juptune.core.ds : String2;
 
+        // Ensure we have enough header bytes.
         if(this._recordReader.bytesLeft < TlsCiphertext.HEADER_SIZE)
         {
             if(allowCompaction)
@@ -642,6 +655,7 @@ struct TlsSocket(UnderlyingSocketT)
                 return Result.make(TlsError.peerTooSlow, "when reading ciphertext, peer is sending data way too slowly to comfortably process"); // @suppress(dscanner.style.long_line)
         }
 
+        // Parse the header and perform some checks.
         ubyte type;
         ushort version_;
         ushort fragmentLength;
@@ -660,6 +674,7 @@ struct TlsSocket(UnderlyingSocketT)
         if(fragmentLength > TlsCiphertext.MAX_LENGTH)
             return Result.make(TlsError.alertRecordOverflow, "TlsCiphertext record contains a payload greater than 2^14 + 256 in length"); // @suppress(dscanner.style.long_line)
 
+        // Make a best-effort attempt to read in enough bytes from the socket to match the record's length field.
         uint attempts;
         while(this._recordReader.bytesLeft < fragmentLength)
         {
@@ -674,6 +689,7 @@ struct TlsSocket(UnderlyingSocketT)
                 return result.wrapError("when fetching ciphertext record into read buffer");
         }
 
+        // Decrypt the ciphertext body in-place.
         const(ubyte)[] encryptedRecord;
         success = this._recordReader.readBytes(fragmentLength, encryptedRecord);
         assert(success, "bug: success shouldn't be able to be false here?");
