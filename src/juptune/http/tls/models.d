@@ -683,6 +683,15 @@ struct TlsExtension // It's a bit too annoying to use the auto encoder/decoder f
         @LengthRange!ServerName(1, ushort.max)
         const(ubyte)[] severNameList;
     }
+
+    /++ Special ++/
+
+    @RawTlsStruct
+    @OnlyForHandshakeType(TlsHandshake.Type.clientHello)
+    @OnlyForHandshakeType(TlsHandshake.Type.serverHello)
+    static struct EmptyExtensionData
+    {
+    }
 }
 
 struct TlsAlert

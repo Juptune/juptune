@@ -2,6 +2,7 @@ module juptune.http.client;
 
 import juptune.core.ds   : String2;
 import juptune.core.util : Result;
+import juptune.event     : IpAddress;
 
 /++
  + Which version of HTTP to use/has been selected by a `HttpClient`.
@@ -329,7 +330,7 @@ struct HttpClient
         this._tlsReadStorage.length     = 1024 * 17;
         this._tlsStagingStorage.length  = 1024 * 32;
         
-        this._tlsSocket = TlsTcpSocket(&this._socket, this._tlsWriteStorage[], this._tlsReadStorage[], this._tlsStagingStorage[], this._config.tls); // @suppress(dscanner.style.long_line)
+        this._tlsSocket = TlsTcpSocket(&this._socket, this._tlsReadStorage[], this._tlsWriteStorage[], this._tlsStagingStorage[], this._config.tls); // @suppress(dscanner.style.long_line)
         this._https1 = Http1ClientImpl!TlsTcpSocket(this._config, &this._tlsSocket, this._writeBuffer, this._readBuffer); // @suppress(dscanner.style.long_line)
         this._isConnected = true;
         this._selectedVersion = HttpClientVersion.https1;

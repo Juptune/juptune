@@ -31,13 +31,13 @@ private
         ubyte[256] table;
         table[] = INVALID_HEADER_CHAR;
 
-        foreach(ch; 'A'..'Z')
+        foreach(ch; 'A'..'Z'+1)
             table[ch] = cast(ubyte)((ch - 'A') + 'a');
 
-        foreach(ch; 'a'..'z')
+        foreach(ch; 'a'..'z'+1)
             table[ch] = cast(ubyte)ch;
 
-        foreach(ch; '0'..'9')
+        foreach(ch; '0'..'9'+1)
             table[ch] = cast(ubyte)ch;
 
         table['-'] = '-';
@@ -727,7 +727,7 @@ struct Http1ReaderBase(SocketT)
      +
      +  `Http1Error.badResponseCode` if the response code is missing or invalid.
      +
-     +  `Http1Error.badResponseReason` if the response reason phrase is missing or invalid.
+     +  `Http1Error.badResponseReason` if the response reason phrase is invalid.
      +
      +  `Http1Error.badTransport` if it is determined that the transport layer is in a bad state, or if the
      +  sender appears to be malicious/poorly coded.
@@ -788,8 +788,6 @@ struct Http1ReaderBase(SocketT)
         result = this.readUntil!'\n'(slice);
         if(result.isError)
             return result;
-        else if(slice.length == 0)
-            return Result.make(Http1Error.badResponseReason, response!("400", "Empty reason phrase in response line"));
         else if(!(cast(char[])slice[0..$]).isHttp1Reason())
             return Result.make(Http1Error.badResponseReason, response!("400", "Invalid reason phrase in response line")); // @suppress(dscanner.style.long_line)
         responseLine.reasonPhrase = cast(char[])slice[0..$];
@@ -2233,7 +2231,7 @@ bool isHttp1HeaderValue(scope const char[] value) @nogc nothrow pure
 bool isHttp1Reason(scope const char[] value) @nogc nothrow pure
 {
     if(value.length == 0)
-        return false;
+        return true;
 
     foreach(i; 0..value.length)
     {
@@ -3041,6 +3039,19 @@ X-Please: don't crash
                 H("x-some-trailer", "yes"),
                 H("x-please", "don't crash"),
             ]
+        ),
+
+        T(
+`HTTP/1.1 200 
+Content-Length: 0
+
+`,
+            Http1Version.http11, 200, "",
+            [
+                H("content-length", "0"),
+            ], 
+            "",
+            []
         ),
 
         // Keep last - it leaves data in the socket we currently don't skip past.

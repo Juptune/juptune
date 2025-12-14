@@ -380,21 +380,18 @@ private Result readExtensions(
             
             case keyShare:
                 tlsExt.data.keyShare = TlsExtension.KeyShare();
-                if(messageType == TlsHandshake.Type.serverHello)
-                    tlsExt.data.keyShare.set(messageType, autoDecodeExt!(TlsExtension.KeyShareServerHello));
-                else
-                    return Result.make(TlsError.alertIllegalParameter, "extension key_share is not allowed to appear under the current handshake message type"); // @suppress(dscanner.style.long_line)
+                tlsExt.data.keyShare.set(messageType, autoDecodeExt!(TlsExtension.KeyShareServerHello));
                 break;
 
             case supportedVersions:
                 tlsExt.data.supportedVersions = TlsExtension.SupportedVersions();
-                if(messageType == TlsHandshake.Type.serverHello)
-                    tlsExt.data.supportedVersions.set(messageType, autoDecodeExt!(TlsExtension.SupportedVersionsServerHello)); // @suppress(dscanner.style.long_line)
-                else
-                    return Result.make(TlsError.alertIllegalParameter, "extension supported_versions is not allowed to appear under the current handshake message type"); // @suppress(dscanner.style.long_line)
+                tlsExt.data.supportedVersions.set(messageType, autoDecodeExt!(TlsExtension.SupportedVersionsServerHello)); // @suppress(dscanner.style.long_line)
                 break;
             
-            case serverName: assert(false, "TODO: Implement serverName");
+            case serverName:
+                autoDecodeExt!(TlsExtension.EmptyExtensionData);
+                break;
+
             case maxFragmentLength: assert(false, "TODO: Implement maxFragmentLength");
             case statusRequest: assert(false, "TODO: Implement statusRequest");
             case supportedGroups: assert(false, "TODO: Implement supportedGroups");
@@ -533,6 +530,7 @@ in(state.mustBeIn(State.readEncryptedServerHello))
 {
     import std.digest.sha : sha256Of;
     import juptune.crypto.ecdsa : EcdsaGroupName, EcdsaPublicKey, EcdsaSignatureAlgorithm;
+    import juptune.crypto.rsa : RsaPadding, RsaPublicKey, RsaSignatureAlgorithm;
 
     TlsHandshake.CertificateVerify verify;
     auto result = autoDecode!"TlsHandshake.CertificateVerify"(reader, verify);
@@ -588,13 +586,59 @@ in(state.mustBeIn(State.readEncryptedServerHello))
         return Result.noError;
     }
 
+    Result handleRsa(RsaPadding Padding, RsaSignatureAlgorithm SigAlgorithm)()
+    {
+        // TODO: verify subjectPublicKeyAlgorithm
+
+        RsaPublicKey pubKey;
+        auto result = RsaPublicKey.fromAsn1RsaPublicKeyBytes(peerCert.subjectPublicKey.bytes, pubKey);
+        if(result.isError)
+            return result;
+
+        static if(SigAlgorithm == RsaSignatureAlgorithm.sha256)
+        {
+            enum HASH_LENGTH = 32;
+            alias Hasher = sha256Of;
+        }
+        else static assert(false, "TODO: handle this particular curve");
+
+        assert(transcriptHash.length == HASH_LENGTH);
+
+        ubyte[SPACES.length + CONTEXT_STRING.length + SEPARATOR.length + HASH_LENGTH] rawSignature;
+        rawSignature[0..SPACES.length] = 0x20;
+        rawSignature[SPACES.length..SPACES.length + CONTEXT_STRING.length] = cast(const(ubyte)[])CONTEXT_STRING[0..$];
+        rawSignature[SPACES.length + CONTEXT_STRING.length] = SEPARATOR[0];
+        rawSignature[SPACES.length + CONTEXT_STRING.length + SEPARATOR.length..$] = transcriptHash[0..$];
+
+        const rawSignatureHash = Hasher(rawSignature);
+
+        bool success;
+        result = pubKey.verifySignature(
+            verify.signature,
+            rawSignatureHash,
+            Padding,
+            SigAlgorithm,
+            success
+        );
+        if(result.isError)
+            return result;
+
+        if(!success)
+            return Result.make(TlsError.verificationFailed, "failed to verify ECDSA signature in CertificateVerify");
+
+        return Result.noError;
+    }
+
     switch(verify.algorithm) with(TlsHandshake.SignatureScheme)
     {
         case ecdsa_secp256r1_sha256:
             return handleEcdsa!(EcdsaGroupName.secp256r1);
 
+        case rsa_pss_rsae_sha256:
+            return handleRsa!(RsaPadding.pkcs1Pss, RsaSignatureAlgorithm.sha256);
+
         default:
-            return Result.make(TlsError.unsupportedAlgorithm);
+            return Result.make(TlsError.unsupportedAlgorithm, "server selected for an unsupported algorithm");
     }
 
     return Result.noError;

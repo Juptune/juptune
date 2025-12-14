@@ -42,7 +42,7 @@ struct TlsSocket(UnderlyingSocketT)
         MemoryWriter _recordWriter;
         MemoryWriter _stagingBuffer;
 
-        size_t _leftToRead;
+        MemoryReader _leftoverReader; // If non-empty, then recieve wasn't able to pass all the data back to the user, so this reader holds the remaining leftovers (subreader of _readBuffer)
     }
 
     this(
@@ -110,11 +110,11 @@ struct TlsSocket(UnderlyingSocketT)
             }
         );
         if(result.isError)
-            return result;
+            return result.wrapError("when putting ClientHello into staging buffer:");
 
         result = this.sendAsPlaintextRecords(TlsPlaintext.ContentType.handshake, this._stagingBuffer.usedBuffer);
         if(result.isError)
-            return result;
+            return result.wrapError("when sending ClientHello over socket:");
         this._encryptContext.transcript.put(this._stagingBuffer.usedBuffer);
         this._stagingBuffer.cursor = 0;
 
@@ -124,13 +124,13 @@ struct TlsSocket(UnderlyingSocketT)
         MemoryReader serverHelloReader; // NOTE: Subset of _stagingBuffer
         result = this.fetchPlaintextHandshakeRecordsIntoStaging(serverHello, serverHelloReader, allowCompaction: true);
         if(result.isError)
-            return result;
+            return result.wrapError("when fetching unencrypted ServerHello over socket:");
         if(serverHello.messageType != TlsHandshake.Type.serverHello)
             return Result.make(TlsError.alertUnexpectedMessage, "expected incoming ServerHello following outgoing ClientHello"); // @suppress(dscanner.style.long_line)
 
         result = readServerHello(serverHelloReader, this._state, this._encryptContext);
         if(result.isError)
-            return result;
+            return result.wrapError("when parsing unencrypted serverHello:");
         if(serverHelloReader.bytesLeft != 0)
             return Result.make(TlsError.tooManyBytes, "when reading ServerHello, not all bytes needed to be read?");
         this._stagingBuffer.cursor = 0;
@@ -152,79 +152,82 @@ struct TlsSocket(UnderlyingSocketT)
 
         result = this._encryptContext.deriveSharedSecret();
         if(result.isError)
-            return result;
+            return result.wrapError("when deriving handshake secrets:");
 
         result = this._encryptContext.deriveHandshakeSecrets();
         if(result.isError)
-            return result;
+            return result.wrapError("when deriving handshake secrets:");
 
         result = this._encryptContext.deriveTrafficKeys();
         if(result.isError)
-            return result;
+            return result.wrapError("when deriving handshake secrets:");
 
         // Check for and ignore changeCipherSpec
 
         result = this.ignoreChangeCipherSpec(allowCompaction: true);
         if(result.isError)
-            return result;
+            return result.wrapError("when attempting to ignore changeCipherSpec:");
 
         // Read encrypted ServerHello
         
         ulong messageMask;
         X509Certificate peerCert;
 
-        result = this.fetchEncryptedHandshakeMessagesUntilFinished( // NOTE: This also adds each message to the transcript AFTER the callback is called
-            (TlsHandshake message, scope ref MemoryReader messageReader){
-                const typeIndex = 1 << enumIndexOf(message.messageType);
-                if(typeIndex != -1)
-                {
-                    if((messageMask & typeIndex) != 0)
-                        return Result.make(TlsError.alertUnexpectedMessage, "duplicate encrypted handshake messages found"); // @suppress(dscanner.style.long_line)
-                    messageMask |= typeIndex;
-                }
+        while((messageMask & (1 << enumIndexOf(TlsHandshake.Type.finished))) == 0) // Keep reading until we've hit the finished message
+        {
+            result = this.fetchEncryptedHandshakeMessagesUntilFinished( // NOTE: This also adds each message to the transcript AFTER the callback is called
+                (TlsHandshake message, scope ref MemoryReader messageReader){
+                    const typeIndex = 1 << enumIndexOf(message.messageType);
+                    if(typeIndex != -1)
+                    {
+                        if((messageMask & typeIndex) != 0)
+                            return Result.make(TlsError.alertUnexpectedMessage, "duplicate encrypted handshake messages found"); // @suppress(dscanner.style.long_line)
+                        messageMask |= typeIndex;
+                    }
 
-                if((typeIndex & enumIndexOf(TlsHandshake.messageType.finished)) != 0)
-                    return Result.make(TlsError.alertUnexpectedMessage, "no messages after Finished should appear");
+                    if((typeIndex & enumIndexOf(TlsHandshake.messageType.finished)) != 0)
+                        return Result.make(TlsError.alertUnexpectedMessage, "no messages after Finished should appear");
 
-                switch(message.messageType) with(TlsHandshake.Type)
-                {
-                    case encryptedExtensions:
-                        return handleEncryptedExtensions(messageReader.buffer, this._state);
+                    switch(message.messageType) with(TlsHandshake.Type)
+                    {
+                        case encryptedExtensions:
+                            return handleEncryptedExtensions(messageReader.buffer, this._state);
 
-                    case certificate:
-                        return handleServerHelloCertificate(
-                            messageReader, 
-                            this._state,
-                            peerCert,
-                            shSettings.certStore,
-                            shSettings.certPolicy
-                        );
+                        case certificate:
+                            return handleServerHelloCertificate(
+                                messageReader, 
+                                this._state,
+                                peerCert,
+                                shSettings.certStore,
+                                shSettings.certPolicy
+                            );
 
-                    case certificateVerify:
-                        auto verifyTranscript = this._encryptContext.transcript;
-                        auto verifyHash = verifyTranscript.finish();
-                        return handleServerHelloCertificateVerify(
-                            messageReader,
-                            this._state,
-                            peerCert,
-                            verifyHash
-                        );
+                        case certificateVerify:
+                            auto verifyTranscript = this._encryptContext.transcript;
+                            auto verifyHash = verifyTranscript.finish();
+                            return handleServerHelloCertificateVerify(
+                                messageReader,
+                                this._state,
+                                peerCert,
+                                verifyHash
+                            );
 
-                    case finished:
-                        return handleServerHelloFinished(
-                            messageReader,
-                            this._state,
-                            this._encryptContext
-                        );
+                        case finished:
+                            return handleServerHelloFinished(
+                                messageReader,
+                                this._state,
+                                this._encryptContext
+                            );
 
-                    default: break;
-                }
-                return Result.noError;
-            }, 
-            allowCompaction: true
-        );
-        if(result.isError)
-            return result;
+                        default: break;
+                    }
+                    return Result.noError;
+                }, 
+                allowCompaction: true
+            );
+            if(result.isError)
+                return result.wrapError("when parsing encrypted ServerHello:");
+        }
 
         // Finish the client side of the handshake
 
@@ -234,7 +237,7 @@ struct TlsSocket(UnderlyingSocketT)
             &this.sendAsCiphertextRecords!true
         );
         if(result.isError)
-            return result;
+            return result.wrapError("when writing client-side Finished:");
 
         // Finalise encryption state, then we're ready to write!
         
@@ -275,16 +278,22 @@ struct TlsSocket(UnderlyingSocketT)
     {
         import std.algorithm : min;
 
-        if(this._leftToRead > 0)
+        // Fetch from previous socket read if there's anything left over.
+        if(this._leftoverReader.bytesLeft > 0)
         {            
-            const length = min(buffer.length, this._leftToRead);
-            buffer[0..length] = cast(void[])this._recordReader.buffer[this._recordReader.cursor..this._recordReader.cursor+length];
-            this._recordReader.goForward(length);
+            const length = min(buffer.length, this._leftoverReader.bytesLeft);
+            buffer[0..length] = cast(void[])this._leftoverReader.buffer[
+                this._leftoverReader.cursor
+                ..
+                this._leftoverReader.cursor+length
+            ];
+            this._leftoverReader.goForward(length);
             sliceWithData = buffer[0..length];
-
-            this._leftToRead -= length;
             return Result.noError;
         }
+
+        // Otherwise fetch and decrypt the latest ciphertext record.
+        this.compactReadBuffer();
 
         if(timeout == Duration.zero && this._config.alwaysTimeout)
             timeout = this._config.readTimeout;
@@ -293,17 +302,27 @@ struct TlsSocket(UnderlyingSocketT)
         MemoryReader reader;
         auto result = this.fetchAndDecryptSingleCiphertextRecordIntoReadBuffer(plaintext, reader, allowCompaction: true); // @suppress(dscanner.style.long_line)
         if(result.isError)
-            return result;
-        if(plaintext.type != TlsPlaintext.ContentType.applicationData)
+            return result.wrapError("when fetching application data from socket:");
+        
+        // Handle special record types.
+        if(plaintext.type == TlsPlaintext.ContentType.alert)
             return Result.make(TlsError.none, "TODOTODOTODO: Need to handle alerts");
+        else if(plaintext.type == TlsPlaintext.ContentType.handshake)
+        {
+            // This will _usually_ be the server sending us a session ticket after the initial handshake.
+            // Handling this is honestly really annoying, so _for now_ I'll just blindly ignore handshake messages, even though
+            // that's not completely correct behaviour.
+            return recieve(buffer, sliceWithData, timeout); // I really hope this does tail call optimisation lol.
+        }
+        else if(plaintext.type != TlsPlaintext.ContentType.applicationData)
+            return Result.make(TlsError.alertUnexpectedMessage, "when receiving ciphertext record, record has unexpected message type"); // @suppress(dscanner.style.long_line)
 
         const length = min(buffer.length, reader.bytesLeft);
         if(length != reader.bytesLeft)
         {
             buffer[0..$] = cast(void[])reader.buffer[reader.cursor..reader.cursor+length];
             reader.goForward(length);
-            this._leftToRead = reader.bytesLeft;
-            this._recordReader = MemoryReader(reader.buffer, reader.cursor); // It's fine, once it's empty it'll get set correctly by fetchIntoReadBuffer.
+            this._leftoverReader = MemoryReader(reader.buffer, reader.cursor);
 
             sliceWithData = buffer[0..$];
         }
@@ -435,7 +454,7 @@ struct TlsSocket(UnderlyingSocketT)
                 writerIsInPlace: true
             );
             if(result.isError)
-                return result;
+                return result.wrapError("when attempting to encrypt plaintext for transport:");
 
             const ciphertext = inPlaceWriter.usedBuffer;
 
@@ -461,9 +480,6 @@ struct TlsSocket(UnderlyingSocketT)
         bool allowCompaction = false,
     ) @nogc nothrow
     {
-        // FOR NOW I'm hard assuming there's only one encrypted ServerHello ciphertext so I don't lose my mind.
-        // TODO: Handle this properly (robustly)
-
         TlsCiphertext.InnerPlaintext plain;
         MemoryReader plainReader;
 
@@ -473,7 +489,7 @@ struct TlsSocket(UnderlyingSocketT)
             allowCompaction
         );
         if(result.isError)
-            return result;
+            return result.wrapError("when fetching encrypted handshake messages from socket:");
 
         while(plainReader.bytesLeft > 0)
         {
@@ -567,7 +583,7 @@ struct TlsSocket(UnderlyingSocketT)
                 size_t _;
                 auto result = this.fetchIntoReadBuffer(_);
                 if(result.isError)
-                    return result;
+                    return result.wrapError("when fetching plaintext record into read buffer:");
             }
 
             auto success = this._recordReader.readBytes(length, fragment);
@@ -655,7 +671,7 @@ struct TlsSocket(UnderlyingSocketT)
             size_t _;
             auto result = this.fetchIntoReadBuffer(_);
             if(result.isError)
-                return result;
+                return result.wrapError("when fetching ciphertext record into read buffer");
         }
 
         const(ubyte)[] encryptedRecord;
@@ -669,7 +685,7 @@ struct TlsSocket(UnderlyingSocketT)
             record
         );
         if(result.isError)
-            return result;
+            return result.wrapError("when decrypting ciphertext record:");
         
         reader = MemoryReader(record.content); // now unencrypted
         return Result.noError;
@@ -685,7 +701,7 @@ struct TlsSocket(UnderlyingSocketT)
         void[] got;
         auto result = this._socket.recieve(this._readBuffer[cursor..$], got, this._config.readTimeout);
         if(result.isError)
-            return result;
+            return result.wrapError("when fetching data from socket into read buffer:");
 
         bytesFetched = got.length;
         this._recordReader = MemoryReader(this._readBuffer[0..cursor + got.length], this._recordReader.cursor);
@@ -709,6 +725,8 @@ alias TlsTcpSocket = TlsSocket!TcpSocket;
 
 debug unittest
 {
+    import core.time : seconds;
+
     import juptune.event.io : TcpSocket;
     import juptune.core.util : resultAssert;
     import juptune.event;
@@ -721,10 +739,12 @@ debug unittest
         import juptune.http;
 
         IpAddress ip;
-        IpAddress.parse(ip, "142.250.129.138", 443).resultAssert;
+        IpAddress.parse(ip, "3.174.141.120", 443).resultAssert;
 
-        auto client = HttpClient(HttpClientConfig());
-        client.connectTls(ip, "www.google.com").resultAssert;
+        auto client = HttpClient(HttpClientConfig().withTlsConfig(
+            TlsConfig().withReadTimeout(2.seconds)
+        ));
+        client.connectTls(ip, "aws.amazon.com").resultAssert;
 
         HttpRequest req;
         req.withMethod("GET");
@@ -736,7 +756,7 @@ debug unittest
         client.request(req, resp).resultAssert;
 
         import std.file : write;
-        write("test.html", cast(string)resp.body.slice);
+        debug write("test.html", cast(string)resp.body.slice);
     });
     loop.join();
 }

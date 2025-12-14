@@ -53,6 +53,40 @@ version(Juptune_OpenSSL)
             }
         }
 
+        static Result fromAsn1RsaPublicKeyBytes(
+            scope const(ubyte)[] asn1PublicKeyBytes,
+            scope ref RsaPublicKey outResult,
+        ) @nogc nothrow
+        {
+            import juptune.data.asn1.decode.bcd.encoding : asn1DecodeComponentHeader, Asn1ComponentHeader, Asn1Ruleset;
+            import juptune.data.buffer : MemoryReader;
+
+            import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
+                :
+                    RSAPublicKey
+                ;
+
+            auto keyReader = MemoryReader(asn1PublicKeyBytes);
+
+            Asn1ComponentHeader anchorKeyHeader;
+            auto result = asn1DecodeComponentHeader!(Asn1Ruleset.der)(keyReader, anchorKeyHeader);
+            if(result.isError)
+                return result;
+            
+            // TODO: Check header info is correct
+
+            RSAPublicKey asn1PublicKey;
+            result = asn1PublicKey.fromDecoding!(Asn1Ruleset.der)(keyReader, anchorKeyHeader.identifier);
+            if(result.isError)
+                return result;
+
+            return RsaPublicKey.fromBigEndianBytes(
+                asn1PublicKey.getModulus().rawBytes,
+                asn1PublicKey.getPublicExponent().rawBytes,
+                outResult
+            );
+        }
+
         static Result fromBigEndianBytes(
             scope const(ubyte)[] modulus,
             scope const(ubyte)[] exponent,

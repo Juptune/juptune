@@ -1,6 +1,6 @@
 #### Imports from the parent meson.build file ####
 
-juptune_data_dep = juptune_data_dep
+juptune_all_dep = juptune_all_dep
 
 #### Sources ####
 
@@ -18,7 +18,7 @@ dasn1_srcs = files(
 
 dasn1_all_dep = declare_dependency(
     sources: dasn1_srcs,
-    dependencies: [juptune_data_dep],
+    dependencies: [juptune_all_dep],
     include_directories: include_directories('src')
 )
 
