@@ -70,13 +70,17 @@ private enum ConstraintBit
 
     all = singleValue | containedSubtype | valueRange | permittedAlphabet | size | type | innerType | pattern
 }
-private immutable ALL_CONSTRAINT_BITS = (){
-    static struct KVP
-    {
-        string name;
-        ConstraintBit value;
-    }
 
+// BUG: The compiler for some reason outputs a reference to the .toHash function for this symbol, but if we embed it within the
+//      below compile-time-only lambda, the toHash symbol never has code generated for it... causing runtime symbol errors.
+//
+//      So it has to be top-level in order to make everything work correctly.
+private static struct KVP
+{
+    string name;
+    ConstraintBit value;
+}
+private immutable ALL_CONSTRAINT_BITS = (){
     KVP[] bits;
 
     static foreach(Name; __traits(allMembers, ConstraintBit))

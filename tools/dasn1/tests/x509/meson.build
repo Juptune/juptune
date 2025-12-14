@@ -1,12 +1,12 @@
 #### Imports from the parent meson.build file ####
 
-juptune_data_dep = juptune_data_dep
+juptune_all_dep = juptune_all_dep
 
 #### Test ####
 
 test_x509_exe = executable(
     'test-x509',
-    dependencies: [juptune_data_dep],
+    dependencies: [juptune_all_dep],
     sources: files(
         './main.d',
         

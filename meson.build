@@ -217,6 +217,7 @@ pkgc.generate(
     subdirs: 'd/juptune',
     url: 'https://www.github.com/Juptune/juptune',
     libraries: [juptune_lib],
+    d_module_versions: juptune_d_versions
 )
 
 #### Tests ####

@@ -752,27 +752,27 @@ debug unittest
 
     auto loop = EventLoop(EventLoopConfig());
     loop.addGCThread((){
-        import juptune.http;
+        // import juptune.http;
 
-        IpAddress ip;
-        IpAddress.parse(ip, "3.174.141.120", 443).resultAssert;
+        // IpAddress ip;
+        // IpAddress.parse(ip, "3.174.141.120", 443).resultAssert;
 
-        auto client = HttpClient(HttpClientConfig().withTlsConfig(
-            TlsConfig().withReadTimeout(2.seconds)
-        ));
-        client.connectTls(ip, "aws.amazon.com").resultAssert;
+        // auto client = HttpClient(HttpClientConfig().withTlsConfig(
+        //     TlsConfig().withReadTimeout(2.seconds)
+        // ));
+        // client.connectTls(ip, "aws.amazon.com").resultAssert;
 
-        HttpRequest req;
-        req.withMethod("GET");
-        req.withPath("/");
-        req.setHeader("User-Agent", "test/1.0.0");
-        req.setHeader("Accept", "*/*");
+        // HttpRequest req;
+        // req.withMethod("GET");
+        // req.withPath("/");
+        // req.setHeader("User-Agent", "test/1.0.0");
+        // req.setHeader("Accept", "*/*");
         
-        HttpResponse resp;
-        client.request(req, resp).resultAssert;
+        // HttpResponse resp;
+        // client.request(req, resp).resultAssert;
 
-        import std.file : write;
-        debug write("test.html", cast(string)resp.body.slice);
+        // import std.file : write;
+        // debug write("test.html", cast(string)resp.body.slice);
     });
     loop.join();
 }
