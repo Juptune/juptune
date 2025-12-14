@@ -693,7 +693,8 @@ private struct IoUringNativeLinuxDriver
         auto head     = *cast(uint*)(this.cqPtr + this.ioUringParams.cq_off.head);
         scope tailPtr = cast(uint*)(this.cqPtr + this.ioUringParams.cq_off.tail);
         const cqMask  = *cast(uint*)(this.cqPtr + this.ioUringParams.cq_off.ring_mask);
-        while(head != atomicLoad!(MemoryOrder.acq)(*tailPtr))
+        const tail    = atomicLoad!(MemoryOrder.acq)(*tailPtr);
+        while(head != tail)
         {
             const headIndex = head & cqMask;
             const cqe = cqeSlice[headIndex];
