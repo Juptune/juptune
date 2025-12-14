@@ -35,7 +35,7 @@ struct EventLoopConfig
     EventLoopConfig withSigtermHandler(bool value) return { this.handleSigterm = value; return this; }
 }
 
-struct CancelToken
+shared struct CancelToken
 {
     shared @nogc nothrow:
 
@@ -245,7 +245,10 @@ private struct LoopThread
     FiberAllocator fiberAllocator;
     IoUring ioUring;
     ArrayNonShrink!(JuptuneFiber*) yieldedFibers;
+    ArrayNonShrink!(JuptuneFiber*) yieldedFibersSubmitQueueIsFull;
+    ArrayNonShrink!(JuptuneFiber*) fibersToWakeUpLast;
     EventLoopThreadStats stats;
+    bool submitQueueIsFull;
 }
 
 /++
@@ -285,8 +288,11 @@ private void loopThreadMain(bool IsGCThread)(scope LoopThread* loopThread) nothr
 
     while(true)
     {
+        loopThread.submitQueueIsFull = false;
+
         // Handle io_uring
-        loopThread.ioUring.opDispatch!"enter"(loopThread.yieldedFibers.length > 0 ? 0 : 1); // Only wait if we have no yields to attend to
+        const fibersWaiting = loopThread.yieldedFibers.length + loopThread.yieldedFibersSubmitQueueIsFull.length;
+        loopThread.ioUring.opDispatch!"enter"(fibersWaiting > 0 ? 0 : 1); // Only block the thread if we have no yields to attend to
         loopThread.ioUring.opDispatch!"processCompletions"((IoUringCompletion c) nothrow @nogc 
         {
             loopThread.stats.cqeTotal++;
@@ -306,10 +312,17 @@ private void loopThreadMain(bool IsGCThread)(scope LoopThread* loopThread) nothr
                     assert(fiber.isInWaitingState);
 
                     loopThread.stats.cqeAwokeFiber++;
-                    fiber.state = JuptuneFiber.state.running;
                     fiber.lastCqe = c;
-                    juptuneFiberSwap(fiber);
-                    loopThreadOnAfterFiberSwap(fiber);
+
+                    // Naive attempt at giving each fiber a fair chance to run.
+                    if(fibersWaiting > 0)
+                        loopThread.fibersToWakeUpLast.put(fiber);
+                    else
+                    {
+                        fiber.state = JuptuneFiber.State.running;
+                        juptuneFiberSwap(fiber);
+                        loopThreadOnAfterFiberSwap(fiber);
+                    }
                     break;
 
                 case JuptuneUringUserDataTag.FAILSAFE:
@@ -317,25 +330,46 @@ private void loopThreadMain(bool IsGCThread)(scope LoopThread* loopThread) nothr
             }
         });
 
-        // Handle non-io yielded fibers
-        const yieldedFiberCount = loopThread.yieldedFibers.length;
-        foreach(i; 0..yieldedFiberCount)
+        // TODO: This is poorly coded jank, make it better
+        void handleFibers(bool ShrinkArray, alias ShouldCircuitBreak)(
+            scope ref ArrayNonShrink!(JuptuneFiber*) array, 
+        )
         {
-            scope fiber = loopThread.yieldedFibers[i];
-            fiber.state = JuptuneFiber.State.running;
-            juptuneFiberSwap(fiber);
-            loopThreadOnAfterFiberSwap(fiber);
-            loopThread.yieldedFibers[i] = null;
+            const yieldedFiberCount = array.length;
+            foreach(i; 0..yieldedFiberCount)
+            {
+                if(ShouldCircuitBreak())
+                    break;
+
+                scope fiber = array[i];
+                fiber.state = JuptuneFiber.State.running;
+                juptuneFiberSwap(fiber);
+                loopThreadOnAfterFiberSwap(fiber);
+                array[i] = null;
+            }
+
+            static if(ShrinkArray)
+            {
+                const yieldedFiberDiff = array.length - yieldedFiberCount;
+                if(yieldedFiberDiff == 0)
+                    array.length = 0;
+                else
+                {
+                    array[0..yieldedFiberDiff] = array[yieldedFiberCount..$];
+                    array.length = yieldedFiberDiff;
+                }
+            }
         }
 
-        const yieldedFiberDiff = loopThread.yieldedFibers.length - yieldedFiberCount;
-        if(yieldedFiberDiff == 0)
-            loopThread.yieldedFibers.length = 0;
-        else
-        {
-            loopThread.yieldedFibers[0..yieldedFiberDiff] = loopThread.yieldedFibers[yieldedFiberCount..$];
-            loopThread.yieldedFibers.length = yieldedFiberDiff;
-        }
+        // Handle non-io yielded fibers
+        handleFibers!(true, () => false)(loopThread.yieldedFibers);
+
+        // Handle fibers waiting for submit queue space (only if the queue isn't full)
+        handleFibers!(true, () => loopThread.submitQueueIsFull)(loopThread.yieldedFibersSubmitQueueIsFull);
+
+        // Handle fibers that had a CQE come through while other fibers are waiting
+        handleFibers!(false, () => false)(loopThread.fibersToWakeUpLast);
+        loopThread.fibersToWakeUpLast.length = 0;
 
         if(juptuneLoopThreadGetFiberCount() == 0)
             break;
@@ -452,6 +486,18 @@ enum JuptuneEventLoopError
      + and should begin to gracefully exit.
      + ++/
     threadWasCanceled
+}
+
+/// The main reason for yielding a fiber.
+enum YieldReason
+{
+    FAILSAFE,
+
+    /// The fiber is being yielded because the io_uring submit queue is full.
+    submitQueueIsFull,
+
+    /// The fiber is being yielded for some other reason.
+    other,
 }
 
 /++
@@ -633,6 +679,14 @@ private Result asyncWithContextImpl(EntryPointT, ContextT)(
  + If you need/want to delay execution of the fiber then please use the (not currently implemented!) `yieldSleep`
  + function instead. This will allow the event loop thread to sleep, easing CPU usage.
  +
+ + Reasons:
+ +  When `reason` is `YieldReason.submitQueueIsFull`, this allows the event loop to optimise its "wake up" loop
+ +  so that the current fiber is only ever called when the submit queue is guarenteed to be empty. Without this
+ +  reason, the fiber may be woken up only to then see that the submit queue is once again full, and immediately yields.
+ +
+ + Params:
+ +  reason = The reason for yielding the fiber.
+ +
  + Throws:
  +  `JuptuneEventLoopError.threadWasCanceled` if the thread has been canceled. This is not
  +  an actual error, but is simply used as a mechanism to encourage you to write code that can gracefully exit
@@ -641,12 +695,18 @@ private Result asyncWithContextImpl(EntryPointT, ContextT)(
  + Returns:
  +  A `Result`
  + ++/
-Result yield() @nogc nothrow
+Result yield(YieldReason reason = YieldReason.other) @nogc nothrow
+in(reason != YieldReason.FAILSAFE, "bug: reason is FAILSAFE?")
 {
     scope loopThread = juptuneLoopThreadGetThis();
     auto fiber = juptuneFiberGetThis();
     fiber.state = JuptuneFiber.State.waitingForReschedule;
-    loopThread.yieldedFibers.put(fiber);
+    
+    if(reason == YieldReason.submitQueueIsFull)
+        loopThread.yieldedFibersSubmitQueueIsFull.put(fiber);
+    else
+        loopThread.yieldedFibers.put(fiber);
+    
     juptuneFiberSwap(juptuneFiberGetRoot());
 
     if(juptuneEventLoopIsThreadCanceled())
@@ -702,6 +762,8 @@ Result juptuneEventLoopSubmitEvent(Command)(
 
     while(loopThread.ioUring.opDispatch!"submitTimeout"(command, config.timeout) == SubmitQueueIsFull.yes)
     {
+        loopThread.submitQueueIsFull = true;
+
         auto yieldResult = yield();
         if(yieldResult.isError)
             return yieldResult;
