@@ -64,7 +64,7 @@ version(linux) private
 
     immutable _g_defaultDriver = IoUringDriver.native;
 
-    alias FileDescriptor        = int;
+    public alias FileDescriptor = int;
     alias IoUringNativeDriver   = IoUringNativeLinuxDriver;
     alias IoUringEmulatedDriver = IoUringEmulatedPosixDriver;
     mixin IoUringTests!(IoUringDriver.native);
@@ -416,7 +416,7 @@ package struct IoUring
 
     // Note: It's recommended to call opDispatch directly instead of relying on
     //       the compiler's lowering; simply because the error messages are actually useful in the former case.
-    auto opDispatch(string name, Params...)(auto ref Params params)
+    auto opDispatch(string name, Params...)(scope auto ref Params params)
     {
         import std.traits : ReturnType;
 
@@ -431,6 +431,13 @@ package struct IoUring
         }}
 
         assert(false, "No implementation for the selected driver is available");
+    }
+
+    // TODO: Look into why the compiler's being a moany cow when using opDispatch
+    void processCompletions(scope void delegate(IoUringCompletion) nothrow @nogc handler) nothrow @nogc
+    in(this.driver == IoUringDriver.native)
+    {
+        this.drivers.native.processCompletions(handler);
     }
 }
 
@@ -515,6 +522,16 @@ struct IoUringWritev
     @MapField("off") ulong _offset = -1; // Do not change
 }
 
+/// io_uring's special MSG_RING call
+struct IoUringMsgRing
+{
+    mixin GenerateDriverFuncs!(IORING_OP_MSG_RING);
+
+    FileDescriptor fd;
+    @MapField("len") uint value32;
+    @MapField("off") ulong value64;
+}
+
 package struct IoUringTimeoutUserData
 {
     timespec64 timeout;
@@ -540,9 +557,12 @@ private struct IoUringNativeLinuxDriver
     ulong[] sqeInUseMasks; // allocated with malloc
     IoUringTimeoutUserData[] timeoutUserData; // allocated with malloc
 
+    bool hasInit;
+
     @nogc nothrow:
 
     Result initDriver(const IoUringConfig config)
+    in(!this.hasInit, "driver already initiatied")
     {
         import core.stdc.stdlib : malloc;
         import core.sys.posix.signal : signal, SIG_IGN, SIGPIPE;
@@ -550,6 +570,7 @@ private struct IoUringNativeLinuxDriver
 
         signal(SIGPIPE, SIG_IGN); // Convenient place to put this
 
+        this.hasInit = true;
         this.config = config;
         this.enableFeatures();
 
@@ -633,6 +654,8 @@ private struct IoUringNativeLinuxDriver
     {
         import core.stdc.stdlib : free;
 
+        this.hasInit = false;
+
         if(this.ioUringFd > 0)
         {
             close(this.ioUringFd);
@@ -654,12 +677,14 @@ private struct IoUringNativeLinuxDriver
 
     private alias _submitTest = submit!IoUringNop;
     SubmitQueueIsFull submit(Command)(Command command)
+    in(this.hasInit, "driver hasn't been initiated yet")
     {
         return this.submitImpl(command, (_, __){});
     }
 
     private alias _submitTimeoutTest = submitTimeout!IoUringNop;
     SubmitQueueIsFull submitTimeout(Command)(Command command, Duration timeout)
+    in(this.hasInit, "driver hasn't been initiated yet")
     {
         if(timeout == Duration.zero)
             return this.submitImpl(command, (_, __){});
@@ -687,6 +712,7 @@ private struct IoUringNativeLinuxDriver
     }
 
     void processCompletions(scope void delegate(IoUringCompletion) nothrow @nogc handler) nothrow @nogc
+    in(this.hasInit, "driver hasn't been initiated yet")
     {
         import core.atomic : atomicStore, atomicLoad, MemoryOrder;
 
@@ -706,6 +732,7 @@ private struct IoUringNativeLinuxDriver
     }
 
     void enter(uint minCompletes = 0)
+    in(this.hasInit, "driver hasn't been initiated yet")
     {
         uint flags = 0;
         if(minCompletes > 0)
@@ -758,6 +785,7 @@ private struct IoUringNativeLinuxDriver
         scope void delegate(io_uring_sqe*, uint) @nogc nothrow modifyFunc
     )
     in(this.pendingSubmits <= this.ioUringParams.sq_entries, "Bug: pendingSubmits is larger than the SQE count")
+    in(this.hasInit, "driver hasn't been initiated yet")
     {
         import core.atomic : atomicStore, MemoryOrder;
 
@@ -785,6 +813,7 @@ private struct IoUringNativeLinuxDriver
     }
 
     private uint allocateNextSqe()
+    in(this.hasInit, "driver hasn't been initiated yet")
     {
         import core.bitop : bsf;
 
@@ -804,6 +833,7 @@ private struct IoUringNativeLinuxDriver
     }
 
     private void freeSqe(uint index)
+    in(this.hasInit, "driver hasn't been initiated yet")
     {
         enum BitsPerLong = ulong.sizeof * 8;
         const maskLong = index / BitsPerLong;
@@ -813,6 +843,7 @@ private struct IoUringNativeLinuxDriver
     }
 
     private void enableFeatures()
+    in(this.hasInit, "driver hasn't been initiated yet")
     {
         if(g_linuxKernal.major > 5 || (g_linuxKernal.major == 5 && g_linuxKernal.minor >= 18))
             this.ioUringParams.flags |= IORING_SETUP_SUBMIT_ALL;

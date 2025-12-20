@@ -109,11 +109,17 @@ data_srcs = files(
 )
 
 event_srcs = files(
+    './src/juptune/event/channel.d',
     './src/juptune/event/fiber.d',
     './src/juptune/event/io.d',
     './src/juptune/event/iouring.d',
-    './src/juptune/event/loop.d',
     './src/juptune/event/package.d',
+
+    './src/juptune/event/loop/async.d',
+    './src/juptune/event/loop/core.d',
+    './src/juptune/event/loop/package.d',
+    './src/juptune/event/loop/scheduler.d',
+    './src/juptune/event/loop/tests.d',
 )
 
 http_srcs = files(

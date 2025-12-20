@@ -4,10 +4,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
-module juptune.event;
+module juptune.event.loop;
 
-public import 
-    juptune.event.channel,
-    juptune.event.io,
-    juptune.event.loop
+public import
+    juptune.event.loop.async,
+    juptune.event.loop.core,
+    juptune.event.loop.scheduler
 ;
