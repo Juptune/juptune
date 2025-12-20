@@ -771,16 +771,22 @@ struct X509CertificateStore
 private __gshared X509CertificateStore g_platformDefaultStore;
 shared static this()
 {
-    import std.file : readText;
+    import std.file : readText, exists;
     import juptune.core.util : resultAssert;
 
     version(linux)
     {
-        const pem = readText("/etc/ssl/ca-bundle.pem");
+        auto bundlePath = "/etc/ssl/ca-bundle.pem";
+        if(!exists(bundlePath))
+            bundlePath = "/etc/ssl/certs/ca-certificates.crt";
+
+        if(exists(bundlePath))
+        {
+            const pem = readText(bundlePath);
+            g_platformDefaultStore.loadBundleFromPem(pem, ignoreAsn1DecodingErrors: true, hasImplicitTrust: true).resultAssert; // @suppress(dscanner.style.long_line)
+        }
     }
     else static assert(false, "TODO: add platform");
-
-    g_platformDefaultStore.loadBundleFromPem(pem, ignoreAsn1DecodingErrors: true, hasImplicitTrust: true).resultAssert;
 }
 
 /++
