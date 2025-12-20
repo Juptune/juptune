@@ -1,0 +1,1 @@
+option('lightweight-results', type: 'boolean', value: false, description: 'If true, then the Result type will be compiled with less information - this is faster but provides less debug info.')

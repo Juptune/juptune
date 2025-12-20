@@ -30,6 +30,15 @@ else
     error('No secondary cryptography library found.')
 endif
 
+#### Options ####
+
+if get_option('lightweight-results')
+    juptune_d_versions += [
+        'Juptune_Result_NoLineInfo',
+        'Juptune_Result_NoContext',
+    ]
+endif
+
 summary({
     'D Versions': juptune_d_versions,
 }, section: 'Dependencies')

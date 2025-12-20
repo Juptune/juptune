@@ -12,6 +12,24 @@ import juptune.core.ds : String, String2;
 import std.traits : getUDAs;
 alias InheritResults(alias Symbol) = getUDAs!(Symbol, Result);
 
+version(Juptune_Result_NoLineInfo)
+{
+    private enum HaveLineInfo = false;
+}
+else
+{
+    private enum HaveLineInfo = true;
+}
+
+version(Juptune_Result_NoContext)
+{
+    private enum HaveContext = false;
+}
+else
+{
+    private enum HaveContext = true;
+}
+
 @mustuse
 struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
 {
@@ -20,11 +38,30 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
     int             errorCode;
     TypeInfo_Enum   errorType;
     string          error;
-    String2         context;
-    string          file;
-    string          module_;
-    string          function_;
-    size_t          line;
+
+    static if(HaveContext)
+    {
+        String2 context;
+    }
+    else
+    {
+        String2 context()() => String2.init;
+    }
+
+    static if(HaveLineInfo)
+    {
+        string file;
+        string module_;
+        string function_;
+        size_t line;
+    }
+    else
+    {
+        string file()() => string.init;
+        string module_()() => string.init;
+        string function_()() => string.init;
+        size_t line()() => size_t.init;
+    }
 
     void toString(OutputRange)(auto ref OutputRange range) const @trusted
     {
@@ -33,19 +70,25 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
         range.put("=========================\n");
         range.put("| RESULT INFORMATION    |\n");
         range.put("=========================\n");
-        range.put("File:     "); range.put(this.file); range.put("\n");
-        range.put("Module:   "); range.put(this.module_); range.put("\n");
-        range.put("Function: "); range.put(this.function_); range.put("\n");
-        range.put("Line:     "); toStringSink(this.line, range); range.put("\n");
+        static if(HaveLineInfo)
+        {
+            range.put("File:     "); range.put(this.file); range.put("\n");
+            range.put("Module:   "); range.put(this.module_); range.put("\n");
+            range.put("Function: "); range.put(this.function_); range.put("\n");
+            range.put("Line:     "); toStringSink(this.line, range); range.put("\n");
+        }
         range.put("-------------------------\n");
         range.put("Code:     "); toStringSink(this.errorCode, range); range.put("\n");
         range.put("Type:     "); range.put(this.errorType.name); range.put("\n");
         range.put("Error:    "); range.put(this.error);
 
-        if(this.context.length)
+        static if(HaveContext)
         {
-            range.put("\n");
-            range.put(this.context.sliceMaybeFromStack);
+            if(this.context.length)
+            {
+                range.put("\n");
+                range.put(this.context.sliceMaybeFromStack);
+            }
         }
     }
 
@@ -58,11 +101,19 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
         this.errorCode = other.errorCode;
         this.errorType = other.errorType;
         this.error     = other.error;
-        this.context   = other.context;
-        this.file      = other.file;
-        this.module_   = other.module_;
-        this.function_ = other.function_;
-        this.line      = other.line;
+        
+        static if(HaveContext)
+        {
+            this.context   = other.context;
+        }
+
+        static if(HaveLineInfo)
+        {
+            this.file      = other.file;
+            this.module_   = other.module_;
+            this.function_ = other.function_;
+            this.line      = other.line;
+        }
     }
 
     void opAssign(T)(auto ref T other)
@@ -70,11 +121,19 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
         this.errorCode = other.errorCode;
         this.errorType = other.errorType;
         this.error     = other.error;
-        this.context   = other.context;
-        this.file      = other.file;
-        this.module_   = other.module_;
-        this.function_ = other.function_;
-        this.line      = other.line;
+
+        static if(HaveContext)
+        {
+            this.context   = other.context;
+        }
+
+        static if(HaveLineInfo)
+        {
+            this.file      = other.file;
+            this.module_   = other.module_;
+            this.function_ = other.function_;
+            this.line      = other.line;
+        }
     }
 
     bool opEquals()(scope auto ref Result other) const @nogc nothrow
@@ -109,12 +168,19 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
         r.errorCode = errorCode;
         r.errorType = typeid(Unqual!T); 
         r.error     = error;
-        r.context   = context;
 
-        r.file      = FILE;
-        r.module_   = MODULE;
-        r.function_ = FUNCTION;
-        r.line      = LINE;
+        static if(HaveContext)
+        {
+            r.context   = context;
+        }
+
+        static if(HaveLineInfo)
+        {
+            r.file      = FILE;
+            r.module_   = MODULE;
+            r.function_ = FUNCTION;
+            r.line      = LINE;
+        }
 
         return r;
     }
@@ -138,12 +204,19 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
         r.errorCode = errorCode;
         r.errorType = typeid(Unqual!T); 
         r.error     = error;
-        r.context   = String2(context.slice);
 
-        r.file      = FILE;
-        r.module_   = MODULE;
-        r.function_ = FUNCTION;
-        r.line      = LINE;
+        static if(HaveContext)
+        {
+            r.context   = String2(context.slice);
+        }
+
+        static if(HaveLineInfo)
+        {
+            r.file      = FILE;
+            r.module_   = MODULE;
+            r.function_ = FUNCTION;
+            r.line      = LINE;
+        }
 
         return r;
     }
@@ -172,8 +245,12 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
     Result wrapError(string newError) @trusted
     {
         Result r = this;
-        r.context = String2(r.error, " ", r.context.sliceMaybeFromStack);
         r.error = newError;
+
+        static if(HaveContext)
+        {
+            r.context = String2(r.error, " ", r.context.sliceMaybeFromStack);
+        }
         return r;
     }
 
