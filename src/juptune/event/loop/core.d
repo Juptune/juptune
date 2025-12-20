@@ -255,21 +255,7 @@ package struct LoopThread
     ArrayNonShrink!(JuptuneFiber*) yieldedFibers;
     ArrayNonShrink!(JuptuneFiber*) yieldedFibersSubmitQueueIsFull;
     ArrayNonShrink!(JuptuneFiber*) fibersToWakeUpLast;
-    EventLoopThreadStats stats;
     bool submitQueueIsFull;
-}
-
-/++
- + A simple struct used to track certain stats of the EventLoop.
- + ++/
-struct EventLoopThreadStats
-{
-    ulong cqeTotal; /// How many CQEs have been generated in total
-    ulong cqeIgnored; /// How many CQEs have been ignored (e.g because their user data is USER_DATA_IGNORE) in total
-    ulong cqeAwokeFiber; /// How many CQEs have caused a fiber to wake up in total
-    invariant(cqeTotal == cqeIgnored + cqeAwokeFiber);
-
-    ulong fibersWaitingOnIo; /// How many fibers are actively waiting for an io_uring CQE to wake them up
 }
 
 package void loopThreadOnAfterFiberSwap(scope ref JuptuneFiber* fiber) @nogc nothrow
@@ -290,12 +276,7 @@ in(g_thisLoopThread !is null, "This function was called outside of the event loo
 package size_t juptuneLoopThreadGetFiberCount() @nogc nothrow
 {
     scope loopThread = juptuneLoopThreadGetThis();
-    size_t sum;
-    
-    sum += loopThread.fiberAllocator.allocatedFiberCount;
-    sum += loopThread.stats.fibersWaitingOnIo;
-
-    return sum;
+    return loopThread.fiberAllocator.allocatedFiberCount;
 }
 
 package IoUringCompletion juptuneEventLoopGetLastCompletion() @nogc nothrow
@@ -364,17 +345,4 @@ bool juptuneEventLoopIsThreadCanceled() @nogc nothrow
     scope loopThread = juptuneLoopThreadGetThis();
     return loopThread.cancelToken.isCancelled
         || loopThread.loop._cancelToken.isCancelled;
-}
-
-/++
- + Accesses the current event loop's `EventLoopThreadStats`.
- +
- + This is a pointer to the live underlying data, so will always be up to date.
- +
- + Returns:
- +  A pointer to the event loop's `EventLoopThreadStats`.
- + ++/
-const(EventLoopThreadStats)* juptuneEventLoopGetStats() scope @nogc nothrow
-{
-    return &juptuneLoopThreadGetThis().stats;
 }

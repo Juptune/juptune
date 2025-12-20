@@ -85,30 +85,24 @@ private void schedulerHandleCqes(scope LoopThread* loopThread) @nogc nothrow
     });
 }
 
-private void schedulerOnCqe(IoUringCompletion c, size_t fibersWaiting) nothrow @nogc 
+private void schedulerOnCqe(IoUringCompletion cqe, size_t fibersWaiting) nothrow @nogc 
 {
     auto loopThread = g_thisLoopThread;
-    loopThread.stats.cqeTotal++;
 
     // USER_DATA_IGNORE means "this CQE was generated for an SQE that we don't care about the results of"
-    if(c.userData is USER_DATA_IGNORE)
-    {
-        loopThread.stats.cqeIgnored++;
+    if(cqe.userData is USER_DATA_IGNORE)
         return;
-    }
 
     // In all other cases, the userData will be a struct that mixes in the JuptuneUringUserDataType template,
     // which will set the first byte to a JuptuneUringUserDataTag for us to switch on.
-    const tag = cast(JuptuneUringUserDataTag)*cast(ubyte*)c.userData;
+    const tag = cast(JuptuneUringUserDataTag)*cast(ubyte*)cqe.userData;
 
     final switch(tag)
     {
         case JuptuneUringUserDataTag.JuptuneFiber:
-            scope fiber = cast(JuptuneFiber*)c.userData;
+            scope fiber = cast(JuptuneFiber*)cqe.userData;
             assert(fiber.isInWaitingState);
-
-            loopThread.stats.cqeAwokeFiber++;
-            fiber.lastCqe = c;
+            fiber.lastCqe = cqe;
 
             // Naive attempt at giving each fiber a fair chance to run.
             if(fibersWaiting > 0)

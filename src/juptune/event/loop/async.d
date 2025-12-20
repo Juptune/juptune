@@ -15,9 +15,6 @@ import std.typecons : Flag;
 package void juptuneLoopThreadAsyncYield() @nogc nothrow
 {
     scope loopThread = juptuneLoopThreadGetThis();
-    loopThread.stats.fibersWaitingOnIo++;
-    scope(exit) loopThread.stats.fibersWaitingOnIo--;
-
     scope fiber = juptuneFiberGetThis();
     fiber.state = JuptuneFiber.State.waitingForCompletionEvent;
     juptuneFiberSwap(juptuneFiberGetRoot());

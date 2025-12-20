@@ -35,9 +35,6 @@ unittest
     auto loop = EventLoop(EventLoopConfig());
     loop.addNoGCThread(() @nogc nothrow {
         juptuneEventLoopSubmitEvent(IoUringNop(), IoUringCompletion.ignore).resultAssert;
-        assert(juptuneEventLoopGetStats().cqeTotal == 1);
-        assert(juptuneEventLoopGetStats().cqeIgnored == 0);
-        assert(juptuneEventLoopGetStats().cqeAwokeFiber == 1);
         juptuneEventLoopCancelThread();
     });
     loop.addNoGCThread(() @nogc nothrow {
@@ -47,9 +44,6 @@ unittest
             SubmitEventConfig().shouldYieldUntilCompletion(false)
         ).resultAssert;
         yield().resultAssert;
-        assert(juptuneEventLoopGetStats().cqeTotal == 1);
-        assert(juptuneEventLoopGetStats().cqeIgnored == 1);
-        assert(juptuneEventLoopGetStats().cqeAwokeFiber == 0);
         juptuneEventLoopCancelThread();
     });
     loop.join();
@@ -62,9 +56,6 @@ unittest
     loop.addGCThread(() nothrow {
         auto forceGCFiber = new int(); // @suppress(dscanner.suspicious.unused_variable)
         juptuneEventLoopSubmitEvent(IoUringNop(), IoUringCompletion.ignore).resultAssert;
-        assert(juptuneEventLoopGetStats().cqeTotal == 1);
-        assert(juptuneEventLoopGetStats().cqeIgnored == 0);
-        assert(juptuneEventLoopGetStats().cqeAwokeFiber == 1);
         juptuneEventLoopCancelThread();
     });
     loop.addGCThread(() nothrow {
@@ -75,9 +66,6 @@ unittest
             SubmitEventConfig().shouldYieldUntilCompletion(false)
         ).resultAssert;
         yield().resultAssert;
-        assert(juptuneEventLoopGetStats().cqeTotal == 1);
-        assert(juptuneEventLoopGetStats().cqeIgnored == 1);
-        assert(juptuneEventLoopGetStats().cqeAwokeFiber == 0);
         juptuneEventLoopCancelThread();
     });
     loop.join();
