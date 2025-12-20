@@ -191,7 +191,7 @@ struct TlsSocket(UnderlyingSocketT)
                     switch(message.messageType) with(TlsHandshake.Type)
                     {
                         case encryptedExtensions:
-                            return handleEncryptedExtensions(messageReader.buffer, this._state);
+                            return handleEncryptedExtensions(messageReader.buffer, this._state).wrapError("when reading encryptedExtensions:"); // @suppress(dscanner.style.long_line)
 
                         case certificate:
                             return handleServerHelloCertificate(
@@ -200,7 +200,7 @@ struct TlsSocket(UnderlyingSocketT)
                                 peerCert,
                                 shSettings.certStore,
                                 shSettings.certPolicy
-                            );
+                            ).wrapError("when reading certificate:");
 
                         case certificateVerify:
                             auto verifyTranscript = this._encryptContext.transcript;
@@ -210,14 +210,14 @@ struct TlsSocket(UnderlyingSocketT)
                                 this._state,
                                 peerCert,
                                 verifyHash
-                            );
+                            ).wrapError("when reading certificateVerify");
 
                         case finished:
                             return handleServerHelloFinished(
                                 messageReader,
                                 this._state,
                                 this._encryptContext
-                            );
+                            ).wrapError("when reading finished");
 
                         default: break;
                     }
@@ -418,7 +418,10 @@ struct TlsSocket(UnderlyingSocketT)
         return Result.noError;
     }
 
-    private Result sendAsCiphertextRecords(bool asClient)(TlsPlaintext.ContentType type, scope const(ubyte)[] bytes) @nogc nothrow
+    private Result sendAsCiphertextRecords(bool asClient)(
+        TlsPlaintext.ContentType type, 
+        scope const(ubyte)[] bytes
+    ) @nogc nothrow
     {
         import std.algorithm : min;
         import juptune.crypto.libsodium : crypto_aead_chacha20poly1305_ietf_abytes;
@@ -750,30 +753,30 @@ debug unittest
     import std.exception;
     import std.file : readText;
 
-    auto loop = EventLoop(EventLoopConfig());
-    loop.addGCThread((){
-        // import juptune.http;
+    // auto loop = EventLoop(EventLoopConfig());
+    // loop.addGCThread((){
+    //     import juptune.http;
 
-        // IpAddress ip;
-        // IpAddress.parse(ip, "3.174.141.120", 443).resultAssert;
+    //     IpAddress ip;
+    //     IpAddress.parse(ip, "104.16.124.96", 443).resultAssert;
 
-        // auto client = HttpClient(HttpClientConfig().withTlsConfig(
-        //     TlsConfig().withReadTimeout(2.seconds)
-        // ));
-        // client.connectTls(ip, "aws.amazon.com").resultAssert;
+    //     auto client = HttpClient(HttpClientConfig().withTlsConfig(
+    //         TlsConfig().withReadTimeout(2.seconds)
+    //     ));
+    //     client.connectTls(ip, "www.cloudflare.com").resultAssert;
 
-        // HttpRequest req;
-        // req.withMethod("GET");
-        // req.withPath("/");
-        // req.setHeader("User-Agent", "test/1.0.0");
-        // req.setHeader("Accept", "*/*");
+    //     HttpRequest req;
+    //     req.withMethod("GET");
+    //     req.withPath("/");
+    //     req.setHeader("User-Agent", "curl/8.16.0");
+    //     req.setHeader("Accept", "*/*");
         
-        // HttpResponse resp;
-        // client.request(req, resp).resultAssert;
+    //     HttpResponse resp;
+    //     client.request(req, resp).resultAssert;
 
-        // import std.file : write;
-        // debug write("test.html", cast(string)resp.body.slice);
-    });
-    loop.join();
+    //     import std.file : write;
+    //     debug write("test.html", cast(string)resp.body.slice);
+    // });
+    // loop.join();
 }
 

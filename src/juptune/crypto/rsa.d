@@ -71,14 +71,14 @@ version(Juptune_OpenSSL)
             Asn1ComponentHeader anchorKeyHeader;
             auto result = asn1DecodeComponentHeader!(Asn1Ruleset.der)(keyReader, anchorKeyHeader);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding RSA public key header:");
             
             // TODO: Check header info is correct
 
             RSAPublicKey asn1PublicKey;
             result = asn1PublicKey.fromDecoding!(Asn1Ruleset.der)(keyReader, anchorKeyHeader.identifier);
             if(result.isError)
-                return result;
+                return result.wrapError("when decoding RSA public key body:");
 
             return RsaPublicKey.fromBigEndianBytes(
                 asn1PublicKey.getModulus().rawBytes,

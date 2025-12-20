@@ -68,7 +68,7 @@ if(is(T == struct))
                 mixin("value.", __traits(identifier, field))
             );
             if(result.isError)
-                return result;
+                return result.wrapError("when autodecoding "~DebugName~"."~__traits(identifier, field)~":");
         }
     }}
 

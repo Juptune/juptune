@@ -204,7 +204,7 @@ struct TlsHandshake // It's a bit too annoying to use the auto encoder/decoder f
         // SignatureScheme.rsa_pss_pss_sha256,
         // SignatureScheme.rsa_pss_pss_sha384,
         // SignatureScheme.rsa_pss_pss_sha512,
-        // SignatureScheme.rsa_pss_rsae_sha256,
+        SignatureScheme.rsa_pss_rsae_sha256,
         // SignatureScheme.rsa_pss_rsae_sha384,
         // SignatureScheme.rsa_pss_rsae_sha512,
     ];

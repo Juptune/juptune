@@ -133,7 +133,7 @@ Result x509ValidatePath(
             couldVerify,
         );
         if(result.isError)
-            return result;
+            return result.wrapError("when verifying signature:");
         if(!couldVerify)
         {
             return Result.make(
@@ -301,7 +301,7 @@ Result x509VerifySignature(
     Asn1ComponentHeader anchorKeyHeader;
     auto result = asn1DecodeComponentHeader!(Asn1Ruleset.der)(anchorKeyMem, anchorKeyHeader);
     if(result.isError)
-        return result;
+        return result.wrapError("when decoding trust anchor key header:");
 
     Result handleRsa()
     {

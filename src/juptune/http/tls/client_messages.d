@@ -501,23 +501,23 @@ in(state.mustBeIn(State.readEncryptedServerHello))
                 Asn1ComponentHeader header;
                 result = asn1DecodeComponentHeader!(Asn1Ruleset.der)(derMem, header);
                 if(result.isError)
-                    return result;
+                    return result.wrapError("when decoding TLS cert header:");
 
                 Certificate asn1Cert;
                 result = asn1Cert.fromDecoding!(Asn1Ruleset.der)(derMem, header.identifier);
                 if(result.isError)
-                    return result;
+                    return result.wrapError("when decoding TLS cert body:");
 
                 result = x509FromAsn1(asn1Cert, peerCert);
                 if(result.isError)
-                    return result;
+                    return result.wrapError("when converting TLS ASN.1 to higher level structure:");
             }
 
             return Result.noError;
         },
         certPolicy,
         reverseChain: true
-    );
+    ).wrapError("when validating cert chain:");
 }
 
 Result handleServerHelloCertificateVerify(
@@ -550,7 +550,7 @@ in(state.mustBeIn(State.readEncryptedServerHello))
         EcdsaPublicKey pubKey;
         auto result = EcdsaPublicKey.fromBytes(NamedCurve, peerCert.subjectPublicKey.bytes, pubKey);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading ECDSA public key:");
 
         static if(NamedCurve == EcdsaGroupName.secp256r1)
         {
@@ -578,7 +578,7 @@ in(state.mustBeIn(State.readEncryptedServerHello))
             success
         );
         if(result.isError)
-            return result;
+            return result.wrapError("when verifying signature:");
 
         if(!success)
             return Result.make(TlsError.verificationFailed, "failed to verify ECDSA signature in CertificateVerify");
@@ -593,7 +593,7 @@ in(state.mustBeIn(State.readEncryptedServerHello))
         RsaPublicKey pubKey;
         auto result = RsaPublicKey.fromAsn1RsaPublicKeyBytes(peerCert.subjectPublicKey.bytes, pubKey);
         if(result.isError)
-            return result;
+            return result.wrapError("when reading RSA public key:");
 
         static if(SigAlgorithm == RsaSignatureAlgorithm.sha256)
         {
@@ -621,7 +621,7 @@ in(state.mustBeIn(State.readEncryptedServerHello))
             success
         );
         if(result.isError)
-            return result;
+            return result.wrapError("when verifying signature:");
 
         if(!success)
             return Result.make(TlsError.verificationFailed, "failed to verify ECDSA signature in CertificateVerify");
@@ -632,10 +632,10 @@ in(state.mustBeIn(State.readEncryptedServerHello))
     switch(verify.algorithm) with(TlsHandshake.SignatureScheme)
     {
         case ecdsa_secp256r1_sha256:
-            return handleEcdsa!(EcdsaGroupName.secp256r1);
+            return handleEcdsa!(EcdsaGroupName.secp256r1).wrapError("for ecdsa_secp256r1_sha256:");
 
         case rsa_pss_rsae_sha256:
-            return handleRsa!(RsaPadding.pkcs1Pss, RsaSignatureAlgorithm.sha256);
+            return handleRsa!(RsaPadding.pkcs1Pss, RsaSignatureAlgorithm.sha256).wrapError("for rsa_pss_rsae_sha256");
 
         default:
             return Result.make(TlsError.unsupportedAlgorithm, "server selected for an unsupported algorithm");

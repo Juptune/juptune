@@ -525,7 +525,7 @@ struct X509CertificateStore
         
         auto result = nextInChain(derBytes, success);
         if(result.isError)
-            return result;
+            return result.wrapError("when fetching first in chain:");
 
         while(success)
         {
@@ -536,21 +536,21 @@ struct X509CertificateStore
 
             result = this.loadCert(certPtr);
             if(result.isError)
-                return result;
+                return result.wrapError("when loading certificate in chain:");
 
             stagingCerts.put(certPtr);
 
             result = nextInChain(derBytes, success);
             if(result.isError)
-                return result;
+                return result.wrapError("when fetching next in chain:");
         }
 
         if(stagingCerts.length == 0)
             return Result.make(X509StoreError.noCertificates, "no certificates were provided by nextInChain?");
 
         return (stagingCerts.length > 1) 
-            ? this.validateCertChain(stagingCerts.slice, policy, reverseChain)
-            : this.validateSingleCert(stagingCerts[0]);
+            ? this.validateCertChain(stagingCerts.slice, policy, reverseChain).wrapError("when validating cert chain:")
+            : this.validateSingleCert(stagingCerts[0]).wrapError("when validating single cert:");
     }
 
     /++
@@ -637,7 +637,7 @@ struct X509CertificateStore
             chain = (reverseChain) ? chain[0..$-1] : chain[1..$];
         }
         else if(result.isError)
-            return result;
+            return result.wrapError("when finding trust anchor:");
 
         // Build up the chain, reversing it if requested.
         ArrayNonShrink!X509CertificateValidationInfo info;
@@ -661,7 +661,7 @@ struct X509CertificateStore
             info.slice, 
             X509CertificateValidationInfo(&trustAnchor.certificate, &trustAnchor.extensions), 
             pointInTimeUtc
-        );
+        ).wrapError("when validating path:");
     }
 
     private Result findTrustAnchor(Cert* forCert, out Cert* trustAnchor) @nogc nothrow
