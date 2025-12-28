@@ -23,7 +23,7 @@ fi
 meson compile -C $BUILD_DIR dasn1
 $BUILD_DIR/tools/dasn1/dasn1 compile dlang-raw \
     --out-dir $JUPTUNE_DIR/src/juptune/data/asn1/generated/raw/ \
-    --base-module juptune.data.asn1.generated \
+    --base-module juptune.asn1.generated \
     $JUPTUNE_DIR/data/asn1/
 
 if [ "$BUILD_DIR" = "$TEMP_BUILD_DIR" ]; then

@@ -353,7 +353,7 @@ struct X509CertificateStore
     in(pem.length > 0, "pem is empty")
     {
         import juptune.core.ds : ArrayNonShrink;
-        import juptune.data.asn1.decode.bcd.encoding : Asn1DecodeError;
+        import juptune.asn1.decode.bcd.encoding : Asn1DecodeError;
         import juptune.data.pem : PemParser;
 
         ArrayNonShrink!ubyte buffer;
@@ -730,9 +730,9 @@ struct X509CertificateStore
         import core.stdc.stdlib : free;
 
         import juptune.data.buffer : MemoryReader;
-        import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : Certificate;
+        import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : Certificate;
         import juptune.data.x509.asn1convert : x509FromAsn1;
-        import juptune.data.asn1.decode.bcd.encoding 
+        import juptune.asn1.decode.bcd.encoding 
             : Asn1ComponentHeader, asn1DecodeComponentHeader, asn1ReadContentBytes,
               Asn1Ruleset;
 

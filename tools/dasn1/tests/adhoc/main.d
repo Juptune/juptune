@@ -1,7 +1,7 @@
 import juptune.core.util : resultAssert;
 import juptune.data.buffer : MemoryReader;
 
-import juptune.data.asn1.decode.bcd.encoding 
+import juptune.asn1.decode.bcd.encoding 
     : asn1DecodeComponentHeader, asn1ReadContentBytes, Asn1ComponentHeader,
         Asn1Identifier, Asn1Ruleset;
 

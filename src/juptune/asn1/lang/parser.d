@@ -6,15 +6,15 @@
  */
 
 /// Contains the parser, i.e. syntax analysis.
-module juptune.data.asn1.lang.parser;
+module juptune.asn1.lang.parser;
 
 import std.typecons : Nullable;
 
 import juptune.core.ds               : String2;
 import juptune.core.util             : Result, resultAssert;
-import juptune.data.asn1.lang.common : Asn1ParserContext, Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
-import juptune.data.asn1.lang.lexer  : Asn1Lexer, Asn1Token;
-import juptune.data.asn1.lang.ast; // Intentionally everything
+import juptune.asn1.lang.common : Asn1ParserContext, Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
+import juptune.asn1.lang.lexer  : Asn1Lexer, Asn1Token;
+import juptune.asn1.lang.ast; // Intentionally everything
 
 enum Asn1ParserError
 {

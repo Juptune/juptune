@@ -1,8 +1,8 @@
-module juptune.data.asn1.generated.raw.CryptographicMessageSyntax_1_2_840_113549_1_9_16_0_14;
-static import PKIX1Explicit88_1_3_6_1_5_5_7_0_18 = juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18;
+module juptune.asn1.generated.raw.CryptographicMessageSyntax_1_2_840_113549_1_9_16_0_14;
+static import PKIX1Explicit88_1_3_6_1_5_5_7_0_18 = juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18;
 
 static import tcon = std.typecons;
-static import asn1 = juptune.data.asn1.decode.bcd.encoding;
+static import asn1 = juptune.asn1.decode.bcd.encoding;
 static import jres = juptune.core.util.result;
 static import jbuf = juptune.data.buffer;
 static import jstr = juptune.core.ds.string2;

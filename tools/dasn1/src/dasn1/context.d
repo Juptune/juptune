@@ -9,11 +9,11 @@ module dasn1.context;
 import std.sumtype : SumType, match;
 
 import juptune.core.util        : resultEnforce;
-import juptune.data.asn1.lang   : Asn1PrintfErrorHandler;
+import juptune.asn1.lang   : Asn1PrintfErrorHandler;
 
 struct Source
 {
-    import juptune.data.asn1.lang : Asn1ModuleIr;
+    import juptune.asn1.lang : Asn1ModuleIr;
 
     string debugName;
     string code;
@@ -24,7 +24,7 @@ struct Source
 
 final class CompilerContext
 {
-    import juptune.data.asn1.lang : Asn1ParserContext, Asn1ModuleRegistry;
+    import juptune.asn1.lang : Asn1ParserContext, Asn1ModuleRegistry;
 
     private
     {
@@ -80,7 +80,7 @@ final class CompilerContext
     void doSyntaxAnalysis()
     {
         import std.algorithm : filter;
-        import juptune.data.asn1.lang : asn1Parse;
+        import juptune.asn1.lang : asn1Parse;
 
         foreach(ref source; this._sources.filter!(s => s.moduleIr is null))
         {
@@ -92,7 +92,7 @@ final class CompilerContext
     void doSemanticAnalysis()
     {
         import std.algorithm : filter;
-        import juptune.data.asn1.lang : asn1Semantics;
+        import juptune.asn1.lang : asn1Semantics;
 
         foreach(ref source; this._sources.filter!(s => s.moduleIr !is null))
             asn1Semantics(this._context, source.moduleIr, this._errors).resultEnforce;

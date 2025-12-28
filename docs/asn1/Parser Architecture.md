@@ -2,7 +2,7 @@
 
 This file serves to provide a decently in-depth view into how Juptune's support for the ASN.1 notation is structured.
 
-Please note, this is only for the support for ASN.1 **notation** (`juptune.data.asn1.lang`) and not for the binary encoding support, as that code is relatively straightforward.
+Please note, this is only for the support for ASN.1 **notation** (`juptune.asn1.lang`) and not for the binary encoding support, as that code is relatively straightforward.
 
 ## File structure
 

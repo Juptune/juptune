@@ -1,7 +1,7 @@
 module tests.adhoc.raw.TestModule_0;
 
 static import tcon = std.typecons;
-static import asn1 = juptune.data.asn1.decode.bcd.encoding;
+static import asn1 = juptune.asn1.decode.bcd.encoding;
 static import jres = juptune.core.util.result;
 static import jbuf = juptune.data.buffer;
 static import jstr = juptune.core.ds.string2;

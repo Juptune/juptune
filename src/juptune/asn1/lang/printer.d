@@ -6,11 +6,11 @@
  */
 
 /// Contains a visitor that can transform IR nodes into their ASN.1 notation equivalent.
-module juptune.data.asn1.lang.printer;
+module juptune.asn1.lang.printer;
 
 import juptune.core.util : Result, resultAssert;
-import juptune.data.asn1.lang.common : Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
-import juptune.data.asn1.lang.ir; // Intentionally everything
+import juptune.asn1.lang.common : Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
+import juptune.asn1.lang.ir; // Intentionally everything
 
 /++
  + A simple handler for `Asn1PrinterVisitor` that will populate an in-memory array with the
@@ -1046,9 +1046,9 @@ unittest
 {
     import std.file : write;
     
-    import juptune.data.asn1.lang.common  : Asn1ParserContext;
-    import juptune.data.asn1.lang.ir      : Asn1ModuleRegistry;
-    import juptune.data.asn1.lang.tooling : Asn1AlwaysCrashErrorHandler, Asn1PrintfErrorHandler, asn1ParseWithSemantics;
+    import juptune.asn1.lang.common  : Asn1ParserContext;
+    import juptune.asn1.lang.ir      : Asn1ModuleRegistry;
+    import juptune.asn1.lang.tooling : Asn1AlwaysCrashErrorHandler, Asn1PrintfErrorHandler, asn1ParseWithSemantics;
 
     const code = `
         MyMod DEFINITIONS IMPLICIT TAGS ::= BEGIN

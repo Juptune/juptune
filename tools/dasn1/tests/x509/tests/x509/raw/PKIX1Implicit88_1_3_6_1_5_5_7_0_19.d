@@ -2,7 +2,7 @@ module tests.x509.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19;
 static import PKIX1Explicit88_1_3_6_1_5_5_7_0_18 = tests.x509.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18;
 
 static import tcon = std.typecons;
-static import asn1 = juptune.data.asn1.decode.bcd.encoding;
+static import asn1 = juptune.asn1.decode.bcd.encoding;
 static import jres = juptune.core.util.result;
 static import jbuf = juptune.data.buffer;
 static import jstr = juptune.core.ds.string2;

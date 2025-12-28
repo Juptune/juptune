@@ -9,7 +9,7 @@ module juptune.data.x509.validation;
 import juptune.core.util : Result;
 import juptune.data.x509.asn1convert : X509Certificate, X509Extension;
 import juptune.data.x509.store : X509ExtensionStore;
-import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : Name;
+import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : Name;
 
 enum X509ValidationError
 {
@@ -287,11 +287,11 @@ Result x509VerifySignature(
 
     import juptune.core.ds : String2;
     import juptune.crypto.rsa : RsaPublicKey, RsaPadding, RsaSignatureAlgorithm;
-    import juptune.data.asn1.decode.bcd.encoding : asn1DecodeComponentHeader, Asn1ComponentHeader, Asn1Ruleset;
+    import juptune.asn1.decode.bcd.encoding : asn1DecodeComponentHeader, Asn1ComponentHeader, Asn1Ruleset;
     import juptune.data.buffer : MemoryReader;
     import juptune.data.x509.asn1convert : X509SignatureAlgorithm, X509PublicKeyAlgorithm;
 
-    import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
+    import juptune.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
         :
             RSAPublicKey
         ;
@@ -404,8 +404,8 @@ Result x509AreNamesEqual(Name a, Name b) @nogc nothrow
 {
     import juptune.core.ds : Array, String2;
     import juptune.data.buffer : MemoryReader;
-    import juptune.data.asn1.decode.bcd.encoding : Asn1Ruleset, Asn1Identifier, Asn1Ia5String, Asn1PrintableString;
-    import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : AttributeTypeAndValue;
+    import juptune.asn1.decode.bcd.encoding : Asn1Ruleset, Asn1Identifier, Asn1Ia5String, Asn1PrintableString;
+    import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : AttributeTypeAndValue;
 
     Result toArray(Name name, out Array!AttributeTypeAndValue array)
     {
@@ -551,11 +551,11 @@ unittest
 {
     import std.file : fileRead = read, exists;
     import juptune.core.util : resultAssert;
-    import juptune.data.asn1.decode.bcd.encoding 
+    import juptune.asn1.decode.bcd.encoding 
         : Asn1DecodeError, Asn1ComponentHeader, Asn1Ruleset, asn1ReadContentBytes, asn1DecodeComponentHeader;
     import juptune.data.buffer : MemoryReader;
     import juptune.data.x509 : X509Certificate, x509FromAsn1;
-    import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : Certificate;
+    import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : Certificate;
 
     X509Certificate readCert(string path)
     {

@@ -6,9 +6,9 @@
  */
 
 /// Contains the lexer.
-module juptune.data.asn1.lang.lexer;
+module juptune.asn1.lang.lexer;
 
-import juptune.data.asn1.lang.common : Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
+import juptune.asn1.lang.common : Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
 
 struct Asn1Token
 {

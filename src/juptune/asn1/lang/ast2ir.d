@@ -6,13 +6,13 @@
  */
 
 /// Provides converter functions to transform AST nodes into IR nodes, while performing light amounts of semantic checks.
-module juptune.data.asn1.lang.ast2ir;
+module juptune.asn1.lang.ast2ir;
 
 import juptune.core.util : Result, resultAssert;
-import juptune.data.asn1.lang.ast; // Intentionally everything
-import juptune.data.asn1.lang.ir;  // Intentionally everything
-import juptune.data.asn1.lang.common : Asn1ParserContext, Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
-import juptune.data.asn1.lang.parser : Asn1Parser, Asn1ParserError;
+import juptune.asn1.lang.ast; // Intentionally everything
+import juptune.asn1.lang.ir;  // Intentionally everything
+import juptune.asn1.lang.common : Asn1ParserContext, Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
+import juptune.asn1.lang.parser : Asn1Parser, Asn1ParserError;
 
 /++++ Special ++++/
 
@@ -2395,7 +2395,7 @@ Result asn1AstToIr(
 version(unittest)
 {
     import juptune.core.util : resultAssert, resultAssertSameCode;
-    import juptune.data.asn1.lang.lexer; // Intentionally everything
+    import juptune.asn1.lang.lexer; // Intentionally everything
 
     private template GenericTestHarness(IrT, alias ParseFunc, alias Converter = asn1AstToIr)
     {

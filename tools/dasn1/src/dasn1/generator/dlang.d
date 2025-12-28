@@ -11,8 +11,8 @@ module dasn1.generator.dlang;
 import std.typecons : Nullable;
 
 import juptune.core.util : Result, resultEnforce;
-import juptune.data.asn1.decode.bcd.encoding : Asn1Identifier;
-import juptune.data.asn1.lang; // Intentionally everything
+import juptune.asn1.decode.bcd.encoding : Asn1Identifier;
+import juptune.asn1.lang; // Intentionally everything
 
 /++++ Common ++++/
 
@@ -336,7 +336,7 @@ string generateRawDlangModule(Asn1ModuleIr mod, ref DlangGeneratorContext contex
     {
         putStartOfModule(mod, "raw", context);
         putLine("static import ", TYPE_CON_SHORTHAND, " = std.typecons;");
-        putLine("static import ", ASN1_SHORTHAND, " = juptune.data.asn1.decode.bcd.encoding;");
+        putLine("static import ", ASN1_SHORTHAND, " = juptune.asn1.decode.bcd.encoding;");
         putLine("static import ", RESULT_SHORTHAND, " = juptune.core.util.result;");
         putLine("static import ", BUFFER_SHORTHAND, " = juptune.data.buffer;");
         putLine("static import ", STRING_SHORTHAND, " = juptune.core.ds.string2;");
@@ -411,7 +411,7 @@ private void putValueLiteral(
                 }
                 else if(auto namedSeqIr = cast(Asn1NamedValueSequenceIr)idIr)
                 {
-                    // TODO: juptune.data.asn1 should probably find a more elegant way to handle transforming this
+                    // TODO: juptune.asn1 should probably find a more elegant way to handle transforming this
                     //       into an Asn1ObjectIdSequenceValueIr during semantics.
                     namedSeqIr.foreachSequenceNamedValueGC((subValueName, subValueIr){
                         // TEMP: Again, something like this really needs to be handled inside of Juptune itself...
@@ -514,7 +514,7 @@ private void putValueLiteral(
         override void visit(Asn1IntegerTypeIr ir)
         {
             import std.conv : to;
-            import juptune.data.asn1.decode.bcd.encoding : Asn1Integer;
+            import juptune.asn1.decode.bcd.encoding : Asn1Integer;
 
             auto intValueIr = cast(Asn1IntegerValueIr)valueIr;
             assert(intValueIr !is null, "bug: Type checker didn't catch that this isn't an integer?");
@@ -1834,7 +1834,7 @@ private void putSetterConstraintChecksForField(
                     return;
                 }
 
-                import juptune.data.asn1.lang.tooling : asn1ToStringGC;
+                import juptune.asn1.lang.tooling : asn1ToStringGC;
                 assert(false, 
                     "bug: Unhandled constraint IR type: "
                     ~typeid(constraintIr).name
@@ -2141,7 +2141,7 @@ private string rawTypeOf(Asn1TypeIr ir, Asn1ModuleIr currentModule, Asn1ErrorHan
 
         override void visit(Asn1TypeReferenceIr ir)
         {
-            import juptune.data.asn1.lang.operations : asn1GetParentModule;
+            import juptune.asn1.lang.operations : asn1GetParentModule;
 
             auto parentModIr = asn1GetParentModule(ir.getResolvedType());
 

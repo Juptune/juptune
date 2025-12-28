@@ -7,12 +7,12 @@
 
 /// Provides a ton of convenience types/functions that tooling may find useful, as it simplifies
 /// usage of this package.
-module juptune.data.asn1.lang.tooling;
+module juptune.asn1.lang.tooling;
 
 import juptune.core.ds                  : String2;
 import juptune.core.util                : Result;
-import juptune.data.asn1.lang.common    : Asn1ParserContext, Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
-import juptune.data.asn1.lang.ir        : Asn1ModuleIr, Asn1BaseIr, Asn1ModuleRegistry;
+import juptune.asn1.lang.common    : Asn1ParserContext, Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
+import juptune.asn1.lang.ir        : Asn1ModuleIr, Asn1BaseIr, Asn1ModuleRegistry;
 
 /++
  + A simple semantic error handler that will always fail an assert if any function is called.
@@ -82,10 +82,10 @@ Result asn1Parse(
     const(char)[] debugName = "",
 ) @nogc nothrow
 {
-    import juptune.data.asn1.lang.ast       : Asn1ModuleDefinitionNode;
-    import juptune.data.asn1.lang.ast2ir    : asn1AstToIr;
-    import juptune.data.asn1.lang.lexer     : Asn1Lexer;
-    import juptune.data.asn1.lang.parser    : Asn1Parser;
+    import juptune.asn1.lang.ast       : Asn1ModuleDefinitionNode;
+    import juptune.asn1.lang.ast2ir    : asn1AstToIr;
+    import juptune.asn1.lang.lexer     : Asn1Lexer;
+    import juptune.asn1.lang.parser    : Asn1Parser;
 
     auto lexer = Asn1Lexer(rawSourceCode, debugName, errorHandler);
     auto parser = Asn1Parser(lexer, &context);
@@ -114,8 +114,8 @@ Result asn1Semantics(
 {
     import std.traits : EnumMembers;
     
-    import juptune.data.asn1.lang.ir        : Asn1BaseIr;
-    import juptune.data.asn1.lang.typecheck : Asn1TypeCheckVisitor;
+    import juptune.asn1.lang.ir        : Asn1BaseIr;
+    import juptune.asn1.lang.typecheck : Asn1TypeCheckVisitor;
 
     foreach(semanticStage; EnumMembers!(Asn1BaseIr.SemanticStageBit))
     {
@@ -176,7 +176,7 @@ String2 asn1ToString(IrT : Asn1BaseIr)(
 in(ir !is null, "ir is null")
 {
     import juptune.core.util              : resultAssert;
-    import juptune.data.asn1.lang.printer : Asn1PrinterVisitor, Asn1StringPrinterHandler;
+    import juptune.asn1.lang.printer : Asn1PrinterVisitor, Asn1StringPrinterHandler;
 
     scope handler = new Asn1StringPrinterHandler();
     scope visitor = new Asn1PrinterVisitor(handler, tagDefault);
@@ -193,7 +193,7 @@ string asn1ToStringGC(IrT : Asn1BaseIr)(
 in(ir !is null, "ir is null")
 {
     import juptune.core.util              : resultAssert;
-    import juptune.data.asn1.lang.printer : Asn1PrinterVisitor, Asn1StringPrinterHandler;
+    import juptune.asn1.lang.printer : Asn1PrinterVisitor, Asn1StringPrinterHandler;
 
     scope handler = new Asn1StringPrinterHandler();
     scope visitor = new Asn1PrinterVisitor(handler, tagDefault);
@@ -209,7 +209,7 @@ version(unittest):
 unittest
 {
     import juptune.core.util : resultAssert;
-    import juptune.data.asn1.lang.ir;
+    import juptune.asn1.lang.ir;
 
     const code = `
         MyMod DEFINITIONS ::= BEGIN

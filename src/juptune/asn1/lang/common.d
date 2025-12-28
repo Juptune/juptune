@@ -6,7 +6,7 @@
  */
 
 /// Contains misc types that are common throughout the entire package without having a distinct place to exist in.
-module juptune.data.asn1.lang.common;
+module juptune.asn1.lang.common;
 
 import std.experimental.allocator.mallocator                        : Mallocator;
 import std.experimental.allocator.building_blocks.allocator_list    : AllocatorList;
@@ -36,8 +36,8 @@ struct Asn1Location
 
 struct Asn1ParserContext
 {
-    import juptune.data.asn1.lang.ast : Asn1BaseNode;
-    import juptune.data.asn1.lang.ir  : Asn1BaseIr;
+    import juptune.asn1.lang.ast : Asn1BaseNode;
+    import juptune.asn1.lang.ir  : Asn1BaseIr;
     import juptune.core.ds            : Array, String2, HashMap;
     import juptune.core.util          : Result;
 

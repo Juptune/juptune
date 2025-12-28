@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  * Author: Bradley Chatha
  */
-module juptune.data.asn1.decode.bcd.encoding;
+module juptune.asn1.decode.bcd.encoding;
 
 import juptune.core.util : Result;
 import juptune.data.buffer : MemoryReader;

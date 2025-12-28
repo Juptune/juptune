@@ -15,11 +15,11 @@ module juptune.data.x509.asn1convert;
 import juptune.core.ds : String2;
 import juptune.core.util : Result;
 
-import juptune.data.asn1.decode.bcd.encoding : Asn1ObjectIdentifier, Asn1Integer;
+import juptune.asn1.decode.bcd.encoding : Asn1ObjectIdentifier, Asn1Integer;
 
-import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 
+import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 
         : Certificate, AlgorithmIdentifier, AttributeTypeAndValue, Name, Time, Extensions, Extension;
-import juptune.data.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19 
+import juptune.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19 
         : 
             GeneralNames,
             GeneralSubtrees,
@@ -129,7 +129,7 @@ abstract class X509PublicKeyAlgorithm
     import std.sumtype : SumType;
     import std.typecons : Nullable;
 
-    import juptune.data.asn1.decode.bcd.encoding : Asn1BitString;
+    import juptune.asn1.decode.bcd.encoding : Asn1BitString;
 
     /// A SumType of all possible public key algorithms.
     alias SumT = SumType!(
@@ -216,7 +216,7 @@ abstract class X509PublicKeyAlgorithm
     /// ECDSA/ECDH (RFC 3279)
     static struct EcPublicKey
     {
-        import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17 : EcpkParameters;
+        import juptune.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17 : EcpkParameters;
 
         enum AllowedKeyUsageCa = 
             X509Extension.KeyUsage.Flag.digitalSignature
@@ -441,7 +441,7 @@ struct X509Certificate
     import std.typecons : Nullable;
 
     import juptune.core.ds.array : Array;
-    import juptune.data.asn1.decode.bcd.encoding : Asn1BitString;
+    import juptune.asn1.decode.bcd.encoding : Asn1BitString;
 
     enum NameComponentKind
     {
@@ -579,7 +579,7 @@ struct X509Certificate
 Result x509FromAsn1(Certificate asn1Cert, out X509Certificate cert) @nogc nothrow
 {
     // Some of these are just so intelisense works
-    import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18
+    import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18
         : TBSCertificate;
 
     TBSCertificate tbsCert = asn1Cert.getTbsCertificate();
@@ -692,9 +692,9 @@ Result x509IdentifySignatureAlgorithm(
     out X509SignatureAlgorithm.SumT algorithm,
 ) @nogc nothrow
 {
-    import juptune.data.asn1.decode.bcd.encoding : Asn1Identifier;
+    import juptune.asn1.decode.bcd.encoding : Asn1Identifier;
     import juptune.data.buffer : MemoryReader;
-    import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
+    import juptune.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
         :
             sha256WithRSAEncryption,
             sha1WithRSAEncryption
@@ -748,9 +748,9 @@ Result x509IdentifyPublicKeyAlgorithm(
 ) @nogc nothrow
 {
     import juptune.data.buffer : MemoryReader;
-    import juptune.data.asn1.decode.bcd.encoding : Asn1Ruleset, Asn1Identifier;
+    import juptune.asn1.decode.bcd.encoding : Asn1Ruleset, Asn1Identifier;
 
-    import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
+    import juptune.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
         :
             id_ecPublicKey,
             rsaEncryption,
@@ -872,7 +872,7 @@ Result x509ForeachNameComponent(
     scope Result delegate(AttributeTypeAndValue component) @nogc nothrow handler,
 ) @nogc nothrow
 {
-    import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : RelativeDistinguishedName;
+    import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : RelativeDistinguishedName;
     assert(name.isRdnSequence(), "bug: unhandled case for Name (or .init Name was passed in)");
 
     return name.getRdnSequence().get().foreachElementAuto((RelativeDistinguishedName rdn){
@@ -888,7 +888,7 @@ Result x509ForeachNameComponentGC(
     scope Result delegate(AttributeTypeAndValue component) handler,
 )
 {
-    import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : RelativeDistinguishedName;
+    import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : RelativeDistinguishedName;
     assert(name.isRdnSequence(), "bug: unhandled case for Name (or .init Name was passed in)");
 
     return name.getRdnSequence().get().foreachElementAutoGC((RelativeDistinguishedName rdn){
@@ -926,7 +926,7 @@ Result x509HandleNameComponent(
 {
     import juptune.data.buffer : MemoryReader;
 
-    import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18
+    import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18
         :   id_at_countryName,
             id_at_organizationName,
             id_at_organizationalUnitName,
@@ -956,7 +956,7 @@ Result x509HandleNameComponent(
             DomainComponent
         ;
 
-    import juptune.data.asn1.decode.bcd.encoding
+    import juptune.asn1.decode.bcd.encoding
         : asn1DecodeComponentHeader, Asn1Identifier, Asn1Ruleset, Asn1ComponentHeader, Asn1Utf8String;
 
     auto memory = MemoryReader(component.getValue().value.data);
@@ -1074,7 +1074,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
 {
     import juptune.data.buffer : MemoryReader;
 
-    import juptune.data.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19
+    import juptune.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19
         : 
             id_ce_authorityKeyIdentifier,
             id_ce_subjectKeyIdentifier,
@@ -1105,7 +1105,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
             InhibitAnyPolicy
         ;
 
-    import juptune.data.asn1.decode.bcd.encoding
+    import juptune.asn1.decode.bcd.encoding
         : Asn1Identifier, Asn1Ruleset, asn1DecodeComponentHeader, Asn1ComponentHeader;
     
     auto memory = MemoryReader(asn1Extension.getExtnValue().data);
@@ -1296,7 +1296,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
 
         X509Extension.ExtendedKeyUsage ext;
         auto result = value.get().foreachElementAuto((element){
-            import juptune.data.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19
+            import juptune.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19
                 :
                     id_kp_serverAuth,
                     id_kp_clientAuth,
@@ -1401,11 +1401,11 @@ unittest
     import juptune.core.util : resultAssert;
     import juptune.data.buffer : MemoryReader;
 
-    import juptune.data.asn1.decode.bcd.encoding 
+    import juptune.asn1.decode.bcd.encoding 
         : asn1DecodeComponentHeader, asn1ReadContentBytes, Asn1ComponentHeader,
             Asn1Identifier, Asn1Ruleset;
 
-    import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18;
+    import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18;
 
     // Certificate from youtube.com
     const(ubyte[]) asn1 = [
@@ -1728,7 +1728,7 @@ unittest
             0x57,  0x11,  0x74,  0x6a,  0x9a,  0x63,  0x74,  0x16,  0xa7,  0x53,
         ]);
 
-        import juptune.data.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19 : DistributionPoint;
+        import juptune.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19 : DistributionPoint;
         CrlDistributionPoints dps = getSum!CrlDistributionPoints;
         DistributionPoint dp;
         assert(dps.points.get().elementCount == 1);
@@ -1740,11 +1740,11 @@ unittest
             return Result.noError;
         }).resultAssert;
 
-        import juptune.data.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19 : AccessDescription;
+        import juptune.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19 : AccessDescription;
         AuthorityInfoAccessSyntax assSyntax = getSum!AuthorityInfoAccessSyntax;
         size_t assCount;
         assSyntax.get().foreachElementAutoGC((AccessDescription ass){
-            import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 
+            import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 
                 : id_ad_ocsp, id_ad_caIssuers;
 
             final switch(assCount)
@@ -1764,7 +1764,7 @@ unittest
             return Result.noError;
         }).resultAssert;
 
-        import juptune.data.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19 : GeneralName;
+        import juptune.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19 : GeneralName;
         SubjectAltName subAltName = getSum!SubjectAltName;
         string[] altNames;
         subAltName.names.get().foreachElementAutoGC((GeneralName name){
@@ -1818,7 +1818,7 @@ unittest
             "*.aistudio.google.com"
         ]);
 
-        import juptune.data.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19 : PolicyInformation;
+        import juptune.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19 : PolicyInformation;
         CertificatePolicies certPolicies = getSum!CertificatePolicies;
         assert(certPolicies.get().elementCount == 1);
         certPolicies.get().foreachElementAutoGC((PolicyInformation info){
@@ -1838,7 +1838,7 @@ unittest
 
     cert.subjectPublicKeyAlgorithm.match!(
         (X509PublicKeyAlgorithm.EcPublicKey epk) {
-            import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
+            import juptune.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
                 : secp256r1;
             assert(epk.params.getNamedCurve() == secp256r1());
         },

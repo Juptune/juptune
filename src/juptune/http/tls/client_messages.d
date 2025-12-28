@@ -488,9 +488,9 @@ in(state.mustBeIn(State.readEncryptedServerHello))
 
             if(isFirst) // TODO: It's a bit annoying we have to parse the first cert twice - maybe CertificateStore could have a more friendly way of doing this sort of stuff?
             {
-                import juptune.data.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : Certificate;
+                import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : Certificate;
                 import juptune.data.x509.asn1convert : x509FromAsn1;
-                import juptune.data.asn1.decode.bcd.encoding 
+                import juptune.asn1.decode.bcd.encoding 
                     : Asn1ComponentHeader, asn1DecodeComponentHeader, asn1ReadContentBytes,
                     Asn1Ruleset;
 

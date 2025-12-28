@@ -11,7 +11,7 @@ import std.stdio : writeln;
 import std.getopt;
 
 import juptune.core.util : resultEnforce, JuptuneResultException;
-import juptune.data.asn1.lang : Asn1PrinterVisitor, Asn1StringPrinterHandler, 
+import juptune.asn1.lang : Asn1PrinterVisitor, Asn1StringPrinterHandler, 
                                 Asn1SemanticError, Asn1ParserError, Asn1LexerError;
 
 import dasn1.context : CompilerContext;

@@ -7,7 +7,7 @@
 
 /// Contains the IR models - these are used for semantics analysis, and contain the most functionality, but
 /// discard a lot of information about the original source code.
-module juptune.data.asn1.lang.ir;
+module juptune.asn1.lang.ir;
 
 import std.meta     : AliasSeq;
 import std.sumtype  : SumType, match;
@@ -15,9 +15,9 @@ import std.typecons : Nullable, Flag;
 
 import juptune.core.ds : Array, String2, HashMap;
 import juptune.core.util : Result;
-import juptune.data.asn1.lang.ast; // Intentionally everything
-import juptune.data.asn1.lang.common : Asn1Location, Asn1ParserContext, Asn1ErrorHandler, Asn1NullErrorHandler;
-import juptune.data.asn1.lang.lexer : Asn1Token;
+import juptune.asn1.lang.ast; // Intentionally everything
+import juptune.asn1.lang.common : Asn1Location, Asn1ParserContext, Asn1ErrorHandler, Asn1NullErrorHandler;
+import juptune.asn1.lang.lexer : Asn1Token;
 
 enum Asn1SemanticError
 {
@@ -289,7 +289,7 @@ final class Asn1ModuleRegistry
         {
             // TODO: This needs to be a little better - it should print out all the raw numbers instead,
             //       and shouldn't use .tooling under any circumstance.
-            import juptune.data.asn1.lang.tooling : asn1ToString;
+            import juptune.asn1.lang.tooling : asn1ToString;
             auto modString = asn1ToString(ir.getModuleVersion());
 
             return Result.make(
@@ -446,7 +446,7 @@ final class Asn1ModuleRegistry
     )
     if(isVersionType!VersionT)
     {
-        import juptune.data.asn1.lang.operations : asn1AreObjectIdentifiersEqual;
+        import juptune.asn1.lang.operations : asn1AreObjectIdentifiersEqual;
 
         foreach(entry; this._entries)
         {
@@ -2142,7 +2142,7 @@ private final class Asn1SequenceTypeBase(string Kind, ubyte UniversalTag) : Asn1
         bool expandComponentsOf = false
     )
     {
-        import juptune.data.asn1.lang.operations : asn1GetExactUnderlyingType;
+        import juptune.asn1.lang.operations : asn1GetExactUnderlyingType;
 
         Result foreachComponentOf(typeof(this) ir, bool isTopLevel = false)
         {
@@ -2936,7 +2936,7 @@ final class Asn1CstringValueIr : Asn1ValueIr
 
 final class Asn1HstringValueIr : Asn1ValueIr
 {
-    import juptune.data.asn1.lang.lexer : Asn1HstringRange;
+    import juptune.asn1.lang.lexer : Asn1HstringRange;
 
     mixin IrBoilerplate;
 
@@ -2969,7 +2969,7 @@ final class Asn1HstringValueIr : Asn1ValueIr
 
 final class Asn1BstringValueIr : Asn1ValueIr
 {
-    import juptune.data.asn1.lang.lexer : Asn1BstringRange;
+    import juptune.asn1.lang.lexer : Asn1BstringRange;
     
     mixin IrBoilerplate;
 
@@ -3241,7 +3241,7 @@ final class Asn1ObjectIdSequenceValueIr : Asn1ValueIr
 // unique IR for this use-case and distinguish its meaning later.
 final class Asn1EmptySequenceValueIr : Asn1ValueIr
 {
-    import juptune.data.asn1.lang.lexer : Asn1BstringRange;
+    import juptune.asn1.lang.lexer : Asn1BstringRange;
     
     mixin IrBoilerplate;
 
@@ -3986,10 +3986,10 @@ unittest
     import std.conv : to;
     import std.traits : EnumMembers;
     import juptune.core.util : resultAssert, resultAssertSameCode;
-    import juptune.data.asn1.lang.ast2ir;
-    import juptune.data.asn1.lang.lexer;
-    import juptune.data.asn1.lang.common;
-    import juptune.data.asn1.lang.parser;
+    import juptune.asn1.lang.ast2ir;
+    import juptune.asn1.lang.lexer;
+    import juptune.asn1.lang.common;
+    import juptune.asn1.lang.parser;
 
     static struct T
     {
@@ -4096,7 +4096,7 @@ unittest
 unittest
 {
     import juptune.core.util : resultAssert, resultAssertSameCode;
-    import juptune.data.asn1.lang.tooling : asn1Parse, Asn1AlwaysCrashErrorHandler;
+    import juptune.asn1.lang.tooling : asn1Parse, Asn1AlwaysCrashErrorHandler;
 
     Asn1ParserContext context;
     Asn1ModuleIr modOne, modTwo;
@@ -4134,7 +4134,7 @@ unittest
 unittest
 {
     import juptune.core.util : resultAssert, resultAssertSameCode;
-    import juptune.data.asn1.lang.tooling : asn1ParseWithSemantics, Asn1AlwaysCrashErrorHandler, Asn1PrintfErrorHandler;
+    import juptune.asn1.lang.tooling : asn1ParseWithSemantics, Asn1AlwaysCrashErrorHandler, Asn1PrintfErrorHandler;
 
     Asn1ParserContext context;
     Asn1ModuleIr modOne, modTwo, modThree;
@@ -4188,8 +4188,8 @@ unittest
     // to be a bug where it'd have the lookup context of ModTwo instead of ModOne.
 
     import juptune.core.util : resultAssert, resultAssertSameCode;
-    import juptune.data.asn1.lang.operations : asn1AreObjectIdentifiersEqual;
-    import juptune.data.asn1.lang.tooling : asn1ParseWithSemantics, Asn1PrintfErrorHandler;
+    import juptune.asn1.lang.operations : asn1AreObjectIdentifiersEqual;
+    import juptune.asn1.lang.tooling : asn1ParseWithSemantics, Asn1PrintfErrorHandler;
 
     Asn1ParserContext context;
     Asn1ModuleIr modOne, modTwo;

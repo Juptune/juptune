@@ -14,7 +14,7 @@ import std.path : buildNormalizedPath, setExtension;
 import std.getopt;
 
 import juptune.core.util : resultEnforce, JuptuneResultException;
-import juptune.data.asn1.lang : Asn1SemanticError, Asn1ParserError, Asn1LexerError, Asn1AlwaysCrashErrorHandler;
+import juptune.asn1.lang : Asn1SemanticError, Asn1ParserError, Asn1LexerError, Asn1AlwaysCrashErrorHandler;
 
 import dasn1.context : CompilerContext;
 import dasn1.generator.dlang;

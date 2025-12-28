@@ -8,13 +8,13 @@
 /// Contains useful functions that are needed by parts of this package, but
 /// don't really have any other place to exist. User code may find these functions useful as well,
 /// but the functions aren't tailored towards user code usage, so may be awkward to use.
-module juptune.data.asn1.lang.operations;
+module juptune.asn1.lang.operations;
 
 import std.typecons : Nullable;
 
 import juptune.core.util                : Result;
-import juptune.data.asn1.lang.common    : Asn1ErrorHandler;
-import juptune.data.asn1.lang.ir        : Asn1TypeIr, Asn1ValueIr, Asn1TaggedTypeIr, Asn1ModuleIr, Asn1BaseIr;
+import juptune.asn1.lang.common    : Asn1ErrorHandler;
+import juptune.asn1.lang.ir        : Asn1TypeIr, Asn1ValueIr, Asn1TaggedTypeIr, Asn1ModuleIr, Asn1BaseIr;
 
 /++
  + Determines if the two IR nodes are valid OBJECT IDENTIFIER values, and are
@@ -64,7 +64,7 @@ in(objIdB !is null, "objIdB is null")
 in(errors !is null, "errors is null")
 {
     import juptune.core.ds : Array;
-    import juptune.data.asn1.lang.ir : Asn1ObjectIdSequenceValueIr, Asn1ValueSequenceIr, Asn1ValueReferenceIr,
+    import juptune.asn1.lang.ir : Asn1ObjectIdSequenceValueIr, Asn1ValueSequenceIr, Asn1ValueReferenceIr,
                                        Asn1IntegerValueIr, Asn1SemanticError;
 
     // Try to use the stack for storage, but fallback to the heap if there's too many values.
@@ -179,10 +179,10 @@ in(errors !is null, "errors is null")
 unittest
 {
     import juptune.core.util              : resultAssert;
-    import juptune.data.asn1.lang.common  : Asn1ParserContext;
-    import juptune.data.asn1.lang.ir      : Asn1ModuleIr, Asn1ObjectIdentifierTypeIr, Asn1ModuleRegistry,
+    import juptune.asn1.lang.common  : Asn1ParserContext;
+    import juptune.asn1.lang.ir      : Asn1ModuleIr, Asn1ObjectIdentifierTypeIr, Asn1ModuleRegistry,
                                             Asn1ValueSequenceIr, Asn1ValueAssignmentIr, Asn1ObjectIdSequenceValueIr;
-    import juptune.data.asn1.lang.tooling : asn1ParseWithSemantics, Asn1AlwaysCrashErrorHandler;
+    import juptune.asn1.lang.tooling : asn1ParseWithSemantics, Asn1AlwaysCrashErrorHandler;
 
     Asn1ParserContext context;
     Asn1ModuleIr modIr;
@@ -256,7 +256,7 @@ unittest
 Asn1TypeIr asn1GetExactUnderlyingType(Asn1TypeIr type) @nogc nothrow
 in(type !is null, "type is null")
 {
-    import juptune.data.asn1.lang.ir : Asn1TypeReferenceIr, Asn1TaggedTypeIr;
+    import juptune.asn1.lang.ir : Asn1TypeReferenceIr, Asn1TaggedTypeIr;
 
     if(auto ir = cast(Asn1TypeReferenceIr)type)
     {
@@ -324,7 +324,7 @@ in(type !is null, "type is null")
  + ++/
 Result asn1WalkTags(DelegateT)(Asn1TypeIr type, scope DelegateT onTag, scope Asn1ErrorHandler errors)
 {
-    import juptune.data.asn1.lang.ir : Asn1TaggedTypeIr, Asn1ValueReferenceIr, Asn1IntegerValueIr, Asn1SemanticError;
+    import juptune.asn1.lang.ir : Asn1TaggedTypeIr, Asn1ValueReferenceIr, Asn1IntegerValueIr, Asn1SemanticError;
 
     Asn1TaggedTypeIr latestImplicit; // May be null
 
@@ -397,10 +397,10 @@ unittest
 {
     import std.conv                       : to;
     import juptune.core.util              : resultAssert, resultAssertSameCode;
-    import juptune.data.asn1.lang.common  : Asn1ParserContext;
-    import juptune.data.asn1.lang.ir      : Asn1ModuleIr, Asn1ModuleRegistry, Asn1TaggedTypeIr,
+    import juptune.asn1.lang.common  : Asn1ParserContext;
+    import juptune.asn1.lang.ir      : Asn1ModuleIr, Asn1ModuleRegistry, Asn1TaggedTypeIr,
                                             Asn1IntegerValueIr, Asn1TypeAssignmentIr, Asn1SemanticError;
-    import juptune.data.asn1.lang.tooling : asn1ParseWithSemantics, Asn1AlwaysCrashErrorHandler;
+    import juptune.asn1.lang.tooling : asn1ParseWithSemantics, Asn1AlwaysCrashErrorHandler;
 
     Asn1ParserContext context;
     Asn1ModuleIr modIr;
@@ -520,7 +520,7 @@ Result asn1TopLevelTagOf(
     scope Asn1ErrorHandler errors,
 ) @nogc nothrow
 {
-    import juptune.data.asn1.lang.ir : Asn1TypeReferenceIr, Asn1SemanticError;
+    import juptune.asn1.lang.ir : Asn1TypeReferenceIr, Asn1SemanticError;
 
     if(auto taggedIr = cast(Asn1TaggedTypeIr)typeIr)
     {
@@ -574,9 +574,9 @@ unittest
             import std.format : format;
 
             import juptune.core.util              : resultAssert;
-            import juptune.data.asn1.lang.common  : Asn1ParserContext;
-            import juptune.data.asn1.lang.ir      : Asn1ModuleIr, Asn1ModuleRegistry, Asn1TypeAssignmentIr;
-            import juptune.data.asn1.lang.tooling : asn1ParseWithSemantics, Asn1PrintfErrorHandler;
+            import juptune.asn1.lang.common  : Asn1ParserContext;
+            import juptune.asn1.lang.ir      : Asn1ModuleIr, Asn1ModuleRegistry, Asn1TypeAssignmentIr;
+            import juptune.asn1.lang.tooling : asn1ParseWithSemantics, Asn1PrintfErrorHandler;
 
             const code = `Unittest DEFINITIONS ::= BEGIN
                 TypeRefToBOOLEAN ::= BOOLEAN

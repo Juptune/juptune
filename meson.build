@@ -45,6 +45,30 @@ summary({
 
 #### Sources ####
 
+asn1_srcs = files(
+    './src/juptune/asn1/decode/bcd/encoding.d',
+    './src/juptune/asn1/generated/raw/AttributeCertificateVersion1_1_2_840_113549_1_9_16_0_15.d',
+    './src/juptune/asn1/generated/raw/CryptographicMessageSyntax_1_2_840_113549_1_9_16_0_14.d',
+    './src/juptune/asn1/generated/raw/CryptographicMessageSyntaxAlgorithms_1_2_840_113549_1_9_16_0_16.d',
+    './src/juptune/asn1/generated/raw/PKIX1_PSS_OAEP_Algorithms_1_3_6_1_5_5_7_0_33.d',
+    './src/juptune/asn1/generated/raw/PKIX1Algorithms88_1_3_6_1_5_5_7_0_17.d',
+    './src/juptune/asn1/generated/raw/PKIX1Explicit88_1_3_6_1_5_5_7_0_18.d',
+    './src/juptune/asn1/generated/raw/PKIX1Implicit88_1_3_6_1_5_5_7_0_19.d',
+    './src/juptune/asn1/generated/raw/PKIXAttributeCertificate_1_3_6_1_5_5_7_0_12.d',
+    './src/juptune/asn1/generated/raw/SecureMimeMessageV3dot1_1_2_840_113549_1_9_16_0_21.d',
+    './src/juptune/asn1/lang/ast.d',
+    './src/juptune/asn1/lang/ast2ir.d',
+    './src/juptune/asn1/lang/common.d',
+    './src/juptune/asn1/lang/ir.d',
+    './src/juptune/asn1/lang/lexer.d',
+    './src/juptune/asn1/lang/operations.d',
+    './src/juptune/asn1/lang/package.d',
+    './src/juptune/asn1/lang/parser.d',
+    './src/juptune/asn1/lang/printer.d',
+    './src/juptune/asn1/lang/tooling.d',
+    './src/juptune/asn1/lang/typecheck.d',
+)
+
 core_srcs = files(
     './src/juptune/core/ds/alloc.d',
     './src/juptune/core/ds/array.d',
@@ -85,28 +109,6 @@ data_srcs = files(
     './src/juptune/data/package.d',
     './src/juptune/data/pem.d',
     './src/juptune/data/utf8.d',
-
-    './src/juptune/data/asn1/decode/bcd/encoding.d',
-    './src/juptune/data/asn1/generated/raw/AttributeCertificateVersion1_1_2_840_113549_1_9_16_0_15.d',
-    './src/juptune/data/asn1/generated/raw/CryptographicMessageSyntax_1_2_840_113549_1_9_16_0_14.d',
-    './src/juptune/data/asn1/generated/raw/CryptographicMessageSyntaxAlgorithms_1_2_840_113549_1_9_16_0_16.d',
-    './src/juptune/data/asn1/generated/raw/PKIX1_PSS_OAEP_Algorithms_1_3_6_1_5_5_7_0_33.d',
-    './src/juptune/data/asn1/generated/raw/PKIX1Algorithms88_1_3_6_1_5_5_7_0_17.d',
-    './src/juptune/data/asn1/generated/raw/PKIX1Explicit88_1_3_6_1_5_5_7_0_18.d',
-    './src/juptune/data/asn1/generated/raw/PKIX1Implicit88_1_3_6_1_5_5_7_0_19.d',
-    './src/juptune/data/asn1/generated/raw/PKIXAttributeCertificate_1_3_6_1_5_5_7_0_12.d',
-    './src/juptune/data/asn1/generated/raw/SecureMimeMessageV3dot1_1_2_840_113549_1_9_16_0_21.d',
-    './src/juptune/data/asn1/lang/ast.d',
-    './src/juptune/data/asn1/lang/ast2ir.d',
-    './src/juptune/data/asn1/lang/common.d',
-    './src/juptune/data/asn1/lang/ir.d',
-    './src/juptune/data/asn1/lang/lexer.d',
-    './src/juptune/data/asn1/lang/operations.d',
-    './src/juptune/data/asn1/lang/package.d',
-    './src/juptune/data/asn1/lang/parser.d',
-    './src/juptune/data/asn1/lang/printer.d',
-    './src/juptune/data/asn1/lang/tooling.d',
-    './src/juptune/data/asn1/lang/typecheck.d',
 
     './src/juptune/data/json/builder.d',
     './src/juptune/data/json/package.d',
@@ -156,9 +158,14 @@ juptune_core_dep = declare_dependency(
     d_module_versions: juptune_d_versions,
 )
 
+juptune_asn1_dep = declare_dependency(
+    sources: asn1_srcs,
+    dependencies: [juptune_core_dep],
+)
+
 juptune_data_dep = declare_dependency(
     sources: data_srcs,
-    dependencies: [juptune_core_dep],
+    dependencies: [juptune_core_dep, juptune_asn1_dep],
 )
 
 juptune_crypto_dep = declare_dependency(
@@ -173,11 +180,11 @@ juptune_event_dep = declare_dependency(
 
 juptune_http_dep = declare_dependency(
     sources: http_srcs,
-    dependencies: [juptune_core_dep, juptune_crypto_dep, juptune_data_dep, juptune_event_dep],
+    dependencies: [juptune_asn1_dep, juptune_core_dep, juptune_crypto_dep, juptune_data_dep, juptune_event_dep],
 )
 
 juptune_all_dep = declare_dependency(
-    dependencies: [juptune_core_dep, juptune_crypto_dep, juptune_data_dep, juptune_event_dep, juptune_http_dep],
+    dependencies: [juptune_asn1_dep, juptune_core_dep, juptune_crypto_dep, juptune_data_dep, juptune_event_dep, juptune_http_dep],
 )
 
 juptune_test_dep = declare_dependency(

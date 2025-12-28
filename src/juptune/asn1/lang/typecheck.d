@@ -6,12 +6,12 @@
  */
 
 /// Contains a visitor that performs the bulk of non-mutating semantics analysis.
-module juptune.data.asn1.lang.typecheck;
+module juptune.asn1.lang.typecheck;
 
 import juptune.core.util : Result, resultAssert;
-import juptune.data.asn1.lang.common : Asn1Location, Asn1ErrorHandler;
-import juptune.data.asn1.lang.operations : asn1GetExactUnderlyingType;
-import juptune.data.asn1.lang.ir; // Intentionally everything
+import juptune.asn1.lang.common : Asn1Location, Asn1ErrorHandler;
+import juptune.asn1.lang.operations : asn1GetExactUnderlyingType;
+import juptune.asn1.lang.ir; // Intentionally everything
 
 class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows users to build on top of the built-in checks.
 {
@@ -522,7 +522,7 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
     {
         import std.typecons : Nullable;
         import juptune.core.ds : HashMap;
-        import juptune.data.asn1.lang.operations : asn1TopLevelTagOf;
+        import juptune.asn1.lang.operations : asn1TopLevelTagOf;
 
         // NOTE: It's obviously very inefficient to loop over sequence components over and over again,
         //       but my priority is to make this code easier to read and maintain, even at the cost of performance.
@@ -1757,11 +1757,11 @@ class Asn1TypeCheckVisitor : Asn1IrVisitor // Intentionally not final - allows u
 version(unittest):
 
 import juptune.core.util : resultAssert, resultAssertSameCode;
-import juptune.data.asn1.lang.common; // Intentionally everything
-import juptune.data.asn1.lang.parser; // Intentionally everything
-import juptune.data.asn1.lang.lexer; // Intentionally everything
-import juptune.data.asn1.lang.ast2ir; // Intentionally everything
-import juptune.data.asn1.lang.ast; // Intentionally everything
+import juptune.asn1.lang.common; // Intentionally everything
+import juptune.asn1.lang.parser; // Intentionally everything
+import juptune.asn1.lang.lexer; // Intentionally everything
+import juptune.asn1.lang.ast2ir; // Intentionally everything
+import juptune.asn1.lang.ast; // Intentionally everything
 
 @("Asn1BitStringTypeIr")
 unittest

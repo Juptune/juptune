@@ -58,10 +58,10 @@ version(Juptune_OpenSSL)
             scope ref RsaPublicKey outResult,
         ) @nogc nothrow
         {
-            import juptune.data.asn1.decode.bcd.encoding : asn1DecodeComponentHeader, Asn1ComponentHeader, Asn1Ruleset;
+            import juptune.asn1.decode.bcd.encoding : asn1DecodeComponentHeader, Asn1ComponentHeader, Asn1Ruleset;
             import juptune.data.buffer : MemoryReader;
 
-            import juptune.data.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
+            import juptune.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
                 :
                     RSAPublicKey
                 ;
