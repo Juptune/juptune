@@ -245,12 +245,11 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
     Result wrapError(string newError) @trusted
     {
         Result r = this;
-        r.error = newError;
-
         static if(HaveContext)
         {
             r.context = String2(r.error, " ", r.context.sliceMaybeFromStack);
         }
+        r.error = newError;
         return r;
     }
 

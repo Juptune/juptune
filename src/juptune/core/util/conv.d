@@ -196,7 +196,13 @@ if(is(StructT == struct) && isOutputRange!(OutputT, const(char)[]))
 {
     static if(__traits(hasMember, StructT, "toString"))
     {
-        value.toString(output);
+        static if(__traits(compiles, { value.toString(output); }))
+            value.toString(output);
+        else
+        {
+            void sink(scope const(char)[] str) { output.put(str); }
+            value.toString(&sink);
+        }
     }
     else
     {

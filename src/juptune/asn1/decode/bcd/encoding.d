@@ -1154,7 +1154,7 @@ struct Asn1ObjectIdentifierImpl(bool IsRelative)
 
     void toString(SinkT)(scope SinkT sink, int depth = 0) // @suppress(dscanner.suspicious.object_const)
     {
-        void putIndent() { foreach(i; 0..depth) sink("  "); }
+        void putIndent(){ foreach(i; 0..depth) sink("  "); }
         putIndent();
         sink("[OBJECT IDENTIFIER]\n");
         putIndent();

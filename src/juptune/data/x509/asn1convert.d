@@ -31,6 +31,8 @@ import juptune.asn1.generated.raw.PKIX1Implicit88_1_3_6_1_5_5_7_0_19
             Asn1CertificatePolicies = CertificatePolicies
         ;
 
+import juptune.crypto.ecdsa : EcdsaGroupName;
+
 // A `Result` error enum.
 enum X509Error
 {
@@ -39,6 +41,7 @@ enum X509Error
     invalidCertVersion, /// The `version` field contains an unknown/invalid version value.
     signatureAlgorithmMismatch, /// The `signatureAlgorithm` and unexposed `signature` fields describe different algorithms.
     invalidTimeType, /// A Time must use UTCTime for years <= 2049, and GeneralizedTime for years >= 2050
+    invalidNamedCurve, /// An Asn1ObjectIdentifier was not recognised for a valid/supported ECDSA named curve.
     uniqueIdentifiersWrongVersion, /// Unique Identifiers exsit under a certificate that is not v2 or v3.
     extensionsWrongVersion, /// Extensions exist under a certificate that is not v3.
     keyUsageTooManyBits, /// The `keyUsage` extension contains more bits than expected.
@@ -686,7 +689,6 @@ Result x509FromAsn1(Certificate asn1Cert, out X509Certificate cert) @nogc nothro
     return Result.noError;
 }
 
-// TODO: implement lol
 Result x509IdentifySignatureAlgorithm(
     AlgorithmIdentifier asn1Algorithm,
     out X509SignatureAlgorithm.SumT algorithm,
@@ -697,7 +699,10 @@ Result x509IdentifySignatureAlgorithm(
     import juptune.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
         :
             sha256WithRSAEncryption,
-            sha1WithRSAEncryption
+            sha1WithRSAEncryption,
+            ecdsa_with_SHA256,
+            ecdsa_with_SHA384,
+            ecdsa_with_SHA512
         ;
 
     Result ensureNoParams(string AlgorithmName)()
@@ -729,11 +734,28 @@ Result x509IdentifySignatureAlgorithm(
         algorithm = X509SignatureAlgorithm.Sha256WithRsaEncryption();
         return Result.noError;
     }
-
     if(asn1Algorithm.getAlgorithm() == sha1WithRSAEncryption())
     {
         if(auto r = ensureNoParams!"Sha1WithRsaEncryption"()) return r;
         algorithm = X509SignatureAlgorithm.Sha1WithRsaEncryption();
+        return Result.noError;
+    }
+    if(asn1Algorithm.getAlgorithm() == ecdsa_with_SHA256())
+    {
+        if(auto r = ensureNoParams!"EcdsaWith256"()) return r;
+        algorithm = X509SignatureAlgorithm.EcdsaWith256();
+        return Result.noError;
+    }
+    if(asn1Algorithm.getAlgorithm() == ecdsa_with_SHA384())
+    {
+        if(auto r = ensureNoParams!"EcdsaWith384"()) return r;
+        algorithm = X509SignatureAlgorithm.EcdsaWith384();
+        return Result.noError;
+    }
+    if(asn1Algorithm.getAlgorithm() == ecdsa_with_SHA512())
+    {
+        if(auto r = ensureNoParams!"EcdsaWith512"()) return r;
+        algorithm = X509SignatureAlgorithm.EcdsaWith512();
         return Result.noError;
     }
 
@@ -813,6 +835,9 @@ Result x509IdentifyPublicKeyAlgorithm(
 /++
  + Converts the given ASN.1 model `Time` into the easier to use structure of `time`.
  +
+ + Notes:
+ +  The value of `time` is undefined if an error is returned.
+ +
  + Params:
  +  asn1Time = The ASN.1 time to convert.
  +  time     = The result.
@@ -845,6 +870,50 @@ Result x509HandleTime(Time asn1Time, out X509Certificate.Time time) @nogc nothro
         assert(false, "TODO: Type check");
 
     return Result.noError;
+}
+
+/++
+ + Converts the given ASN.1 object identifier into its corresponding `EcdsaGroupName`.
+ +
+ + Notes:
+ +  The value of `name` is undefined if an error is returned.
+ +
+ +  This uses the OBJECT IDENTIFIERs from RFC 5480... which for some reason have different values than the one from SEC 2
+ +
+ + Params:
+ +  identifier = The OBJECT IDENTIFIER that _should_ represent an ECDSA named curve.
+ +  name       = The corresponding named curve.
+ +
+ + Throws:
+ +  `X509Error.invalidNamedCurve` if `identifier` is not recognised as a valid/support ECDSA named curve.
+ +
+ + Returnns:
+ +  An errorful `Result` if something went wrong.
+ + ++/
+Result x509HandleNamedCurveIdentifierRfc5480(Asn1ObjectIdentifier identifier, out EcdsaGroupName name) @nogc nothrow
+{
+    import juptune.asn1.generated.raw.PKIX1Algorithms2008_1_3_6_1_5_5_7_0_45
+        :
+            secp256r1,
+            secp384r1
+        ;
+
+    if(identifier == secp256r1())
+    {
+        name = EcdsaGroupName.secp256r1;
+        return Result.noError;
+    }
+    else if(identifier == secp384r1())
+    {
+        name = EcdsaGroupName.secp384r1;
+        return Result.noError;
+    }
+
+    return Result.make(
+        X509Error.invalidNamedCurve, 
+        "identifier does not identify a valid/supported ECDSA named curve",
+        String2("identifier was: ", identifier)
+    );
 }
 
 /++
@@ -1392,6 +1461,8 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
     extension = X509Extension.Unknown(asn1Extension);
     return Result.noError;
 }
+
+/++ Unittests ++/
 
 @("x.509 - general megatest")
 unittest

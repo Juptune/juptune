@@ -13,6 +13,7 @@ enum EcdsaGroupName
 {
     FAILSAFE,
     secp256r1,
+    secp384r1,
 }
 
 enum EcdsaSignatureAlgorithm
@@ -129,6 +130,7 @@ version(Juptune_OpenSSL)
             case FAILSAFE: assert(false, "bug: FAILSAFE");
 
             case secp256r1: return "prime256v1"; // Just OpenSSL things
+            case secp384r1: return "secp384r1";
         }
     }
 }

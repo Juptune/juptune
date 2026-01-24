@@ -52,6 +52,7 @@ asn1_srcs = files(
     './src/juptune/asn1/generated/raw/CryptographicMessageSyntaxAlgorithms_1_2_840_113549_1_9_16_0_16.d',
     './src/juptune/asn1/generated/raw/PKIX1_PSS_OAEP_Algorithms_1_3_6_1_5_5_7_0_33.d',
     './src/juptune/asn1/generated/raw/PKIX1Algorithms88_1_3_6_1_5_5_7_0_17.d',
+    './src/juptune/asn1/generated/raw/PKIX1Algorithms2008_1_3_6_1_5_5_7_0_45.d',
     './src/juptune/asn1/generated/raw/PKIX1Explicit88_1_3_6_1_5_5_7_0_18.d',
     './src/juptune/asn1/generated/raw/PKIX1Implicit88_1_3_6_1_5_5_7_0_19.d',
     './src/juptune/asn1/generated/raw/PKIXAttributeCertificate_1_3_6_1_5_5_7_0_12.d',

@@ -22,7 +22,7 @@ fi
 # Ensure dasn1 is compiled, and use it to generate the decoder model
 meson compile -C $BUILD_DIR dasn1
 $BUILD_DIR/tools/dasn1/dasn1 compile dlang-raw \
-    --out-dir $JUPTUNE_DIR/src/juptune/data/asn1/generated/raw/ \
+    --out-dir $JUPTUNE_DIR/src/juptune/asn1/generated/raw/ \
     --base-module juptune.asn1.generated \
     $JUPTUNE_DIR/data/asn1/
 

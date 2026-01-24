@@ -287,38 +287,23 @@ Result x509VerifySignature(
 
     import juptune.core.ds : String2;
     import juptune.crypto.rsa : RsaPublicKey, RsaPadding, RsaSignatureAlgorithm;
+    import juptune.crypto.ecdsa : EcdsaPublicKey, EcdsaGroupName, EcdsaSignatureAlgorithm;
     import juptune.asn1.decode.bcd.encoding : asn1DecodeComponentHeader, Asn1ComponentHeader, Asn1Ruleset;
     import juptune.data.buffer : MemoryReader;
     import juptune.data.x509.asn1convert : X509SignatureAlgorithm, X509PublicKeyAlgorithm;
-
+    
     import juptune.asn1.generated.raw.PKIX1Algorithms88_1_3_6_1_5_5_7_0_17
         :
-            RSAPublicKey
+            EcpkParameters
         ;
-
-    auto anchorKeyMem = MemoryReader(trustAnchorKey.bytes);
-
-    Asn1ComponentHeader anchorKeyHeader;
-    auto result = asn1DecodeComponentHeader!(Asn1Ruleset.der)(anchorKeyMem, anchorKeyHeader);
-    if(result.isError)
-        return result.wrapError("when decoding trust anchor key header:");
-
+    
     Result handleRsa()
     {
         // Decode the trust anchor's public key
-        RSAPublicKey asn1PublicKey;
-        auto result = asn1PublicKey.fromDecoding!(Asn1Ruleset.der)(anchorKeyMem, anchorKeyHeader.identifier);
-        if(result.isError)
-            return result;
-
         RsaPublicKey publicKey;
-        result = RsaPublicKey.fromBigEndianBytes(
-            asn1PublicKey.getModulus().rawBytes,
-            asn1PublicKey.getPublicExponent().rawBytes,
-            publicKey
-        );
+        auto result = RsaPublicKey.fromAsn1RsaPublicKeyBytes(trustAnchorKey.bytes, publicKey);
         if(result.isError)
-            return result;
+            return result.wrapError("when decoding RSA trust anchor public key:");
 
         // Perform hash + set hash parameters
         union Hash
@@ -383,8 +368,87 @@ Result x509VerifySignature(
         );
     }
 
-    result = trustAnchorKeyAlgorithm.match!(
+    Result handleEcdsa(EcpkParameters params)
+    {
+        import juptune.data.x509.asn1convert : x509HandleNamedCurveIdentifierRfc5480;
+
+        if(!params.isNamedCurve)
+            return Result.make(X509ValidationError.certificateIsInvalid, "for ECDSA trust anchor public key, EcpkParamaters may only be the namedCurve option - all other options are forbidden for PKIX purposes under RFC 5480"); // @suppress(dscanner.style.long_line)
+
+        EcdsaGroupName namedCurve;
+        auto result = x509HandleNamedCurveIdentifierRfc5480(params.getNamedCurve(), namedCurve);
+        if(result.isError)
+            return result.wrapError("when handling ECDSA trust anchor public key:");
+
+        // Decode the trust anchor's public key
+        EcdsaPublicKey publicKey;
+        result = EcdsaPublicKey.fromBytes(
+            namedCurve,
+            trustAnchorKey.bytes, 
+            publicKey
+        );
+        if(result.isError)
+            return result.wrapError("when decoding ECDSA trust anchor public key:");
+
+        // Perform hash + set hash parameters
+        union Hash
+        {
+            ubyte[20] sha1;
+            ubyte[28] sha224;
+            ubyte[32] sha256;
+            ubyte[48] sha384;
+            ubyte[64] sha512;
+        }
+
+        Hash hashBuffer;
+        const(ubyte)[] subjectHash;
+        EcdsaSignatureAlgorithm sigAlgorithm;
+        
+        result = subjectSignatureAlgorithm.match!(
+            (X509SignatureAlgorithm.EcdsaWithSha1 _){
+                return Result.make(X509ValidationError.unknownSignatureAlgorithm, "EcdsaWithSha1 is not supported");
+            },
+            (X509SignatureAlgorithm.EcdsaWith244 _){
+                return Result.make(X509ValidationError.unknownSignatureAlgorithm, "EcdsaWith244 is not supported");
+            },
+            (X509SignatureAlgorithm.EcdsaWith256 _){
+                sigAlgorithm = EcdsaSignatureAlgorithm.sha256;
+                hashBuffer.sha256 = sha256Of(subjectTbsRawDer);
+                subjectHash = hashBuffer.sha256[];
+                return Result.noError;
+            },
+            (X509SignatureAlgorithm.EcdsaWith384 _){
+                sigAlgorithm = EcdsaSignatureAlgorithm.sha384;
+                hashBuffer.sha384 = sha384Of(subjectTbsRawDer);
+                subjectHash = hashBuffer.sha384[];
+                return Result.noError;
+            },
+            (X509SignatureAlgorithm.EcdsaWith512 _){
+                sigAlgorithm = EcdsaSignatureAlgorithm.sha512;
+                hashBuffer.sha512 = sha512Of(subjectTbsRawDer);
+                subjectHash = hashBuffer.sha512[];
+                return Result.noError;
+            },
+            (_) => Result.make(
+                X509ValidationError.keyAndSignatureAlgorithmMismatch,
+                "Trust anchor key is ECDSA while subject's signature algorithm does not use ECDSA",
+                String2("subject signature algorithm was of type: ", typeof(_).stringof)
+            ),
+        );
+        if(result.isError)
+            return result;
+
+        return publicKey.verifySignature(
+            subjectSignature.bytes, 
+            subjectHash, 
+            sigAlgorithm, 
+            couldVerify
+        );
+    }
+
+    auto result = trustAnchorKeyAlgorithm.match!(
         (X509PublicKeyAlgorithm.RsaEncryption _) => handleRsa(),
+        (X509PublicKeyAlgorithm.EcPublicKey ecdsa) => handleEcdsa(ecdsa.params),
         (X509PublicKeyAlgorithm.Unknown unknown) {
             return Result.make(
                 X509ValidationError.unknownKeyAlgorithm,
