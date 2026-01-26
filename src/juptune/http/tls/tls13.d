@@ -755,27 +755,27 @@ debug unittest
 
     auto loop = EventLoop(EventLoopConfig());
     loop.addGCThread((){
-        import juptune.http;
+        // import juptune.http;
 
-        IpAddress ip;
-        IpAddress.parse(ip, "104.16.124.96", 443).resultAssert;
+        // IpAddress ip;
+        // IpAddress.parse(ip, "104.16.124.96", 443).resultAssert;
 
-        auto client = HttpClient(HttpClientConfig().withTlsConfig(
-            TlsConfig().withReadTimeout(2.seconds)
-        ));
-        client.connectTls(ip, "www.cloudflare.com").resultAssert;
+        // auto client = HttpClient(HttpClientConfig().withTlsConfig(
+        //     TlsConfig().withReadTimeout(2.seconds)
+        // ));
+        // client.connectTls(ip, "www.cloudflare.com").resultAssert;
 
-        HttpRequest req;
-        req.withMethod("GET");
-        req.withPath("/");
-        req.setHeader("User-Agent", "curl/8.16.0");
-        req.setHeader("Accept", "*/*");
+        // HttpRequest req;
+        // req.withMethod("GET");
+        // req.withPath("/");
+        // req.setHeader("User-Agent", "curl/8.16.0");
+        // req.setHeader("Accept", "*/*");
         
-        HttpResponse resp;
-        client.request(req, resp).resultAssert;
+        // HttpResponse resp;
+        // client.request(req, resp).resultAssert;
 
-        import std.file : write;
-        debug write("test.html", cast(string)resp.body.slice);
+        // import std.file : write;
+        // debug write("test.html", cast(string)resp.body.slice);
     });
     loop.join();
 }
