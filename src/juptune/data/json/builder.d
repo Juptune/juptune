@@ -116,7 +116,7 @@ struct JsonBuilder(SinkT)
         if(this._depth >= this._depthMarkers.length * BITS_PER_BYTE)
             return Result.make(JsonBuilderError.tooDeep, "Attempted to start an object, with a full depth buffer.");
 
-        if(this._depth != 0 && this.inObject)
+        if(this._depth != 0)
         {
             if(!this._isFirstItem)
             {
@@ -124,14 +124,17 @@ struct JsonBuilder(SinkT)
                 if(result.isError)
                     return result;
             }
-            
-            auto result = this.put(keyIfInObject);
-            if(result.isError)
-                return result;
-            
-            result = this._sink(": ");
-            if(result.isError)
-                return result;
+
+            if(this.inObject)
+            {
+                auto result = this.put(keyIfInObject);
+                if(result.isError)
+                    return result;
+                
+                result = this._sink(": ");
+                if(result.isError)
+                    return result;
+            }
         }
 
         const byteIndex = this._depth / 8;
@@ -164,7 +167,7 @@ struct JsonBuilder(SinkT)
         if(this._depth >= this._depthMarkers.length * BITS_PER_BYTE)
             return Result.make(JsonBuilderError.tooDeep, "Attempted to start an array, with a full depth buffer.");
 
-        if(this._depth != 0 && this.inObject)
+        if(this._depth != 0)
         {
             if(!this._isFirstItem)
             {
@@ -173,13 +176,16 @@ struct JsonBuilder(SinkT)
                     return result;
             }
             
-            auto result = this.put(keyIfInObject);
-            if(result.isError)
-                return result;
-            
-            result = this._sink(": ");
-            if(result.isError)
-                return result;
+            if(this.inObject)
+            {
+                auto result = this.put(keyIfInObject);
+                if(result.isError)
+                    return result;
+                
+                result = this._sink(": ");
+                if(result.isError)
+                    return result;
+            }
         }
 
         const byteIndex = this._depth / 8;
@@ -429,21 +435,22 @@ struct JsonBuilder(SinkT)
 
         while(cursor < str.length)
         {
-            const ch = str[cursor++];
+            const ch = str[cursor];
 
             switch(ch)
             {
                 // Using shorthand error handling syntax since conciseness matters more here.
-                case '"': if(auto r = flush()) return r; else if(auto r = this._sink(`\"`)) return r; else break;
-                case '\\': if(auto r = flush()) return r; else if(auto r = this._sink(`\\`)) return r; else break;
-                case '/': if(auto r = flush()) return r; else if(auto r = this._sink(`\/`)) return r; else break; // Reason #1000230 on why not to model anything after Javascript
-                case '\b': if(auto r = flush()) return r; else if(auto r = this._sink(`\b`)) return r; else break;
-                case '\f': if(auto r = flush()) return r; else if(auto r = this._sink(`\f`)) return r; else break;
-                case '\n': if(auto r = flush()) return r; else if(auto r = this._sink(`\n`)) return r; else break;
-                case '\r': if(auto r = flush()) return r; else if(auto r = this._sink(`\r`)) return r; else break;
-                case '\t': if(auto r = flush()) return r; else if(auto r = this._sink(`\t`)) return r; else break;
+                case '"': if(auto r = flush()) return r; else if(auto r = this._sink(`\"`)) return r; else { cursor++; break; }
+                case '\\': if(auto r = flush()) return r; else if(auto r = this._sink(`\\`)) return r; else { cursor++; break; }
+                case '/': if(auto r = flush()) return r; else if(auto r = this._sink(`\/`)) return r; else { cursor++; break; } // Reason #1000230 on why not to model anything after Javascript
+                case '\b': if(auto r = flush()) return r; else if(auto r = this._sink(`\b`)) return r; else { cursor++; break; }
+                case '\f': if(auto r = flush()) return r; else if(auto r = this._sink(`\f`)) return r; else { cursor++; break; }
+                case '\n': if(auto r = flush()) return r; else if(auto r = this._sink(`\n`)) return r; else { cursor++; break; }
+                case '\r': if(auto r = flush()) return r; else if(auto r = this._sink(`\r`)) return r; else { cursor++; break; }
+                case '\t': if(auto r = flush()) return r; else if(auto r = this._sink(`\t`)) return r; else { cursor++; break; }
 
                 default:
+                    cursor++;
                     break; // No special handling needed - wait until we can flush an entire slice to the sink.
             }
         }
@@ -467,6 +474,11 @@ struct JsonBuilder(SinkT)
     private Result put()(bool bool_)
     {
         return bool_ ? this._sink("true") : this._sink("false");
+    }
+
+    private Result put()(typeof(null) _)
+    {
+        return this._sink("null");
     }
 }
 

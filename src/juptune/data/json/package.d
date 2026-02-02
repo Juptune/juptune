@@ -6,4 +6,8 @@
  */
 module juptune.data.json;
 
-public import juptune.data.json.builder, juptune.data.json.parser;
+public import 
+    juptune.data.json.builder, 
+    juptune.data.json.parser,
+    juptune.data.json.serialise
+;

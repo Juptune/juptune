@@ -289,7 +289,7 @@ struct JsonParser
         bool            _expectingName;
         Token.Type      _previousType;
 
-        invariant
+        debug invariant
         {
             if(this._expectingName)
                 assert(this.inObject(), "bug: _expectingName shouldn't be true when we're not in an object?");
