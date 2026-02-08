@@ -434,7 +434,7 @@ struct JsonParser
      + Returns:
      +  A `Result` indicating whether the parser can be considered "finished" or not.
      + ++/
-    Result finish()
+    Result finish() @nogc nothrow
     {
         if(this._depth != 0)
             return Result.make(JsonParserError.incomplete, "depth buffer isn't empty, cannot finish mid-way through");

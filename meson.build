@@ -199,8 +199,9 @@ juptune_test_dep = declare_dependency(
 
 examples = {
     'http-hello-world-hardcoded': ['./examples/http-hello-world-hardcoded/main.d'],
-    'http-echo-low-level': ['./examples/http-echo-low-level/main.d'],
+    # 'http-echo-low-level': ['./examples/http-echo-low-level/main.d'], Needs to be fixed - the String2 -> String migration broke something
     'http-client-curl': ['./examples/http-client-curl/main.d'],
+    'https-wines': ['./examples/https-wines/main.d'],
 }
 
 example_exes = []

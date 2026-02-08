@@ -202,7 +202,6 @@ struct HttpClient
         TlsTcpSocket    _tlsSocket;
         Array!ubyte     _tlsWriteStorage;
         Array!ubyte     _tlsReadStorage;
-        Array!ubyte     _tlsStagingStorage;
 
         // Dynamic state
         bool                _isConnected;
@@ -328,9 +327,11 @@ struct HttpClient
 
         this._tlsWriteStorage.length    = 1024 * 8;
         this._tlsReadStorage.length     = 1024 * 17;
-        this._tlsStagingStorage.length  = 1024 * 32;
+
+        Array!ubyte tlsStagingStorage; // We only need the staging buffer during the handshake.
+        tlsStagingStorage.length  = 1024 * 32;
         
-        this._tlsSocket = TlsTcpSocket(&this._socket, this._tlsReadStorage[], this._tlsWriteStorage[], this._tlsStagingStorage[], this._config.tls); // @suppress(dscanner.style.long_line)
+        this._tlsSocket = TlsTcpSocket(&this._socket, this._tlsReadStorage[], this._tlsWriteStorage[], tlsStagingStorage[], this._config.tls); // @suppress(dscanner.style.long_line)
         this._https1 = Http1ClientImpl!TlsTcpSocket(this._config, &this._tlsSocket, this._writeBuffer, this._readBuffer); // @suppress(dscanner.style.long_line)
         this._isConnected = true;
         this._selectedVersion = HttpClientVersion.https1;
@@ -347,7 +348,6 @@ struct HttpClient
             cast(void)this.close();
             return result;
         }
-        this._tlsStagingStorage.__xdtor(); // The staging buffer is only needed during a handshake.
         
         return Result.noError;
     }
@@ -377,7 +377,6 @@ struct HttpClient
         this._tlsSocket = TlsTcpSocket.init;
         this._tlsWriteStorage.length = 0;
         this._tlsReadStorage.length = 0;
-        this._tlsStagingStorage.length = 0;
 
         if(closeResult.isError)
             return closeResult;

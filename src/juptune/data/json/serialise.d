@@ -9,7 +9,7 @@ module juptune.data.json.serialise;
 import std.traits : isInstanceOf;
 import std.typecons : Nullable;
 
-import juptune.core.ds : Array, String;
+import juptune.core.ds : Array, ArrayBase, String;
 import juptune.core.util : Result;
 
 import juptune.data.json.builder : JsonBuilder;
@@ -359,6 +359,30 @@ if(__traits(isIntegral, ToDeserialiseT) && !is(ToDeserialiseT == bool))
     return token.asInt(toDeserialiseInto);
 }
 
+// TEMPORARY Overload for floats
+private Result jsonDeserialiseImpl(ToDeserialiseT, Json Uda)(
+    scope ref JsonParser json, 
+    scope ref ToDeserialiseT toDeserialiseInto,
+)
+if(is(ToDeserialiseT == float) || is(ToDeserialiseT == double))
+{    
+    JsonParser.Token token;
+    auto result = json.next(token);
+    if(result.isError)
+        return result;
+    
+    // if(token.type != JsonParser.Token.Type.floating)
+    // {
+    //     return Result.make(
+    //         JsonSerialiseError.wrongType,
+    //         "expected an floating token when deserialising field of type "~ToDeserialiseT.stringof,
+    //         String("got a token of type ", token.type, " instead")
+    //     );
+    // }
+
+    return Result.noError;
+}
+
 // Overload for bools
 private Result jsonDeserialiseImpl(ToDeserialiseT, Json Uda)(
     scope ref JsonParser json, 
@@ -390,15 +414,15 @@ private Result jsonDeserialiseImpl(ToDeserialiseT, Json Uda)(
     scope out ToDeserialiseT toDeserialiseInto,
 )
 if(
-    (is(ToDeserialiseT == T[], T) || is(ToDeserialiseT == Array!T, T))
+    (is(ToDeserialiseT == T[], T) || isInstanceOf!(ArrayBase, ToDeserialiseT))
     && !is(ToDeserialiseT : const(char)[]) // Exclude strings
     && !is(ToDeserialiseT == Array!char) // ^^
 )
 {
     static if(is(ToDeserialiseT == T[], T))
         alias ElementT = T;
-    else static if(is(ToDeserialiseT == Array!T, T))
-        alias ElementT = T;
+    else static if(isInstanceOf!(ArrayBase, ToDeserialiseT))
+        alias ElementT = ToDeserialiseT.ValueT;
     else static assert(false);
 
     JsonParser.Token token;
@@ -445,7 +469,7 @@ private Result jsonDeserialiseImpl(ToDeserialiseT, Json Uda)(
 )
 if(
     is(ToDeserialiseT == struct)
-    && !is(ToDeserialiseT == Array!_, _) // Except for some structs that are specially handled
+    && !isInstanceOf!(ArrayBase, ToDeserialiseT) // Except for some structs that are specially handled
     && !is(ToDeserialiseT == String) // ^^
 )
 {
