@@ -96,6 +96,7 @@ void nogcServer()
 
         // Having to use debug so I can use RNG in @nogc... I love @nogc I love @nogc I love @nogc.
         debug const index = uniform(0, wines.length);
+        else const index = 0;
 
         printf(
             "At %s in %s, I'd suggest the %s which has an average rating of %s\n",
@@ -136,7 +137,7 @@ void gcServer()
 
             assert(resp.status == 200, "non-200 response");
 
-            Wine[] wines;
+            WineGC[] wines;
 
             ubyte[8] depth;
             scope json = JsonParser(cast(const(char)[])resp.body.slice, depth);
@@ -146,10 +147,10 @@ void gcServer()
             const index = uniform(0, wines.length);
             writefln(
                 "At %s in %s, I'd suggest the %s which has an average rating of %s",
-                wines[index].winery.slice,
-                wines[index].location.slice,
-                wines[index].wine.slice,
-                wines[index].rating.average.slice,
+                wines[index].winery,
+                wines[index].location,
+                wines[index].wine,
+                wines[index].rating.average,
             );
         }
         catch(Exception ex)
