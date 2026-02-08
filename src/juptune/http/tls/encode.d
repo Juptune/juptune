@@ -153,7 +153,7 @@ Result autoEncode(string DebugName, T, FieldUdas...)(
 )
 if(is(T == const(ubyte)[]))
 {
-    import juptune.core.ds : String2;
+    import juptune.core.ds : String;
     import juptune.http.tls.models : ExactLength, LengthRange;
 
     static foreach(Uda; FieldUdas)
@@ -165,7 +165,7 @@ if(is(T == const(ubyte)[]))
                 return Result.make(
                     TlsError.exactLengthConstraintFailed,
                     "expected field "~DebugName~" of type "~typeof(value).stringof~" to be a specific length",
-                    String2("expected length of ", Uda.length, " but got length of ", value.length)
+                    String("expected length of ", Uda.length, " but got length of ", value.length)
                 );
             }
         }
@@ -176,7 +176,7 @@ if(is(T == const(ubyte)[]))
                 return Result.make(
                     TlsError.lengthRangeConstraintFailed,
                     "expected field "~DebugName~" of type "~typeof(value).stringof~" to be at least a certain size",
-                    String2("expected minimum length of ", Uda.lower, " but got length of ", value.length)
+                    String("expected minimum length of ", Uda.lower, " but got length of ", value.length)
                 );
             }
             if(value.length > Uda.upper)
@@ -184,7 +184,7 @@ if(is(T == const(ubyte)[]))
                 return Result.make(
                     TlsError.lengthRangeConstraintFailed,
                     "expected field "~DebugName~" of type "~typeof(value).stringof~" to be at most a certain size",
-                    String2("expected maximum length of ", Uda.lower, " but got length of ", value.length)
+                    String("expected maximum length of ", Uda.lower, " but got length of ", value.length)
                 );
             }
 
@@ -195,7 +195,7 @@ if(is(T == const(ubyte)[]))
                     return Result.make(
                         TlsError.lengthRangeConstraintFailed,
                         "expected field "~DebugName~" of type "~typeof(value).stringof~" to be a size that's a multiple of "~ElementT.stringof, // @suppress(dscanner.style.long_line)
-                        String2("expected length that is a multiple of ", ElementT.sizeof, " but got length of ", value.length) // @suppress(dscanner.style.long_line)
+                        String("expected length that is a multiple of ", ElementT.sizeof, " but got length of ", value.length) // @suppress(dscanner.style.long_line)
                     );
                 }
             }
@@ -227,7 +227,7 @@ Result autoEncode(string DebugName, T, FieldUdas...)(
 )
 if(isIntegral!T)
 {
-    import juptune.core.ds          : String2;
+    import juptune.core.ds          : String;
     import juptune.data.buffer      : Endian;
     import juptune.http.tls.models  : ExactValue;
 
@@ -240,7 +240,7 @@ if(isIntegral!T)
                 return Result.make(
                     TlsError.exactValueConstraintFailed,
                     "expected field "~DebugName~" of type "~typeof(value).stringof~" to be a specific value",
-                    String2("expected value of ", Uda.value, " but got value of ", value)
+                    String("expected value of ", Uda.value, " but got value of ", value)
                 );
             }
         }

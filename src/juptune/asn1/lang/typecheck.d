@@ -2668,11 +2668,11 @@ unittest
 private final class ErrorCollector : Asn1ErrorHandler
 {
     import juptune.core.util.conv : toStringSink;
-    import juptune.core.ds : String2, Array;
+    import juptune.core.ds : String, Array;
 
     @nogc nothrow:
 
-    Array!String2 errors;
+    Array!String errors;
     Array!char buffer;
     uint _indent;
 
@@ -2692,7 +2692,7 @@ private final class ErrorCollector : Asn1ErrorHandler
     }
     override void endLine()
     {
-        this.errors.put(String2(this.buffer[0..$]));
+        this.errors.put(String(this.buffer[0..$]));
         this.buffer.length = 0; // Not using .fromDestroyingArray since we want to keep the underlying capacity.
     }
     override void indent() { this._indent++; }

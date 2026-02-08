@@ -38,7 +38,7 @@ struct Asn1ParserContext
 {
     import juptune.asn1.lang.ast : Asn1BaseNode;
     import juptune.asn1.lang.ir  : Asn1BaseIr;
-    import juptune.core.ds            : Array, String2, HashMap;
+    import juptune.core.ds            : Array, String, HashMap;
     import juptune.core.util          : Result;
 
     @disable this(this){}
@@ -46,7 +46,7 @@ struct Asn1ParserContext
     NodeAllocator allocator;
     Array!Asn1BaseNode nodesToDtor;
     Array!Asn1BaseIr irToDtor;
-    Array!String2 strings;
+    Array!String strings;
 
     @nogc nothrow:
 
@@ -80,11 +80,11 @@ struct Asn1ParserContext
      +  slice = The slice to make a copy of.
      +
      + Returns:
-     +  The copied slice, in the form of a `String2`.
+     +  The copied slice, in the form of a `String`.
      + ++/
-    String2 preserveString(scope const(char)[] slice)
+    String preserveString(scope const(char)[] slice)
     {
-        this.strings.put(String2(slice));
+        this.strings.put(String(slice));
         return this.strings[$-1];
     }
 
@@ -93,7 +93,7 @@ struct Asn1ParserContext
      + preserves a living instance of `str`, so that its ref count doesn't reach 0 until
      + sometime after this context instance is destroyed.
      + ++/
-    void preserveString(ref String2 str)
+    void preserveString(ref String str)
     {
         this.strings.put(str);
     }
@@ -126,7 +126,7 @@ struct Asn1ParserContext
 
 abstract class Asn1ErrorHandler
 {
-    import juptune.core.ds : Array, String2;
+    import juptune.core.ds : Array, String;
 
     @nogc nothrow:
 
@@ -136,7 +136,7 @@ abstract class Asn1ErrorHandler
     abstract void indent();
     abstract void dedent();
 
-    String2 errorAndString(Args...)(Asn1Location location, scope auto ref Args args)
+    String errorAndString(Args...)(Asn1Location location, scope auto ref Args args)
     {
         import juptune.core.util : toStringSink;
 
@@ -168,7 +168,7 @@ abstract class Asn1ErrorHandler
             }
         }
 
-        return String2.fromDestroyingArray(buffer);
+        return String.fromDestroyingArray(buffer);
     }
 }
 

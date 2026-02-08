@@ -9,7 +9,7 @@ module juptune.data.json.serialise;
 import std.traits : isInstanceOf;
 import std.typecons : Nullable;
 
-import juptune.core.ds : Array, String2;
+import juptune.core.ds : Array, String;
 import juptune.core.util : Result;
 
 import juptune.data.json.builder : JsonBuilder;
@@ -272,7 +272,7 @@ if(is(ToSerialiseT == ElementT[], ElementT) && !is(ToSerialiseT : const(char)[])
  +
  +  `Array!char` is special-cased for only supporting strings.
  +
- +  `String2` is supported for strings.
+ +  `String` is supported for strings.
  +
  +  `Nullable!T` where `T` is any supported type.
  +
@@ -316,7 +316,7 @@ private Result jsonDeserialiseImpl(ToDeserialiseT, Json Uda)(
     scope ref JsonParser json, 
     scope ref ToDeserialiseT toDeserialiseInto,
 )
-if(is(ToDeserialiseT == string) || is(ToDeserialiseT == String2) || is(ToDeserialiseT == Array!char))
+if(is(ToDeserialiseT == string) || is(ToDeserialiseT == String) || is(ToDeserialiseT == Array!char))
 {
     JsonParser.Token token;
     auto result = json.next(token);
@@ -328,7 +328,7 @@ if(is(ToDeserialiseT == string) || is(ToDeserialiseT == String2) || is(ToDeseria
         return Result.make(
             JsonSerialiseError.wrongType,
             "expected a string token when deserialising field of type "~ToDeserialiseT.stringof,
-            String2("got a token of type ", token.type, " instead")
+            String("got a token of type ", token.type, " instead")
         );
     }
 
@@ -352,7 +352,7 @@ if(__traits(isIntegral, ToDeserialiseT) && !is(ToDeserialiseT == bool))
         return Result.make(
             JsonSerialiseError.wrongType,
             "expected an integer token when deserialising field of type "~ToDeserialiseT.stringof,
-            String2("got a token of type ", token.type, " instead")
+            String("got a token of type ", token.type, " instead")
         );
     }
 
@@ -376,7 +376,7 @@ if(is(ToDeserialiseT == bool))
         return Result.make(
             JsonSerialiseError.wrongType,
             "expected a boolean token when deserialising field of type "~ToDeserialiseT.stringof,
-            String2("got a token of type ", token.type, " instead")
+            String("got a token of type ", token.type, " instead")
         );
     }
 
@@ -411,7 +411,7 @@ if(
         return Result.make(
             JsonSerialiseError.wrongType,
             "expected an array start token when deserialising field of type "~ToDeserialiseT.stringof,
-            String2("got a token of type ", token.type, " instead")
+            String("got a token of type ", token.type, " instead")
         );
     }
 
@@ -446,7 +446,7 @@ private Result jsonDeserialiseImpl(ToDeserialiseT, Json Uda)(
 if(
     is(ToDeserialiseT == struct)
     && !is(ToDeserialiseT == Array!_, _) // Except for some structs that are specially handled
-    && !is(ToDeserialiseT == String2) // ^^
+    && !is(ToDeserialiseT == String) // ^^
 )
 {
     import juptune.core.ds : ArrayNonShrink;
@@ -461,7 +461,7 @@ if(
         return Result.make(
             JsonSerialiseError.wrongType,
             "expected an object start token when deserialising field of type "~ToDeserialiseT.stringof,
-            String2("got a token of type ", token.type, " instead")
+            String("got a token of type ", token.type, " instead")
         );
     }
 
@@ -480,7 +480,7 @@ if(
             return Result.make(
                 JsonSerialiseError.wrongType,
                 "expected an name token when deserialising next field of struct type "~ToDeserialiseT.stringof,
-                String2("got a token of type ", token.type, " instead")
+                String("got a token of type ", token.type, " instead")
             );
         }
 
@@ -552,7 +552,7 @@ if(
                 return Result.make(
                     JsonSerialiseError.keyNotRecognised,
                     "when parsing struct type "~ToDeserialiseT.stringof~": the input JSON object contains a key that does not correlate to a field within the struct.", // @suppress(dscanner.style.long_line)
-                    String2("key was: ", nameSlice)
+                    String("key was: ", nameSlice)
                 );
         }
     }
@@ -581,8 +581,8 @@ private Result jsonToString(JsonParser.Token token, scope ref string value) noth
     return Result.noError;
 }
 
-// To @nogc string (String2 case)
-private Result jsonToString(JsonParser.Token token, scope out String2 value) @nogc nothrow
+// To @nogc string (String case)
+private Result jsonToString(JsonParser.Token token, scope out String value) @nogc nothrow
 {
     if(token.hasEscapeChars)
     {
@@ -590,11 +590,11 @@ private Result jsonToString(JsonParser.Token token, scope out String2 value) @no
         str.reserve(token.asUnescapedString.length);
         foreach(slice; token.asEscapedString)
             str.put(slice);
-        value = String2.fromDestroyingArray(str);
+        value = String.fromDestroyingArray(str);
         return Result.noError;
     }
 
-    value = String2(token.asUnescapedString);
+    value = String(token.asUnescapedString);
     return Result.noError;
 }
 

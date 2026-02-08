@@ -5,7 +5,7 @@ static import tcon = std.typecons;
 static import asn1 = juptune.asn1.decode.bcd.encoding;
 static import jres = juptune.core.util.result;
 static import jbuf = juptune.data.buffer;
-static import jstr = juptune.core.ds.string2;
+static import jstr = juptune.core.ds.string;
 static import utf8 = juptune.data.utf8;
 
 asn1.Asn1ObjectIdentifier id_aa(
@@ -162,9 +162,9 @@ struct SMIMECapability
         if(result.isError)
             return result.wrapError("when decoding header of field 'capabilityID' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE SMIMECapability when reading top level tag 6 for field 'capabilityID' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE SMIMECapability when reading top level tag 6 for field 'capabilityID' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 6)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE SMIMECapability when reading top level tag 6 for field 'capabilityID' the tag's value was expected to be 6", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE SMIMECapability when reading top level tag 6 for field 'capabilityID' the tag's value was expected to be 6", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_capabilityID;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_capabilityID);
         if(result.isError)

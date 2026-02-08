@@ -1,6 +1,6 @@
 module juptune.http.common;
 
-import juptune.core.ds : Array, String2;
+import juptune.core.ds : Array, String;
 
 private mixin template HttpMessageNoGCCommon()
 {
@@ -26,7 +26,7 @@ private mixin template HttpMessageNoGCCommon()
      + Notes:
      +  The key and value will be copied into a heap allocated string.
      +
-     +  The key and value types are templated, so that you can use any type supported by `String2`.
+     +  The key and value types are templated, so that you can use any type supported by `String`.
      +
      + Params:
      +  key   = The name of the header to set.
@@ -43,7 +43,7 @@ private mixin template HttpMessageNoGCCommon()
                 if(value.length == 0)
                     this._headers.remove(i);
                 else
-                    header._value = String2(value);
+                    header._value = String(value);
                 return;
             }
         }
@@ -56,7 +56,7 @@ private mixin template HttpMessageNoGCCommon()
      + Tries to get the header with the given name.
      +
      + Notes:
-     +  The key type is templated, so that you can use any type supported by `String2`.
+     +  The key type is templated, so that you can use any type supported by `String`.
      +
      + Params:
      +  key      = The name of the header to get.
@@ -94,8 +94,8 @@ struct HttpHeader
 {
     private 
     {
-        String2 _name;
-        String2 _value;
+        String _name;
+        String _value;
     }
 
     /++ 
@@ -108,23 +108,23 @@ struct HttpHeader
      +
      +  The name and value will be copied into an internal string.
      +
-     +  If the name is of type `String2`, it will have its payload cloned into a new string as this ctor
+     +  If the name is of type `String`, it will have its payload cloned into a new string as this ctor
      +  needs to modify the string in place.
      +
      + Params:
-     +  name  = The name of the header. This can be any type supported by `String2`'s ctor.
-     +  value = The value of the header. This can be any type supported by `String2`'s ctor.
+     +  name  = The name of the header. This can be any type supported by `String`'s ctor.
+     +  value = The value of the header. This can be any type supported by `String`'s ctor.
      + ++/
     this(NameT, ValueT)(scope NameT name, scope ValueT value) @trusted // @safe: The const removal is safe
     {
         import juptune.http.v1 : http1CanonicalHeaderNameInPlace;
 
-        this._value = String2(value);
+        this._value = String(value);
 
-        static if(is(NameT == String2))
-            this._name = String2(name.sliceMaybeFromStack); // Clones the payload.
+        static if(is(NameT == String))
+            this._name = String(name.sliceMaybeFromStack); // Clones the payload.
         else
-            this._name = String2(name);
+            this._name = String(name);
 
         // NOTE: While it would be nice to check the validation result, this
         //       should get caught in the writer anyway. The annoyance of constructors :(
@@ -140,10 +140,10 @@ struct HttpHeader
     }
 
     /// The name of the header.
-    ref const(String2) name() scope return const @safe @nogc nothrow => this._name;
+    ref const(String) name() scope return const @safe @nogc nothrow => this._name;
 
     /// The value of the header.
-    ref const(String2) value() scope return const @safe @nogc nothrow => this._value;
+    ref const(String) value() scope return const @safe @nogc nothrow => this._value;
 }
 
 /++
@@ -155,8 +155,8 @@ struct HttpRequest
 
     private
     {
-        String2 _method;
-        String2 _path;
+        String _method;
+        String _path;
     }
 
     @nogc nothrow:
@@ -174,35 +174,35 @@ struct HttpRequest
      + Sets the method of the request.
      +
      + Notes:
-     +  The method type is templated so that you can use any type supported by `String2`.
+     +  The method type is templated so that you can use any type supported by `String`.
      +
      + Params:
      +  method = The method to set the request to.
      + ++/
     void withMethod(MethodT)(scope MethodT method)
     {
-        this._method = String2(method);
+        this._method = String(method);
     }
 
     /++ 
      + Sets the path of the request.
      +
      + Notes:
-     +  The path type is templated so that you can use any type supported by `String2`.
+     +  The path type is templated so that you can use any type supported by `String`.
      +
      + Params:
      +  path = The path to set the request to.
      + ++/
     void withPath(PathT)(scope PathT path)
     {
-        this._path = String2(path);
+        this._path = String(path);
     }
 
     /// The method of the request.
-    ref const(String2) method() scope return const @safe @nogc nothrow => this._method;
+    ref const(String) method() scope return const @safe @nogc nothrow => this._method;
 
     /// The path of the request.
-    ref const(String2) path() scope return const @safe @nogc nothrow => this._path;
+    ref const(String) path() scope return const @safe @nogc nothrow => this._path;
 }
 
 /++
@@ -215,7 +215,7 @@ struct HttpResponse
     private
     {
         uint   _status;
-        String2 _reason;
+        String _reason;
     }
 
     @nogc nothrow:
@@ -244,18 +244,18 @@ struct HttpResponse
      + Sets the reason of the response.
      +
      + Notes:
-     +  The reason type is templated so that you can use any type supported by `String2`.
+     +  The reason type is templated so that you can use any type supported by `String`.
      +
      + Params:
      +  reason = The reason to set the response to.
      + ++/
     void withReason(ReasonT)(scope ReasonT reason)
     {
-        this._reason = String2(reason);
+        this._reason = String(reason);
     }
 
     /// The status of the response.
-    ref const(String2) reason() scope return const @safe @nogc nothrow => this._reason;
+    ref const(String) reason() scope return const @safe @nogc nothrow => this._reason;
 
     /// The reason of the response.
     uint status() const @safe @nogc nothrow => this._status;

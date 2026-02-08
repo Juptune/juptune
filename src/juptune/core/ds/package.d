@@ -8,7 +8,6 @@ module juptune.core.ds;
 
 public import 
     juptune.core.ds.string,
-    juptune.core.ds.string2,
     juptune.core.ds.alloc,
     juptune.core.ds.array,
     juptune.core.ds.block,

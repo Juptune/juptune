@@ -1,6 +1,6 @@
 module juptune.http.client;
 
-import juptune.core.ds   : String2;
+import juptune.core.ds   : String;
 import juptune.core.util : Result;
 import juptune.event     : IpAddress;
 
@@ -146,7 +146,7 @@ final class HttpClientAdapter : IHttpClient
  + ++/
 struct HttpClient
 {
-    import juptune.core.ds      : Array, String2;
+    import juptune.core.ds      : Array, String;
     import juptune.event.io     : TcpSocket, IpAddress;
     import juptune.http.common  : HttpRequest, HttpResponse;
     import juptune.http.uri     : Uri;
@@ -208,7 +208,7 @@ struct HttpClient
         bool                _isConnected;
         HttpClientVersion   _selectedVersion;
         bool                _lockClient;
-        String2             _hostName;
+        String             _hostName;
 
         invariant(_isConnected || _selectedVersion == HttpClientVersion.FAILSAFE, "bug: Incorrect state management");
         invariant(!_lockClient, "Attempted to use client while it was locked (or a bug where the lock wasn't released)"); // @suppress(dscanner.style.long_line)
@@ -567,7 +567,7 @@ struct HttpClient
     }
 }
 
-private String2 setIpHostname(IpAddress ip, scope const(char)[] host = null) @nogc nothrow
+private String setIpHostname(IpAddress ip, scope const(char)[] host = null) @nogc nothrow
 {
     import juptune.core.ds : Array;
 
@@ -592,7 +592,7 @@ private String2 setIpHostname(IpAddress ip, scope const(char)[] host = null) @no
         }
     }
 
-    return String2.fromDestroyingArray(hostName);
+    return String.fromDestroyingArray(hostName);
 }
 
 private struct Http1ClientImpl(SocketT)
@@ -621,7 +621,7 @@ private struct Http1ClientImpl(SocketT)
     Result request(
         scope ref const HttpRequest request, 
         scope ref HttpResponse response,
-        scope ref const String2 defaultHost,
+        scope ref const String defaultHost,
         scope out bool closeConnection,
     ) @nogc
     in(writer != typeof(writer).init, "Http1Writer is not initialized")
@@ -659,7 +659,7 @@ private struct Http1ClientImpl(SocketT)
         scope out HttpResponse response,
         scope RequestFuncT bodyPutter, 
         scope ResponseFuncT bodyReader,
-        scope ref const String2 defaultHost,
+        scope ref const String defaultHost,
         scope out bool closeConnection,
     )
     in(writer != typeof(writer).init, "Http1Writer is not initialized")
@@ -694,7 +694,7 @@ private struct Http1ClientImpl(SocketT)
 
     Result sendHead(
         scope ref const HttpRequest request,
-        scope ref const String2 defaultHost,
+        scope ref const String defaultHost,
         bool assumeHasBody,
     ) @nogc
     {

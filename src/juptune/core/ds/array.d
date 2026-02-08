@@ -37,7 +37,7 @@ struct ArrayBase(
         size_t   _length;
     }
 
-    @nogc nothrow:
+    @trusted @nogc nothrow: // @suppress(dscanner.trust_too_much)
 
     static if(Alloc.CtorParams.length)
     this(Alloc.CtorParams params)
@@ -67,7 +67,7 @@ struct ArrayBase(
         this.dtorValues(0, this.length);
         if(this._values.ptr)
         {
-            this.free(this._values.ptr);
+            this.free(&this._values[0]);
             this._values = null;
             this._length = 0;
         }

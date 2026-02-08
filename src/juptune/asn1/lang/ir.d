@@ -13,7 +13,7 @@ import std.meta     : AliasSeq;
 import std.sumtype  : SumType, match;
 import std.typecons : Nullable, Flag;
 
-import juptune.core.ds : Array, String2, HashMap;
+import juptune.core.ds : Array, String, HashMap;
 import juptune.core.util : Result;
 import juptune.asn1.lang.ast; // Intentionally everything
 import juptune.asn1.lang.common : Asn1Location, Asn1ParserContext, Asn1ErrorHandler, Asn1NullErrorHandler;
@@ -335,7 +335,7 @@ final class Asn1ModuleRegistry
             // (_) => Result.make(
             //     Asn1SemanticError.moduleIsVirtual,
             //     "cannot access a virtual module directly",
-            //     String2(
+            //     String(
             //         "while module '", name, 
             //         "' does exist, it was created programatically outside of an Asn1ModuleIr, and thus ",
             //         "cannot be returned by getModuleOrNull"
@@ -752,7 +752,7 @@ final class Asn1ModuleIr : Asn1BaseIr
             return Result.make(
                 Asn1SemanticError.toolNotFound, 
                 "assignment not found",
-                String2("no assignment for '", name, "' was found")
+                String("no assignment for '", name, "' was found")
             );
         }
 
@@ -765,7 +765,7 @@ final class Asn1ModuleIr : Asn1BaseIr
             return Result.make(
                 Asn1SemanticError.toolWrongType,
                 "assignment type mismatch",
-                String2(
+                String(
                     "assignment for '", name, 
                     "' exists, but is of type ", typeid(assIr).name,
                     " instead of type ", AssT.stringof
@@ -1350,7 +1350,7 @@ abstract class Asn1TypeIr : Asn1BaseIr
         constraint.setParent(this);
 
         const bits = constraint.getConstraintBits();
-        String2 firstFailure;
+        String firstFailure;
         foreach(bit; ALL_CONSTRAINT_BITS)
         {
             if((bits & bit.value) == 0)
@@ -1362,10 +1362,10 @@ abstract class Asn1TypeIr : Asn1BaseIr
                 "constraint of kind ", bit.name,
                 " is not allowed on type of kind ", this.getKindName()
             );
-            if(firstFailure == String2.init)
+            if(firstFailure == String.init)
                 firstFailure = failMessage;
         }
-        if(firstFailure != String2.init)
+        if(firstFailure != String.init)
         {
             return Result.make(
                 Asn1SemanticError.constraintIsNotAllowed,

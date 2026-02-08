@@ -518,7 +518,7 @@ struct Asn1Lexer
     private Result lexNext(scope out Asn1Token token)
     {
         import std.ascii : isAlpha, isDigit;
-        import juptune.core.ds : String2, Array;
+        import juptune.core.ds : String, Array;
     
         if(this.eof)
         {
@@ -580,7 +580,7 @@ struct Asn1Lexer
     private Result lexNextIdentifier(scope ref Asn1Token token)
     {
         import std.ascii : isUpper;
-        import juptune.core.ds : String2, Array;
+        import juptune.core.ds : String, Array;
 
         Asn1Location location;
         auto result = this.readUntil!(
@@ -658,7 +658,7 @@ struct Asn1Lexer
     private Result lexNextMultiComment(scope ref Asn1Token token)
     in(this.charsLeft >= 2 && this.peekAt(0) == '/' && this.peekAt(1) == '*')
     {
-        import juptune.core.ds : String2, Array;
+        import juptune.core.ds : String, Array;
         // Comments have different enough logic that readUntil is too hard to use.
 
         Asn1Location location;
@@ -714,7 +714,7 @@ struct Asn1Lexer
     private Result lexNextNumber(scope ref Asn1Token token)
     {
         import std.ascii       : isDigit;
-        import juptune.core.ds : String2, Array;
+        import juptune.core.ds : String, Array;
 
         Asn1Location location;
         location.start = this._cursor;
@@ -819,7 +819,7 @@ struct Asn1Lexer
     private Result lexNextTypedString(scope ref Asn1Token token)
     in(this.charsLeft >= 1 && this.peekAt(0) == '\'')
     {
-        import juptune.core.ds : String2, Array;
+        import juptune.core.ds : String, Array;
         /* Note: I'm not sure if typed strings can contain escape characters, so for now I'm avoiding readUntil */
 
         Asn1Location location;
@@ -890,7 +890,7 @@ struct Asn1Lexer
     private Result lexNextCharString(scope ref Asn1Token token)
     in(this.charsLeft >= 1 && this.peekAt(0) == '"')
     {
-        import juptune.core.ds : String2, Array;
+        import juptune.core.ds : String, Array;
         /* Note: I'm not sure if typed strings can contain escape characters, so for now I'm avoiding readUntil */
 
         Asn1Location location;
@@ -989,7 +989,7 @@ struct Asn1Lexer
 
     private Result validateBitString(scope ref Asn1Token token)
     {
-        import juptune.core.ds : String2, Array;
+        import juptune.core.ds : String, Array;
 
         foreach(i, ch; token.value.asSubString.slice)
         {
@@ -1011,7 +1011,7 @@ struct Asn1Lexer
 
     private Result validateHexString(scope ref Asn1Token token)
     {
-        import juptune.core.ds : String2, Array;
+        import juptune.core.ds : String, Array;
 
         foreach(i, ch; token.value.asSubString.slice)
         {
@@ -1069,7 +1069,7 @@ struct Asn1Lexer
         AllowEof allowEof = AllowEof.no,
     )
     {
-        import juptune.core.ds : String2, Array;
+        import juptune.core.ds : String, Array;
 
         range.sourceName = This._sourceDebugName;
         range.line = This._debugLine;

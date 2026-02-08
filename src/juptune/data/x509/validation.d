@@ -41,7 +41,7 @@ Result x509ValidatePath(
     X509Certificate.Time pointInTimeUtc,
 ) @nogc nothrow
 {
-    import juptune.core.ds : String2;
+    import juptune.core.ds : String;
 
     // Vars defined by the RFC 5280 6.1 algorithm
     auto workingPublicKeyAlgorithm = trustAnchor.certificate.subjectPublicKeyAlgorithm;
@@ -70,7 +70,7 @@ Result x509ValidatePath(
                 return Result.make(
                     X509ValidationError.certificateIsNotCa,
                     "Parent certificate is not a CA certificate - it cannot be used for verifying signatures",
-                    String2("Child certificate was certPath[", i, "]")
+                    String("Child certificate was certPath[", i, "]")
                 );
             }
 
@@ -79,7 +79,7 @@ Result x509ValidatePath(
                 return Result.make(
                     X509ValidationError.certificateCannotSignCerts,
                     "Parent certificate does not have the keyCertSign usage bit set - it cannot sign certificates let alone be used for verification", // @suppress(dscanner.style.long_line)
-                    String2("Child certificate was certPath[", i, "]")
+                    String("Child certificate was certPath[", i, "]")
                 );
             }
 
@@ -88,7 +88,7 @@ Result x509ValidatePath(
                 return Result.make(
                     X509ValidationError.certificateIsInvalid,
                     "Parent certificate has a pathLenConstraint set but does not have a keyUsage extension - this is not a valid certificate", // @suppress(dscanner.style.long_line)
-                    String2("Child certificate was certPath[", i, "]")
+                    String("Child certificate was certPath[", i, "]")
                 );
             }
         }
@@ -98,7 +98,7 @@ Result x509ValidatePath(
             return Result.make(
                 X509ValidationError.certificateIsNotCa,
                 "Parent certificate is not a CA certificate - it cannot be used for verifying signatures",
-                String2("Child certificate was certPath[", i, "]")
+                String("Child certificate was certPath[", i, "]")
             );
         }
 
@@ -118,7 +118,7 @@ Result x509ValidatePath(
             return Result.make(
                 X509ValidationError.certificateCannotSignCerts,
                 "Parent certificate does not have the keyCertSign usage bit set - it cannot sign certificates let alone be used for verification", // @suppress(dscanner.style.long_line)
-                String2("Child certificate was certPath[", i, "]")
+                String("Child certificate was certPath[", i, "]")
             );
         }
 
@@ -139,7 +139,7 @@ Result x509ValidatePath(
             return Result.make(
                 X509ValidationError.signatureCouldNotBeValidated, 
                 "Certificate's signature could not be validated using parent's public key",
-                String2("Certificate was certPath[", i, "]")
+                String("Certificate was certPath[", i, "]")
             );
         }
 
@@ -149,7 +149,7 @@ Result x509ValidatePath(
             return Result.make(
                 X509ValidationError.certificateHasExpired,
                 "Certificate has expired",
-                String2(
+                String(
                     "Certificate was certPath[", i, "] with notValidAfter of ", cert.notValidAfter,
                     " and pointOfTimeUtc of ", pointInTimeUtc
                 )
@@ -160,7 +160,7 @@ Result x509ValidatePath(
             return Result.make(
                 X509ValidationError.certificateNotValidYet,
                 "Certificate is not yet valid",
-                String2(
+                String(
                     "Certificate was certPath[", i, "] with notValidBefore of ", cert.notValidBefore,
                     " and pointOfTimeUtc of ", pointInTimeUtc
                 )
@@ -173,7 +173,7 @@ Result x509ValidatePath(
         // RFC 5280 6.1.3.a.4
         result = x509AreNamesEqual(workingIssuerName, cert.issuer);
         if(result.isError)
-            return result.wrapError("when comparing issuer names:"); // TODO: Probably helpful to add the cert index to the String2 context.
+            return result.wrapError("when comparing issuer names:"); // TODO: Probably helpful to add the cert index to the String context.
 
         // RFC 5280 6.1.3.b
         // TODO: Support Permitted Subtrees
@@ -232,7 +232,7 @@ Result x509ValidatePath(
                 return Result.make(
                     X509ValidationError.tooManyCertificates,
                     "Too many certificates were checked, likely due to the trust anchor/an intermidary certificate setting a pathLenConstraint", // @suppress(dscanner.style.long_line)
-                    String2("Certificate was certPath[", i, "]")
+                    String("Certificate was certPath[", i, "]")
                 );
             }
             maxPathLength--;
@@ -285,7 +285,7 @@ Result x509VerifySignature(
     import std.digest.sha : sha1Of, sha224Of, sha256Of, sha384Of, sha512Of;
     import std.sumtype : match;
 
-    import juptune.core.ds : String2;
+    import juptune.core.ds : String;
     import juptune.crypto.rsa : RsaPublicKey, RsaPadding, RsaSignatureAlgorithm;
     import juptune.crypto.ecdsa : EcdsaPublicKey, EcdsaGroupName, EcdsaSignatureAlgorithm;
     import juptune.asn1.decode.bcd.encoding : asn1DecodeComponentHeader, Asn1ComponentHeader, Asn1Ruleset;
@@ -353,7 +353,7 @@ Result x509VerifySignature(
             (_) => Result.make(
                 X509ValidationError.keyAndSignatureAlgorithmMismatch,
                 "Trust anchor key is RSA while subject's signature algorithm does not use RSA",
-                String2("subject signature algorithm was of type: ", typeof(_).stringof)
+                String("subject signature algorithm was of type: ", typeof(_).stringof)
             ),
         );
         if(result.isError)
@@ -432,7 +432,7 @@ Result x509VerifySignature(
             (_) => Result.make(
                 X509ValidationError.keyAndSignatureAlgorithmMismatch,
                 "Trust anchor key is ECDSA while subject's signature algorithm does not use ECDSA",
-                String2("subject signature algorithm was of type: ", typeof(_).stringof)
+                String("subject signature algorithm was of type: ", typeof(_).stringof)
             ),
         );
         if(result.isError)
@@ -453,7 +453,7 @@ Result x509VerifySignature(
             return Result.make(
                 X509ValidationError.unknownKeyAlgorithm,
                 "Trust anchor contains an unknown/unsupported key algorithm for its subjectPublicKey",
-                String2("algorithm OID was: TODO")
+                String("algorithm OID was: TODO")
             );
         },
         (_) { assert(false, "Unimplemented verification for "~typeof(_).stringof); return Result.noError; }
@@ -466,7 +466,7 @@ Result x509VerifySignature(
 
 Result x509AreNamesEqual(Name a, Name b) @nogc nothrow
 {
-    import juptune.core.ds : Array, String2;
+    import juptune.core.ds : Array, String;
     import juptune.data.buffer : MemoryReader;
     import juptune.asn1.decode.bcd.encoding : Asn1Ruleset, Asn1Identifier, Asn1Ia5String, Asn1PrintableString;
     import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : AttributeTypeAndValue;
@@ -491,7 +491,7 @@ Result x509AreNamesEqual(Name a, Name b) @nogc nothrow
         return Result.make(
             X509ValidationError.namesDontMatch,
             "names do not match: names contain a different amount of components",
-            String2("name A contains ", aNames.length, " components; name B contains ", bNames.length, " components")
+            String("name A contains ", aNames.length, " components; name B contains ", bNames.length, " components")
         );
     }
 
@@ -505,7 +505,7 @@ Result x509AreNamesEqual(Name a, Name b) @nogc nothrow
             return Result.make(
                 X509ValidationError.namesDontMatch,
                 "names do not match: component types do not match",
-                String2(
+                String(
                     "component #", i, 
                     " for name A is of type ", aComp.getType().get().components.map!(b => b.isNull ? -1 : b.get),
                     "; for name B is of type ", bComp.getType().get().components.map!(b => b.isNull ? -1 : b.get)
@@ -518,7 +518,7 @@ Result x509AreNamesEqual(Name a, Name b) @nogc nothrow
             return Result.make(
                 X509ValidationError.namesDontMatch,
                 "names cannot be compared: component values are different ASN.1 types (this is actually a Juptune limitation TODO: fix)", // @suppress(dscanner.style.long_line)
-                String2(
+                String(
                     "component #", i, 
                     " for name A is of value type ", aComp.getValue().identifier,
                     "; for name B is of value type ", bComp.getValue().identifier
@@ -533,7 +533,7 @@ Result x509AreNamesEqual(Name a, Name b) @nogc nothrow
             return Result.make(
                 X509ValidationError.namesDontMatch,
                 "names cannot be compared: expected component to be of a UNIVERSAL tag and primitively constructed",
-                String2("component #", i, " for both names have an identifier of ", id)
+                String("component #", i, " for both names have an identifier of ", id)
             );
         }
 
@@ -555,7 +555,7 @@ Result x509AreNamesEqual(Name a, Name b) @nogc nothrow
                 return Result.make(
                     X509ValidationError.namesDontMatch,
                     "names do not match: components are not equal",
-                    String2("component #", i, " for name A is `", aStr.asSlice, "`; for name B is `", bStr.asSlice, "`") // @suppress(dscanner.style.long_line)
+                    String("component #", i, " for name A is `", aStr.asSlice, "`; for name B is `", bStr.asSlice, "`") // @suppress(dscanner.style.long_line)
                 );
             }
             return Result.noError;
@@ -576,7 +576,7 @@ Result x509AreNamesEqual(Name a, Name b) @nogc nothrow
             default: return Result.make(
                 X509ValidationError.namesDontMatch,
                 "names cannot be compared: components are of an unknown/unsupported type",
-                String2("component #", i, " for both names have an identifier of ", id)
+                String("component #", i, " for both names have an identifier of ", id)
             );
         }
     }

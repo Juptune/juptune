@@ -81,7 +81,7 @@ Result autoDecode(string DebugName, T, FieldUdas...)(
 )
 if(is(T == const(ubyte)[]))
 {
-    import juptune.core.ds : String2;
+    import juptune.core.ds : String;
     import juptune.http.tls.models : ExactLength, LengthRange;
 
     // I may add extra UDAs in the future that aren't the "main UDA" but modify decoding logic in some way.
@@ -110,7 +110,7 @@ if(is(T == const(ubyte)[]))
             return Result.make(
                 TlsError.eof,
                 "[ExactLength] ran out of bytes while reading value of "~DebugName~" of type "~typeof(value).stringof~" when autodecoding", // @suppress(dscanner.style.long_line)
-                String2("expected length of ", MainUda.length, " but got length of ", reader.bytesLeft)
+                String("expected length of ", MainUda.length, " but got length of ", reader.bytesLeft)
             );
         }
     }
@@ -127,7 +127,7 @@ if(is(T == const(ubyte)[]))
             return Result.make(
                 TlsError.lengthRangeConstraintFailed,
                 "expected at least a certain amount of bytes for field "~DebugName~" of type "~typeof(value).stringof~" when autodecoding", // @suppress(dscanner.style.long_line)
-                String2("expected minimum length of ", MainUda.lower, " but got length of ", length)
+                String("expected minimum length of ", MainUda.lower, " but got length of ", length)
             );
         }
         if(length > MainUda.upper)
@@ -135,7 +135,7 @@ if(is(T == const(ubyte)[]))
             return Result.make(
                 TlsError.lengthRangeConstraintFailed,
                 "expected at most a certain amount of bytes for field "~DebugName~" of type "~typeof(value).stringof~" when autodecoding", // @suppress(dscanner.style.long_line)
-                String2("expected maximum length of ", MainUda.lower, " but got length of ", length)
+                String("expected maximum length of ", MainUda.lower, " but got length of ", length)
             );
         }
 
@@ -146,7 +146,7 @@ if(is(T == const(ubyte)[]))
                 return Result.make(
                     TlsError.lengthRangeConstraintFailed,
                     "expected field "~DebugName~" of type "~typeof(value).stringof~" to be a size that's a multiple of "~ElementT.stringof~" when autodecoding", // @suppress(dscanner.style.long_line)
-                    String2("expected length that is a multiple of ", ElementT.sizeof, " but got length of ", length) // @suppress(dscanner.style.long_line)
+                    String("expected length that is a multiple of ", ElementT.sizeof, " but got length of ", length) // @suppress(dscanner.style.long_line)
                 );
             }
         }
@@ -157,7 +157,7 @@ if(is(T == const(ubyte)[]))
             return Result.make(
                 TlsError.exactLengthConstraintFailed,
                 "[LengthRange] ran out of bytes while reading value of "~DebugName~" of type "~typeof(value).stringof~" when autodecoding", // @suppress(dscanner.style.long_line)
-                String2("expected length of ", length, " but got length of ", reader.bytesLeft)
+                String("expected length of ", length, " but got length of ", reader.bytesLeft)
             );
         }
     }
@@ -177,7 +177,7 @@ Result autoDecode(string DebugName, T, FieldUdas...)(
 if(isIntegral!T && !is(T == enum))
 {
     import std.bitmanip : Endian;
-    import juptune.core.ds : String2;
+    import juptune.core.ds : String;
     import juptune.http.tls.models : ExactValue;
 
     auto success = reader.tryIntegral!(T, Endian.bigEndian, true)(value);
@@ -194,7 +194,7 @@ if(isIntegral!T && !is(T == enum))
                 return Result.make(
                     TlsError.exactValueConstraintFailed,
                     "expected field "~DebugName~" of type "~T.stringof~" to be a specific value when autodecoding",
-                    String2("expected value of ", Uda.value, " but got value of ", value)
+                    String("expected value of ", Uda.value, " but got value of ", value)
                 );
             }
         }
@@ -246,7 +246,7 @@ Result autoDecode(string DebugName, T, FieldUdas...)(
 if(__traits(isStaticArray, T) && is(typeof(T.init[0]) == ubyte))
 {
     import std.traits : EnumMembers;
-    import juptune.core.ds : String2;
+    import juptune.core.ds : String;
 
     const(ubyte)[] bytes;
     auto success = reader.readBytes(value.length, bytes);

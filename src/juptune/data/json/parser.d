@@ -527,7 +527,7 @@ struct JsonParser
     Result next(scope out Token token) @nogc nothrow
     in(!this._rootValueHasBeenParsed, "bug: the root value for the given input has already been parsed - the caller shouldn't be attempting to read anything else") // @suppress(dscanner.style.long_line)
     {
-        import juptune.core.ds : String2;
+        import juptune.core.ds : String;
 
         scope(exit) this._previousType = token.type;
 
@@ -548,7 +548,7 @@ struct JsonParser
                     return Result.make(
                         JsonParserError.missingComma, 
                         "expected comma when reading next object name or array value", 
-                        String2("got '", comma, "' (cast(ubyte)", cast(ubyte)comma, ")")
+                        String("got '", comma, "' (cast(ubyte)", cast(ubyte)comma, ")")
                     );
                 }
                 this.skipWhite();
@@ -577,7 +577,7 @@ struct JsonParser
                 return Result.make(
                     JsonParserError.missingColon, 
                     "expected colon after object field", 
-                    String2("got '", colon, "' (cast(ubyte)", cast(ubyte)colon, ")")
+                    String("got '", colon, "' (cast(ubyte)", cast(ubyte)colon, ")")
                 );
             }
 
@@ -670,7 +670,7 @@ struct JsonParser
                 return Result.make(
                     JsonParserError.unexpectedCharacter, 
                     "unexpected character found when parsing next token",
-                    String2("got '", ch, "' (cast(ubyte)", cast(ubyte)ch, ")")
+                    String("got '", ch, "' (cast(ubyte)", cast(ubyte)ch, ")")
                 );
         }
     }
@@ -761,7 +761,7 @@ struct JsonParser
 
     private Result nextString(out const(char)[] textWithQuotes, out bool hasEscapeChars) @nogc nothrow
     {
-        import juptune.core.ds   : String2;
+        import juptune.core.ds   : String;
         import juptune.data.utf8 : utf8Validate;
 
         const start = this._cursor;
@@ -771,7 +771,7 @@ struct JsonParser
             return Result.make(
                 JsonParserError.unexpectedCharacter, 
                 "expected quote to start off string/name",
-                String2("got '", firstQuote, "' (cast(ubyte)", cast(ubyte)firstQuote, ")")
+                String("got '", firstQuote, "' (cast(ubyte)", cast(ubyte)firstQuote, ")")
             );
         }
 
@@ -908,7 +908,7 @@ struct JsonParser
 
     private Result expectKeyword(string Keyword)() @nogc nothrow
     {
-        import juptune.core.ds : String2;
+        import juptune.core.ds : String;
 
         if(this._cursor + Keyword.length > this._input.length)
             return Result.make(JsonParserError.invalidKeyword, "ran out of bytes when expecting keyword `"~Keyword~"`");
@@ -919,7 +919,7 @@ struct JsonParser
             return Result.make(
                 JsonParserError.invalidKeyword, 
                 "expected keyword `"~Keyword~"`", 
-                String2("got '", slice, "'")
+                String("got '", slice, "'")
             );
         }
 

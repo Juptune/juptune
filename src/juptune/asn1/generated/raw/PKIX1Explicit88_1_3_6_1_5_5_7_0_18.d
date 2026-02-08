@@ -4,7 +4,7 @@ static import tcon = std.typecons;
 static import asn1 = juptune.asn1.decode.bcd.encoding;
 static import jres = juptune.core.util.result;
 static import jbuf = juptune.data.buffer;
-static import jstr = juptune.core.ds.string2;
+static import jstr = juptune.core.ds.string;
 static import utf8 = juptune.data.utf8;
 
 asn1.Asn1ObjectIdentifier id_pkix(
@@ -321,9 +321,9 @@ struct AttributeTypeAndValue
         if(result.isError)
             return result.wrapError("when decoding header of field 'type' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE AttributeTypeAndValue when reading top level tag 6 for field 'type' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE AttributeTypeAndValue when reading top level tag 6 for field 'type' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 6)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE AttributeTypeAndValue when reading top level tag 6 for field 'type' the tag's value was expected to be 6", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE AttributeTypeAndValue when reading top level tag 6 for field 'type' the tag's value was expected to be 6", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_type;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_type);
         if(result.isError)
@@ -473,9 +473,9 @@ struct Attribute
         if(result.isError)
             return result.wrapError("when decoding header of field 'type' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Attribute when reading top level tag 6 for field 'type' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Attribute when reading top level tag 6 for field 'type' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 6)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Attribute when reading top level tag 6 for field 'type' the tag's value was expected to be 6", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Attribute when reading top level tag 6 for field 'type' the tag's value was expected to be 6", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_type;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_type);
         if(result.isError)
@@ -495,9 +495,9 @@ struct Attribute
         if(result.isError)
             return result.wrapError("when decoding header of field 'values' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Attribute when reading top level tag 17 for field 'values' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Attribute when reading top level tag 17 for field 'values' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 17)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Attribute when reading top level tag 17 for field 'values' the tag's value was expected to be 17", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Attribute when reading top level tag 17 for field 'values' the tag's value was expected to be 17", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_values;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_values);
         if(result.isError)
@@ -3458,9 +3458,9 @@ struct AlgorithmIdentifier
         if(result.isError)
             return result.wrapError("when decoding header of field 'algorithm' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE AlgorithmIdentifier when reading top level tag 6 for field 'algorithm' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE AlgorithmIdentifier when reading top level tag 6 for field 'algorithm' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 6)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE AlgorithmIdentifier when reading top level tag 6 for field 'algorithm' the tag's value was expected to be 6", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE AlgorithmIdentifier when reading top level tag 6 for field 'algorithm' the tag's value was expected to be 6", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_algorithm;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_algorithm);
         if(result.isError)
@@ -3960,9 +3960,9 @@ struct SubjectPublicKeyInfo
         if(result.isError)
             return result.wrapError("when decoding header of field 'algorithm' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE SubjectPublicKeyInfo when reading top level tag 16 for field 'algorithm' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE SubjectPublicKeyInfo when reading top level tag 16 for field 'algorithm' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE SubjectPublicKeyInfo when reading top level tag 16 for field 'algorithm' the tag's value was expected to be 16", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE SubjectPublicKeyInfo when reading top level tag 16 for field 'algorithm' the tag's value was expected to be 16", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_algorithm;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_algorithm);
         if(result.isError)
@@ -3982,9 +3982,9 @@ struct SubjectPublicKeyInfo
         if(result.isError)
             return result.wrapError("when decoding header of field 'subjectPublicKey' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE SubjectPublicKeyInfo when reading top level tag 3 for field 'subjectPublicKey' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE SubjectPublicKeyInfo when reading top level tag 3 for field 'subjectPublicKey' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 3)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE SubjectPublicKeyInfo when reading top level tag 3 for field 'subjectPublicKey' the tag's value was expected to be 3", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE SubjectPublicKeyInfo when reading top level tag 3 for field 'subjectPublicKey' the tag's value was expected to be 3", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_subjectPublicKey;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_subjectPublicKey);
         if(result.isError)
@@ -4234,9 +4234,9 @@ struct Extension
         if(result.isError)
             return result.wrapError("when decoding header of field 'extnID' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Extension when reading top level tag 6 for field 'extnID' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Extension when reading top level tag 6 for field 'extnID' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 6)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Extension when reading top level tag 6 for field 'extnID' the tag's value was expected to be 6", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Extension when reading top level tag 6 for field 'extnID' the tag's value was expected to be 6", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_extnID;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_extnID);
         if(result.isError)
@@ -4294,9 +4294,9 @@ struct Extension
         if(result.isError)
             return result.wrapError("when decoding header of field 'extnValue' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Extension when reading top level tag 4 for field 'extnValue' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Extension when reading top level tag 4 for field 'extnValue' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 4)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Extension when reading top level tag 4 for field 'extnValue' the tag's value was expected to be 4", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Extension when reading top level tag 4 for field 'extnValue' the tag's value was expected to be 4", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_extnValue;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_extnValue);
         if(result.isError)
@@ -5001,9 +5001,9 @@ struct TBSCertificate
                     if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
                         return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 0 for field version a primitive tag was found when a constructed one was expected");
                     if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 0 for field 'version' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 0 for field 'version' the tag's class was expected to be contextSpecific", jstr.String("class was ", componentHeader.identifier.class_));
                     if(componentHeader.identifier.tag != 0)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 0 for field 'version' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 0 for field 'version' the tag's value was expected to be 0", jstr.String("tag value was ", componentHeader.identifier.tag));
                     result = asn1.asn1DecodeComponentHeader!ruleset(memory_version, componentHeader);
                     if(result.isError)
                         return result.wrapError("when decoding header of field 'version' in type "~__traits(identifier, typeof(this))~":");
@@ -5039,9 +5039,9 @@ struct TBSCertificate
         if(result.isError)
             return result.wrapError("when decoding header of field 'serialNumber' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertificate when reading top level tag 2 for field 'serialNumber' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertificate when reading top level tag 2 for field 'serialNumber' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 2)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE TBSCertificate when reading top level tag 2 for field 'serialNumber' the tag's value was expected to be 2", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE TBSCertificate when reading top level tag 2 for field 'serialNumber' the tag's value was expected to be 2", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_serialNumber;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_serialNumber);
         if(result.isError)
@@ -5061,9 +5061,9 @@ struct TBSCertificate
         if(result.isError)
             return result.wrapError("when decoding header of field 'signature' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'signature' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'signature' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'signature' the tag's value was expected to be 16", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'signature' the tag's value was expected to be 16", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_signature;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_signature);
         if(result.isError)
@@ -5101,9 +5101,9 @@ struct TBSCertificate
         if(result.isError)
             return result.wrapError("when decoding header of field 'validity' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'validity' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'validity' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'validity' the tag's value was expected to be 16", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'validity' the tag's value was expected to be 16", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_validity;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_validity);
         if(result.isError)
@@ -5141,9 +5141,9 @@ struct TBSCertificate
         if(result.isError)
             return result.wrapError("when decoding header of field 'subjectPublicKeyInfo' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'subjectPublicKeyInfo' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'subjectPublicKeyInfo' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'subjectPublicKeyInfo' the tag's value was expected to be 16", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE TBSCertificate when reading top level tag 16 for field 'subjectPublicKeyInfo' the tag's value was expected to be 16", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_subjectPublicKeyInfo;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_subjectPublicKeyInfo);
         if(result.isError)
@@ -5235,9 +5235,9 @@ struct TBSCertificate
                     if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
                         return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 3 for field extensions a primitive tag was found when a constructed one was expected");
                     if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 3 for field 'extensions' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 3 for field 'extensions' the tag's class was expected to be contextSpecific", jstr.String("class was ", componentHeader.identifier.class_));
                     if(componentHeader.identifier.tag != 3)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 3 for field 'extensions' the tag's value was expected to be 3", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 3 for field 'extensions' the tag's value was expected to be 3", jstr.String("tag value was ", componentHeader.identifier.tag));
                     result = asn1.asn1DecodeComponentHeader!ruleset(memory_extensions, componentHeader);
                     if(result.isError)
                         return result.wrapError("when decoding header of field 'extensions' in type "~__traits(identifier, typeof(this))~":");
@@ -5410,9 +5410,9 @@ struct Certificate
         if(result.isError)
             return result.wrapError("when decoding header of field 'tbsCertificate' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Certificate when reading top level tag 16 for field 'tbsCertificate' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Certificate when reading top level tag 16 for field 'tbsCertificate' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Certificate when reading top level tag 16 for field 'tbsCertificate' the tag's value was expected to be 16", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Certificate when reading top level tag 16 for field 'tbsCertificate' the tag's value was expected to be 16", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_tbsCertificate;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_tbsCertificate);
         if(result.isError)
@@ -5436,9 +5436,9 @@ struct Certificate
         if(result.isError)
             return result.wrapError("when decoding header of field 'signatureAlgorithm' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Certificate when reading top level tag 16 for field 'signatureAlgorithm' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Certificate when reading top level tag 16 for field 'signatureAlgorithm' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Certificate when reading top level tag 16 for field 'signatureAlgorithm' the tag's value was expected to be 16", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Certificate when reading top level tag 16 for field 'signatureAlgorithm' the tag's value was expected to be 16", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_signatureAlgorithm;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_signatureAlgorithm);
         if(result.isError)
@@ -5458,9 +5458,9 @@ struct Certificate
         if(result.isError)
             return result.wrapError("when decoding header of field 'signature' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Certificate when reading top level tag 3 for field 'signature' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE Certificate when reading top level tag 3 for field 'signature' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 3)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Certificate when reading top level tag 3 for field 'signature' the tag's value was expected to be 3", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE Certificate when reading top level tag 3 for field 'signature' the tag's value was expected to be 3", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_signature;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_signature);
         if(result.isError)
@@ -5624,9 +5624,9 @@ struct CertificateList
         if(result.isError)
             return result.wrapError("when decoding header of field 'tbsCertList' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE CertificateList when reading top level tag 16 for field 'tbsCertList' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE CertificateList when reading top level tag 16 for field 'tbsCertList' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE CertificateList when reading top level tag 16 for field 'tbsCertList' the tag's value was expected to be 16", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE CertificateList when reading top level tag 16 for field 'tbsCertList' the tag's value was expected to be 16", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_tbsCertList;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_tbsCertList);
         if(result.isError)
@@ -5646,9 +5646,9 @@ struct CertificateList
         if(result.isError)
             return result.wrapError("when decoding header of field 'signatureAlgorithm' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE CertificateList when reading top level tag 16 for field 'signatureAlgorithm' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE CertificateList when reading top level tag 16 for field 'signatureAlgorithm' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE CertificateList when reading top level tag 16 for field 'signatureAlgorithm' the tag's value was expected to be 16", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE CertificateList when reading top level tag 16 for field 'signatureAlgorithm' the tag's value was expected to be 16", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_signatureAlgorithm;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_signatureAlgorithm);
         if(result.isError)
@@ -5668,9 +5668,9 @@ struct CertificateList
         if(result.isError)
             return result.wrapError("when decoding header of field 'signature' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE CertificateList when reading top level tag 3 for field 'signature' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE CertificateList when reading top level tag 3 for field 'signature' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 3)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE CertificateList when reading top level tag 3 for field 'signature' the tag's value was expected to be 3", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE CertificateList when reading top level tag 3 for field 'signature' the tag's value was expected to be 3", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_signature;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_signature);
         if(result.isError)
@@ -5855,9 +5855,9 @@ struct TBSCertList_RevokedCertificate
         if(result.isError)
             return result.wrapError("when decoding header of field 'userCertificate' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertList-RevokedCertificate when reading top level tag 2 for field 'userCertificate' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertList-RevokedCertificate when reading top level tag 2 for field 'userCertificate' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 2)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE TBSCertList-RevokedCertificate when reading top level tag 2 for field 'userCertificate' the tag's value was expected to be 2", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE TBSCertList-RevokedCertificate when reading top level tag 2 for field 'userCertificate' the tag's value was expected to be 2", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_userCertificate;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_userCertificate);
         if(result.isError)
@@ -6313,9 +6313,9 @@ struct TBSCertList
         if(result.isError)
             return result.wrapError("when decoding header of field 'signature' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertList when reading top level tag 16 for field 'signature' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE TBSCertList when reading top level tag 16 for field 'signature' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE TBSCertList when reading top level tag 16 for field 'signature' the tag's value was expected to be 16", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE TBSCertList when reading top level tag 16 for field 'signature' the tag's value was expected to be 16", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_signature;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_signature);
         if(result.isError)
@@ -6447,9 +6447,9 @@ struct TBSCertList
                     if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
                         return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 0 for field crlExtensions a primitive tag was found when a constructed one was expected");
                     if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 0 for field 'crlExtensions' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 0 for field 'crlExtensions' the tag's class was expected to be contextSpecific", jstr.String("class was ", componentHeader.identifier.class_));
                     if(componentHeader.identifier.tag != 0)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 0 for field 'crlExtensions' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 0 for field 'crlExtensions' the tag's value was expected to be 0", jstr.String("tag value was ", componentHeader.identifier.tag));
                     result = asn1.asn1DecodeComponentHeader!ruleset(memory_crlExtensions, componentHeader);
                     if(result.isError)
                         return result.wrapError("when decoding header of field 'crlExtensions' in type "~__traits(identifier, typeof(this))~":");
@@ -7683,9 +7683,9 @@ struct PersonalName
         if(result.isError)
             return result.wrapError("when decoding header of field 'surname' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE PersonalName when reading top level tag 0 for field 'surname' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE PersonalName when reading top level tag 0 for field 'surname' the tag's class was expected to be contextSpecific", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 0)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE PersonalName when reading top level tag 0 for field 'surname' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE PersonalName when reading top level tag 0 for field 'surname' the tag's value was expected to be 0", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_surname;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_surname);
         if(result.isError)
@@ -7984,9 +7984,9 @@ struct ExtensionAttribute
         if(result.isError)
             return result.wrapError("when decoding header of field 'extension-attribute-type' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE ExtensionAttribute when reading top level tag 0 for field 'extension-attribute-type' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE ExtensionAttribute when reading top level tag 0 for field 'extension-attribute-type' the tag's class was expected to be contextSpecific", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 0)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE ExtensionAttribute when reading top level tag 0 for field 'extension-attribute-type' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE ExtensionAttribute when reading top level tag 0 for field 'extension-attribute-type' the tag's value was expected to be 0", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_extension_attribute_type;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_extension_attribute_type);
         if(result.isError)
@@ -8006,9 +8006,9 @@ struct ExtensionAttribute
         if(result.isError)
             return result.wrapError("when decoding header of field 'extension-attribute-value' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE ExtensionAttribute when reading top level tag 1 for field 'extension-attribute-value' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE ExtensionAttribute when reading top level tag 1 for field 'extension-attribute-value' the tag's class was expected to be contextSpecific", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 1)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE ExtensionAttribute when reading top level tag 1 for field 'extension-attribute-value' the tag's value was expected to be 1", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE ExtensionAttribute when reading top level tag 1 for field 'extension-attribute-value' the tag's value was expected to be 1", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_extension_attribute_value;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_extension_attribute_value);
         if(result.isError)
@@ -8019,9 +8019,9 @@ struct ExtensionAttribute
             if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
                 return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 1 for field extension_attribute_value a primitive tag was found when a constructed one was expected");
             if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 1 for field 'extension_attribute_value' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 1 for field 'extension_attribute_value' the tag's class was expected to be contextSpecific", jstr.String("class was ", componentHeader.identifier.class_));
             if(componentHeader.identifier.tag != 1)
-                return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 1 for field 'extension_attribute_value' the tag's value was expected to be 1", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 1 for field 'extension_attribute_value' the tag's value was expected to be 1", jstr.String("tag value was ", componentHeader.identifier.tag));
             result = asn1.asn1DecodeComponentHeader!ruleset(memory_extension_attribute_value, componentHeader);
             if(result.isError)
                 return result.wrapError("when decoding header of field 'extension_attribute_value' in type "~__traits(identifier, typeof(this))~":");
@@ -8242,9 +8242,9 @@ struct BuiltInDomainDefinedAttribute
         if(result.isError)
             return result.wrapError("when decoding header of field 'type' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE BuiltInDomainDefinedAttribute when reading top level tag 19 for field 'type' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE BuiltInDomainDefinedAttribute when reading top level tag 19 for field 'type' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 19)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE BuiltInDomainDefinedAttribute when reading top level tag 19 for field 'type' the tag's value was expected to be 19", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE BuiltInDomainDefinedAttribute when reading top level tag 19 for field 'type' the tag's value was expected to be 19", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_type;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_type);
         if(result.isError)
@@ -8264,9 +8264,9 @@ struct BuiltInDomainDefinedAttribute
         if(result.isError)
             return result.wrapError("when decoding header of field 'value' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE BuiltInDomainDefinedAttribute when reading top level tag 19 for field 'value' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE BuiltInDomainDefinedAttribute when reading top level tag 19 for field 'value' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 19)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE BuiltInDomainDefinedAttribute when reading top level tag 19 for field 'value' the tag's value was expected to be 19", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE BuiltInDomainDefinedAttribute when reading top level tag 19 for field 'value' the tag's value was expected to be 19", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_value;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_value);
         if(result.isError)
@@ -8989,9 +8989,9 @@ struct BuiltInStandardAttributes
                     if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
                         return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 1 for field country_name a primitive tag was found when a constructed one was expected");
                     if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.application)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 1 for field 'country_name' the tag's class was expected to be application", jstr.String2("class was ", componentHeader.identifier.class_));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 1 for field 'country_name' the tag's class was expected to be application", jstr.String("class was ", componentHeader.identifier.class_));
                     if(componentHeader.identifier.tag != 1)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 1 for field 'country_name' the tag's value was expected to be 1", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 1 for field 'country_name' the tag's value was expected to be 1", jstr.String("tag value was ", componentHeader.identifier.tag));
                     result = asn1.asn1DecodeComponentHeader!ruleset(memory_country_name, componentHeader);
                     if(result.isError)
                         return result.wrapError("when decoding header of field 'country_name' in type "~__traits(identifier, typeof(this))~":");
@@ -9032,9 +9032,9 @@ struct BuiltInStandardAttributes
                     if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
                         return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 2 for field administration_domain_name a primitive tag was found when a constructed one was expected");
                     if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.application)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 2 for field 'administration_domain_name' the tag's class was expected to be application", jstr.String2("class was ", componentHeader.identifier.class_));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 2 for field 'administration_domain_name' the tag's class was expected to be application", jstr.String("class was ", componentHeader.identifier.class_));
                     if(componentHeader.identifier.tag != 2)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 2 for field 'administration_domain_name' the tag's value was expected to be 2", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 2 for field 'administration_domain_name' the tag's value was expected to be 2", jstr.String("tag value was ", componentHeader.identifier.tag));
                     result = asn1.asn1DecodeComponentHeader!ruleset(memory_administration_domain_name, componentHeader);
                     if(result.isError)
                         return result.wrapError("when decoding header of field 'administration_domain_name' in type "~__traits(identifier, typeof(this))~":");
@@ -9133,9 +9133,9 @@ struct BuiltInStandardAttributes
                     if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
                         return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 2 for field private_domain_name a primitive tag was found when a constructed one was expected");
                     if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 2 for field 'private_domain_name' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 2 for field 'private_domain_name' the tag's class was expected to be contextSpecific", jstr.String("class was ", componentHeader.identifier.class_));
                     if(componentHeader.identifier.tag != 2)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 2 for field 'private_domain_name' the tag's value was expected to be 2", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 2 for field 'private_domain_name' the tag's value was expected to be 2", jstr.String("tag value was ", componentHeader.identifier.tag));
                     result = asn1.asn1DecodeComponentHeader!ruleset(memory_private_domain_name, componentHeader);
                     if(result.isError)
                         return result.wrapError("when decoding header of field 'private_domain_name' in type "~__traits(identifier, typeof(this))~":");
@@ -9464,9 +9464,9 @@ struct ORAddress
         if(result.isError)
             return result.wrapError("when decoding header of field 'built-in-standard-attributes' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.universal)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE ORAddress when reading top level tag 16 for field 'built-in-standard-attributes' the tag's class was expected to be universal", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE ORAddress when reading top level tag 16 for field 'built-in-standard-attributes' the tag's class was expected to be universal", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 16)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE ORAddress when reading top level tag 16 for field 'built-in-standard-attributes' the tag's value was expected to be 16", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE ORAddress when reading top level tag 16 for field 'built-in-standard-attributes' the tag's value was expected to be 16", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_built_in_standard_attributes;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_built_in_standard_attributes);
         if(result.isError)
@@ -10890,9 +10890,9 @@ struct ExtendedNetworkAddress_e163_4_address
         if(result.isError)
             return result.wrapError("when decoding header of field 'number' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE ExtendedNetworkAddress-e163-4-address when reading top level tag 0 for field 'number' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE ExtendedNetworkAddress-e163-4-address when reading top level tag 0 for field 'number' the tag's class was expected to be contextSpecific", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 0)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE ExtendedNetworkAddress-e163-4-address when reading top level tag 0 for field 'number' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE ExtendedNetworkAddress-e163-4-address when reading top level tag 0 for field 'number' the tag's value was expected to be 0", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_number;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_number);
         if(result.isError)
@@ -11382,9 +11382,9 @@ struct PresentationAddress
                     if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
                         return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 0 for field pSelector a primitive tag was found when a constructed one was expected");
                     if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 0 for field 'pSelector' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 0 for field 'pSelector' the tag's class was expected to be contextSpecific", jstr.String("class was ", componentHeader.identifier.class_));
                     if(componentHeader.identifier.tag != 0)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 0 for field 'pSelector' the tag's value was expected to be 0", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 0 for field 'pSelector' the tag's value was expected to be 0", jstr.String("tag value was ", componentHeader.identifier.tag));
                     result = asn1.asn1DecodeComponentHeader!ruleset(memory_pSelector, componentHeader);
                     if(result.isError)
                         return result.wrapError("when decoding header of field 'pSelector' in type "~__traits(identifier, typeof(this))~":");
@@ -11425,9 +11425,9 @@ struct PresentationAddress
                     if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
                         return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 1 for field sSelector a primitive tag was found when a constructed one was expected");
                     if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 1 for field 'sSelector' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 1 for field 'sSelector' the tag's class was expected to be contextSpecific", jstr.String("class was ", componentHeader.identifier.class_));
                     if(componentHeader.identifier.tag != 1)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 1 for field 'sSelector' the tag's value was expected to be 1", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 1 for field 'sSelector' the tag's value was expected to be 1", jstr.String("tag value was ", componentHeader.identifier.tag));
                     result = asn1.asn1DecodeComponentHeader!ruleset(memory_sSelector, componentHeader);
                     if(result.isError)
                         return result.wrapError("when decoding header of field 'sSelector' in type "~__traits(identifier, typeof(this))~":");
@@ -11468,9 +11468,9 @@ struct PresentationAddress
                     if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
                         return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 2 for field tSelector a primitive tag was found when a constructed one was expected");
                     if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 2 for field 'tSelector' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 2 for field 'tSelector' the tag's class was expected to be contextSpecific", jstr.String("class was ", componentHeader.identifier.class_));
                     if(componentHeader.identifier.tag != 2)
-                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 2 for field 'tSelector' the tag's value was expected to be 2", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                        return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 2 for field 'tSelector' the tag's value was expected to be 2", jstr.String("tag value was ", componentHeader.identifier.tag));
                     result = asn1.asn1DecodeComponentHeader!ruleset(memory_tSelector, componentHeader);
                     if(result.isError)
                         return result.wrapError("when decoding header of field 'tSelector' in type "~__traits(identifier, typeof(this))~":");
@@ -11497,9 +11497,9 @@ struct PresentationAddress
         if(result.isError)
             return result.wrapError("when decoding header of field 'nAddresses' in type "~__traits(identifier, typeof(this))~":");
         if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE PresentationAddress when reading top level tag 3 for field 'nAddresses' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for SEQUENCE PresentationAddress when reading top level tag 3 for field 'nAddresses' the tag's class was expected to be contextSpecific", jstr.String("class was ", componentHeader.identifier.class_));
         if(componentHeader.identifier.tag != 3)
-            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE PresentationAddress when reading top level tag 3 for field 'nAddresses' the tag's value was expected to be 3", jstr.String2("tag value was ", componentHeader.identifier.tag));
+            return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for SEQUENCE PresentationAddress when reading top level tag 3 for field 'nAddresses' the tag's value was expected to be 3", jstr.String("tag value was ", componentHeader.identifier.tag));
         jbuf.MemoryReader memory_nAddresses;
         result = asn1.asn1ReadContentBytes(memory, componentHeader.length, memory_nAddresses);
         if(result.isError)
@@ -11510,9 +11510,9 @@ struct PresentationAddress
             if(componentHeader.identifier.encoding != asn1.Asn1Identifier.Encoding.constructed)
                 return jres.Result.make(asn1.Asn1DecodeError.constructionIsPrimitive, "when reading EXPLICIT tag 3 for field nAddresses a primitive tag was found when a constructed one was expected");
             if(componentHeader.identifier.class_ != asn1.Asn1Identifier.Class.contextSpecific)
-                return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 3 for field 'nAddresses' the tag's class was expected to be contextSpecific", jstr.String2("class was ", componentHeader.identifier.class_));
+                return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidClass, "for TODO TODO when reading EXPLICIT tag 3 for field 'nAddresses' the tag's class was expected to be contextSpecific", jstr.String("class was ", componentHeader.identifier.class_));
             if(componentHeader.identifier.tag != 3)
-                return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 3 for field 'nAddresses' the tag's value was expected to be 3", jstr.String2("tag value was ", componentHeader.identifier.tag));
+                return jres.Result.make(asn1.Asn1DecodeError.identifierHasInvalidTag, "for TODO TODO when reading EXPLICIT tag 3 for field 'nAddresses' the tag's value was expected to be 3", jstr.String("tag value was ", componentHeader.identifier.tag));
             result = asn1.asn1DecodeComponentHeader!ruleset(memory_nAddresses, componentHeader);
             if(result.isError)
                 return result.wrapError("when decoding header of field 'nAddresses' in type "~__traits(identifier, typeof(this))~":");

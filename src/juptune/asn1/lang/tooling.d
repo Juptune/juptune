@@ -9,7 +9,7 @@
 /// usage of this package.
 module juptune.asn1.lang.tooling;
 
-import juptune.core.ds                  : String2;
+import juptune.core.ds                  : String;
 import juptune.core.util                : Result;
 import juptune.asn1.lang.common    : Asn1ParserContext, Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
 import juptune.asn1.lang.ir        : Asn1ModuleIr, Asn1BaseIr, Asn1ModuleRegistry;
@@ -167,9 +167,9 @@ Result asn1ParseWithSemantics(
  +  tagDefault = The default tag encoding.
  +
  + Returns:
- +  `ir` as a `String2`.
+ +  `ir` as a `String`.
  + ++/
-String2 asn1ToString(IrT : Asn1BaseIr)(
+String asn1ToString(IrT : Asn1BaseIr)(
     IrT ir,
     Asn1ModuleIr.TagDefault tagDefault = Asn1ModuleIr.TagDefault.explicit
 ) @nogc nothrow
@@ -182,7 +182,7 @@ in(ir !is null, "ir is null")
     scope visitor = new Asn1PrinterVisitor(handler, tagDefault);
     ir.visit(visitor).resultAssert; // There shouldn't be any error results from the printer visitor
 
-    return String2.fromDestroyingArray(handler.buffer);
+    return String.fromDestroyingArray(handler.buffer);
 }
 
 /// Same as `asn1ToString` but creates a GC string instead.

@@ -7,7 +7,7 @@
 module juptune.core.util.result;
 
 import core.attribute : mustuse;
-import juptune.core.ds : String, String2;
+import juptune.core.ds : String, String;
 
 import std.traits : getUDAs;
 alias InheritResults(alias Symbol) = getUDAs!(Symbol, Result);
@@ -41,11 +41,11 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
 
     static if(HaveContext)
     {
-        String2 context;
+        String context;
     }
     else
     {
-        String2 context()() => String2.init;
+        String context()() => String.init;
     }
 
     static if(HaveLineInfo)
@@ -160,7 +160,7 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
     (
         T      errorCode, 
         string error    = null, 
-        String2 context = String2.init
+        String context = String.init
     ) 
     {
         auto r = Result.noError;
@@ -172,42 +172,6 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
         static if(HaveContext)
         {
             r.context   = context;
-        }
-
-        static if(HaveLineInfo)
-        {
-            r.file      = FILE;
-            r.module_   = MODULE;
-            r.function_ = FUNCTION;
-            r.line      = LINE;
-        }
-
-        return r;
-    }
-
-    static Result make
-    (
-        T,
-        string FILE     = __FILE__, 
-        string MODULE   = __MODULE__, 
-        string FUNCTION = __PRETTY_FUNCTION__,
-        size_t LINE     = __LINE__
-    )
-    (
-        T      errorCode, 
-        string error, 
-        String context
-    ) @trusted
-    {
-        auto r = Result.noError;
-
-        r.errorCode = errorCode;
-        r.errorType = typeid(Unqual!T); 
-        r.error     = error;
-
-        static if(HaveContext)
-        {
-            r.context   = String2(context.slice);
         }
 
         static if(HaveLineInfo)
@@ -247,7 +211,7 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
         Result r = this;
         static if(HaveContext)
         {
-            r.context = String2(r.error, " ", r.context.sliceMaybeFromStack);
+            r.context = String(r.error, " ", r.context.sliceMaybeFromStack);
         }
         r.error = newError;
         return r;
@@ -298,12 +262,13 @@ void resultAssert(Result result) @nogc nothrow
     // Quirk: Assert seems to hold onto the string slice longer than it should do,
     //        so we have to destroy the string without actually calling the destructor.
     import std.algorithm : moveEmplace;
+    import juptune.core.ds : Array;
 
-    String s;
+    Array!char s;
     result.toString(s);
 
-    String s2;
-    auto slice = s[];
+    Array!char s2;
+    auto slice = s.slice;
     moveEmplace(s2, s);
     
     assert(false, slice);

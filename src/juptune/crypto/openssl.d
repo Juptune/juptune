@@ -5,7 +5,7 @@ import juptune.core.util : Result;
 Result opensslErrorToResult(string context) @nogc nothrow
 {
     import core.stdc.string : strlen;
-    import juptune.core.ds : String2;
+    import juptune.core.ds : String;
 
     enum OpenSslError { error }
     char[128] buffer;
@@ -15,7 +15,7 @@ Result opensslErrorToResult(string context) @nogc nothrow
     return Result.make(
         OpenSslError.error,
         context,
-        String2(buffer[0..strlen(&buffer[0])])
+        String(buffer[0..strlen(&buffer[0])])
     );
 }
 

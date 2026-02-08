@@ -12,7 +12,7 @@
 /// while providing helper functions for the extra parts that would otherwise require allocation to be handled cleanly.
 module juptune.data.x509.asn1convert;
 
-import juptune.core.ds : String2;
+import juptune.core.ds : String;
 import juptune.core.util : Result;
 
 import juptune.asn1.decode.bcd.encoding : Asn1ObjectIdentifier, Asn1Integer;
@@ -627,7 +627,7 @@ Result x509FromAsn1(Certificate asn1Cert, out X509Certificate cert) @nogc nothro
             return Result.make(
                 X509Error.invalidCertVersion, 
                 "The `version` field contains an unknown/invalid value",
-                String2("version value was ", versionInt)
+                String("version value was ", versionInt)
             );
     }
 
@@ -649,7 +649,7 @@ Result x509FromAsn1(Certificate asn1Cert, out X509Certificate cert) @nogc nothro
             return Result.make(
                 X509Error.uniqueIdentifiersWrongVersion,
                 "Certificate contains a subject unique identifier, but the version is not v2 or v3 - forbidden as per RFC 5280 4.1.2.8", // @suppress(dscanner.style.long_line)
-                String2("version is ", cert.version_)
+                String("version is ", cert.version_)
             );
         }
         cert.subjectUniqueId = suid.get.get();
@@ -661,7 +661,7 @@ Result x509FromAsn1(Certificate asn1Cert, out X509Certificate cert) @nogc nothro
             return Result.make(
                 X509Error.uniqueIdentifiersWrongVersion,
                 "Certificate contains an issuer unique identifier, but the version is not v2 or v3 - forbidden as per RFC 5280 4.1.2.8", // @suppress(dscanner.style.long_line)
-                String2("version is ", cert.version_)
+                String("version is ", cert.version_)
             );
         }
         cert.issuerUniqueId = iuid.get.get();
@@ -673,7 +673,7 @@ Result x509FromAsn1(Certificate asn1Cert, out X509Certificate cert) @nogc nothro
         return Result.make(
             X509Error.extensionsWrongVersion,
             "Certificate contains extensions, but the version is not v3 - forbidden as per RFC 5280 4.1.2.9",
-            String2("version is ", cert.version_)
+            String("version is ", cert.version_)
         );
     }
     cert.extensions = tbsCert.getExtensions();
@@ -724,7 +724,7 @@ Result x509IdentifySignatureAlgorithm(
         return Result.make(
             X509Error.algorithmHasParameters,
             "when handling signature algorithm "~AlgorithmName~" - no/NULL parameters were expected",
-            String2("parameter identifier was: ", id)
+            String("parameter identifier was: ", id)
         );
     }
 
@@ -798,7 +798,7 @@ Result x509IdentifyPublicKeyAlgorithm(
         return Result.make(
             X509Error.algorithmHasParameters,
             "when handling public key algorithm "~AlgorithmName~" - no/NULL parameters were expected",
-            String2("parameter identifier was: ", id)
+            String("parameter identifier was: ", id)
         );
     }
 
@@ -912,7 +912,7 @@ Result x509HandleNamedCurveIdentifierRfc5480(Asn1ObjectIdentifier identifier, ou
     return Result.make(
         X509Error.invalidNamedCurve, 
         "identifier does not identify a valid/supported ECDSA named curve",
-        String2("identifier was: ", identifier)
+        String("identifier was: ", identifier)
     );
 }
 
@@ -1225,7 +1225,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
             return Result.make(
                 X509Error.keyUsageTooManyBits,
                 "The `keyUsage` extension has more bits than expected/supported",
-                String2("got ", value.get().bitCount, " bits where only ", KeyFlag.MAX_BIT_COUNT, " at most expected")
+                String("got ", value.get().bitCount, " bits where only ", KeyFlag.MAX_BIT_COUNT, " at most expected")
             );
         }
 
@@ -1389,7 +1389,7 @@ Result x509HandleExtension(Extension asn1Extension, out X509Extension.SumT exten
             return Result.make(
                 X509Error.extendedKeyUsageUnknownUsage,
                 "The `extKeyUsage` extension contains an unknown usage identifier",
-                String2("identifier was ", element.get().components.map!(i => i.isNull ? -1 : i.get))
+                String("identifier was ", element.get().components.map!(i => i.isNull ? -1 : i.get))
             );
         });
         if(result.isError)

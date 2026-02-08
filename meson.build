@@ -78,7 +78,6 @@ core_srcs = files(
     './src/juptune/core/ds/package.d',
     './src/juptune/core/ds/pointer.d',
     './src/juptune/core/ds/string.d',
-    './src/juptune/core/ds/string2.d',
 
     './src/juptune/core/util/ansi.d',
     './src/juptune/core/util/conv.d',

@@ -642,7 +642,7 @@ struct TlsSocket(UnderlyingSocketT)
     ) @nogc nothrow
     {
         import std.traits : EnumMembers;
-        import juptune.core.ds : String2;
+        import juptune.core.ds : String;
 
         // Ensure we have enough header bytes.
         if(this._recordReader.bytesLeft < TlsCiphertext.HEADER_SIZE)

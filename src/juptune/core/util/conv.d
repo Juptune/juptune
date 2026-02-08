@@ -70,9 +70,11 @@ void toStringSink(OutputRangeT, ValueT)(auto ref ValueT value, auto ref OutputRa
 
 String to(StringT : String, ValueT)(auto ref ValueT value)
 {
-    String s;
-    toStringSink(value, s);
-    return s;
+    import juptune.core.ds : Array;
+
+    Array!char buffer;
+    toStringSink(value, buffer);
+    return String.fromDestroyingArray(buffer);
 }
 ///
 @("to!String")
@@ -139,7 +141,7 @@ if(__traits(isIntegral, NumT) && !is(NumT == bool))
     static if(is(ValueT : const(char)[]))
         output = (base == 10) ? fromBase10!NumT(value, error) : fromBase16!NumT(value, error);
     else static if(is(ValueT == String))
-        output = (base == 10) ? fromBase10!NumT(value.range, error) : fromBase16!NumT(value.range, error);
+        output = (base == 10) ? fromBase10!NumT(value.sliceMaybeFromStack, error) : fromBase16!NumT(value.sliceMaybeFromStack, error); // @suppress(dscanner.style.long_line)
     else static assert(false, "Don't know how to convert `"~ValueT.stringof~"` into a `"~NumT.stringof~"`");
 
     result = error.length 

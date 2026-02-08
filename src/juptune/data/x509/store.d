@@ -201,7 +201,7 @@ struct X509ExtensionStore
  + ++/
 struct X509CertificateStore
 {
-    import juptune.core.ds : Array, HashMap, String2;
+    import juptune.core.ds : Array, HashMap, String;
 
     /// An aggregate type storing a bunch of information about an x.509 certificate.
     static struct Cert
@@ -367,7 +367,7 @@ struct X509CertificateStore
                         return Result.make(
                             X509StoreError.wrongPemLabel,
                             "expected data boundary in PEM to have label CERTIFICATE",
-                            String2("got label '", label, "'")
+                            String("got label '", label, "'")
                         );
                     }
 
@@ -437,7 +437,7 @@ struct X509CertificateStore
                             return Result.make(
                                 X509StoreError.wrongPemLabel,
                                 "expected data boundary in PEM to have label CERTIFICATE",
-                                String2("got label '", label, "'")
+                                String("got label '", label, "'")
                             );
                         }
 
@@ -675,7 +675,7 @@ struct X509CertificateStore
                 return Result.make(
                     X509StoreError.trustAnchorNotFound,
                     "certificate's authorityKeyIdentifier refers to a trust anchor that has not been loaded yet",
-                    String2("authorityKeyIdentifier was: ", authKeyId.get.keyIdentifier)
+                    String("authorityKeyIdentifier was: ", authKeyId.get.keyIdentifier)
                 );
             }
 
@@ -709,7 +709,7 @@ struct X509CertificateStore
                 return Result.make(
                     X509StoreError.duplicateSubjectKeyId,
                     "certificate contains a subject key id that's already been used",
-                    String2(
+                    String(
                         "subject key id was: ", subjectKeyId.get.keyIdentifier,
                         " (hashing to: ", subjectKeyHash, ")"
                     )

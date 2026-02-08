@@ -74,7 +74,7 @@ version(linux) private
      *
      * NOTE: Druntime's headers are, as usual, outdated. Some of the padding bytes are now actually being used.
      */
-    struct io_uring_sqe
+    struct io_uring_sqe // @suppress(dscanner.style.phobos_naming_convention)
     {
         import core.sys.linux.fs : __kernel_rwf_t;
 

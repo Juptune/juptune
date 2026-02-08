@@ -219,7 +219,7 @@ final class DlangCodeBuilder
                     ` when reading `, tagType, " ", tagValue, 
                     ` for field '`, fieldName,
                     `' the tag's class was expected to be `, class_.to!string,
-                    `", `, STRING_SHORTHAND, ".String2(",
+                    `", `, STRING_SHORTHAND, ".String(",
                         `"class was ", `, classVar,
                     ")",
                 ");"
@@ -255,7 +255,7 @@ final class DlangCodeBuilder
                     ` when reading `, tagType, " ", tagValue, 
                     ` for field '`, fieldName,
                     `' the tag's value was expected to be `, tagValue,
-                    `", `, STRING_SHORTHAND, ".String2(",
+                    `", `, STRING_SHORTHAND, ".String(",
                         `"tag value was ", `, tagVar,
                     ")",
                 ");"
@@ -339,7 +339,7 @@ string generateRawDlangModule(Asn1ModuleIr mod, ref DlangGeneratorContext contex
         putLine("static import ", ASN1_SHORTHAND, " = juptune.asn1.decode.bcd.encoding;");
         putLine("static import ", RESULT_SHORTHAND, " = juptune.core.util.result;");
         putLine("static import ", BUFFER_SHORTHAND, " = juptune.data.buffer;");
-        putLine("static import ", STRING_SHORTHAND, " = juptune.core.ds.string2;");
+        putLine("static import ", STRING_SHORTHAND, " = juptune.core.ds.string;");
         putLine("static import ", UTF8_SHORTHAND, " = juptune.data.utf8;");
         endLine();
 

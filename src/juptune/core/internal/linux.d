@@ -8,7 +8,7 @@ module juptune.core.internal.linux;
 
 version(linux):
 
-import juptune.core.ds   : String2, Array;
+import juptune.core.ds   : String, Array;
 import juptune.core.util : Result;
 
 import core.stdc.stdio              : sscanf;
@@ -106,5 +106,5 @@ Result linuxErrorAsResult(string staticMessage, int errnum) @nogc nothrow
     else
         msg.length = strlen(msg.ptr);
 
-    return Result.make(cast(LinuxError)errnum, staticMessage, String2.fromDestroyingArray(msg));
+    return Result.make(cast(LinuxError)errnum, staticMessage, String.fromDestroyingArray(msg));
 }
