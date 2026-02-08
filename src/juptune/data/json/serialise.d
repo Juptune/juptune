@@ -295,11 +295,11 @@ if(is(ToSerialiseT == ElementT[], ElementT) && !is(ToSerialiseT : const(char)[])
  +  toDeserialiseInto   = The value to store the result into.
  +
  + Throws:
- +  `wrongType` if an incorrect token is encountered during deserialisation.
+ +  `JsonSerialiseError.wrongType` if an incorrect token is encountered during deserialisation.
  +
- +  `keyRedefined` for structs if the JSON input has a duplicate key.
+ +  `JsonSerialiseError.keyRedefined` for structs if the JSON input has a duplicate key.
  +
- +  `keyNotRecognised` for structs if the JSON input contains a key that doesn't exist inside of `ToDeserialiseInto`.
+ +  `JsonSerialiseError.keyNotRecognised` for structs if the JSON input contains a key that doesn't exist inside of `ToDeserialiseInto`.
  +
  +  Anything that `JsonParser` can throw.
  + ++/
@@ -697,12 +697,14 @@ unittest
             
             auto builder = JsonBuilder!(typeof(put))(put, new ubyte[8]);
             builder.jsonSerialise(TestCase.input).resultAssert;
+            builder.finish().resultAssert;
 
             assert(buffer.slice == TestCase.expected, "Expected:\n---\n"~TestCase.expected~"\n---\nGot:\n---\n"~buffer.slice.idup); // @suppress(dscanner.style.long_line)
 
             typeof(TestCase.input) reparsed;
             auto parser = JsonParser(buffer.slice, new ubyte[8]);
             parser.jsonDeserialise(reparsed).resultAssert;
+            parser.finish().resultAssert;
             assert(reparsed == TestCase.input);
         }
         catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)

@@ -9,5 +9,6 @@ module juptune.event.loop;
 public import
     juptune.event.loop.async,
     juptune.event.loop.core,
+    juptune.event.loop.mutex,
     juptune.event.loop.scheduler
 ;

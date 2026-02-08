@@ -132,6 +132,7 @@ event_srcs = files(
     './src/juptune/event/loop/async.d',
     './src/juptune/event/loop/core.d',
     './src/juptune/event/loop/package.d',
+    './src/juptune/event/loop/mutex.d',
     './src/juptune/event/loop/scheduler.d',
     './src/juptune/event/loop/tests.d',
 )

@@ -114,8 +114,6 @@ package struct JuptuneFiber
 
         /*
             The fiber is waiting for an io_uring completion event to happen.
-
-            `waitingForCompletionEventId` is the userdata that the io_uring completion event will have.
         */
         waitingForCompletionEvent = 0b1000_0000,
 

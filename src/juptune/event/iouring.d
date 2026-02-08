@@ -15,7 +15,7 @@ version(linux) private
     // Strangely the io_uring module is both outdated and also missing functions;
     // so we'll fill in the gaps.
     import core.sys.linux.errno;
-    import core.sys.linux.io_uring      : io_uring_params, io_uring_cqe, io_uring_sqe, IOSQE_IO_LINK;
+    import core.sys.linux.io_uring      : io_uring_params, io_uring_cqe, IOSQE_IO_LINK;
     import core.sys.posix.signal        : sigset_t;
     import core.sys.posix.sys.socket    : socklen_t, sockaddr;
     import core.sys.posix.unistd        : close;
@@ -68,6 +68,107 @@ version(linux) private
     alias IoUringNativeDriver   = IoUringNativeLinuxDriver;
     alias IoUringEmulatedDriver = IoUringEmulatedPosixDriver;
     mixin IoUringTests!(IoUringDriver.native);
+
+    /**
+     * IO submission data structure (Submission Queue Entry)
+     *
+     * NOTE: Druntime's headers are, as usual, outdated. Some of the padding bytes are now actually being used.
+     */
+    struct io_uring_sqe
+    {
+        import core.sys.linux.fs : __kernel_rwf_t;
+
+        /// type of operation for this sqe
+        ubyte opcode;
+        /// IOSQE_* flags
+        ubyte flags;
+        /// ioprio for the request
+        ushort ioprio;
+        /// file descriptor to do IO on
+        int fd;
+        union
+        {
+            /// offset into file
+            ulong off;
+            ulong addr2;
+        }
+
+        union
+        {
+            /// pointer to buffer or iovecs
+            ulong addr;
+            ulong splice_off_in;
+        }
+
+        /// buffer size or number of iovecs
+        uint len;
+        union
+        {
+            __kernel_rwf_t rw_flags;
+            uint fsync_flags;
+
+            /// compatibility
+            ushort poll_events;
+            /// word-reversed for BE
+            uint poll32_events;
+
+            uint sync_range_flags;
+            uint msg_flags;
+            uint timeout_flags;
+            uint accept_flags;
+            uint cancel_flags;
+            uint open_flags;
+            uint statx_flags;
+            uint fadvise_advice;
+            uint splice_flags;
+            uint rename_flags;
+            uint unlink_flags;
+        }
+
+        /// data to be passed back at completion time
+        ulong user_data;
+        /**
+        * pack this to avoid bogus arm OABI complaints
+        */
+        union
+        {
+            align (1):
+
+            /// index into fixed buffers, if used
+            ushort buf_index;
+            /// for grouped buffer selection
+            ushort buf_group;
+        }
+
+        /// personality to use, if used
+        ushort personality;
+
+        union
+        {
+            int splice_fd_in;
+            uint file_index;
+            uint optlen;
+
+            struct 
+            {
+                ushort addr_len;
+                ushort[1] __pad3;
+            }
+        }
+
+        union
+        {
+            struct 
+            {
+                ulong addr3;
+                ulong[1] __pad2;
+            }
+
+            ulong optval;
+            ubyte[0] cmd;
+        }
+    }
+    static assert(io_uring_sqe.sizeof == 64);
 
     struct timespec64 // @suppress(dscanner.style.phobos_naming_convention)
     {
@@ -227,6 +328,22 @@ version(linux) private
         IORING_OP_URING_CMD,
         IORING_OP_SEND_ZC,
         IORING_OP_SENDMSG_ZC,
+        IORING_OP_READ_MULTISHOT,
+        IORING_OP_WAITID,
+        IORING_OP_FUTEX_WAIT,
+        IORING_OP_FUTEX_WAKE,
+        IORING_OP_FUTEX_WAITV,
+        IORING_OP_FIXED_FD_INSTALL,
+        IORING_OP_FTRUNCATE,
+        IORING_OP_BIND,
+        IORING_OP_LISTEN,
+        IORING_OP_RECV_ZC,
+        IORING_OP_EPOLL_WAIT,
+        IORING_OP_READV_FIXED,
+        IORING_OP_WRITEV_FIXED,
+        IORING_OP_PIPE,
+        IORING_OP_NOP128,
+        IORING_OP_URING_CMD128,
     }
 }
 
@@ -530,6 +647,26 @@ struct IoUringMsgRing
     FileDescriptor fd;
     @MapField("len") uint value32;
     @MapField("off") ulong value64;
+}
+
+struct IoUringFutexWait
+{
+    mixin GenerateDriverFuncs!(IORING_OP_FUTEX_WAIT);
+
+    @MapField("addr") int* watchThisPointer;
+    @MapField("addr2") int untilItsThisValue;
+    @MapField("addr3") ulong bitmask; // Must have at least one SET bit in common with FutexWake
+    @MapField("fd") int flags;
+}
+
+struct IoUringFutexWake
+{
+    mixin GenerateDriverFuncs!(IORING_OP_FUTEX_WAKE);
+
+    @MapField("addr") int* forThisPointer;
+    @MapField("addr2") int wakeThisManyWaiters;
+    @MapField("addr3") ulong bitmask; // Must have at least one SET bit in common with FutexWait
+    @MapField("fd") int flags;
 }
 
 package struct IoUringTimeoutUserData
