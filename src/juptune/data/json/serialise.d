@@ -9,10 +9,21 @@ module juptune.data.json.serialise;
 import std.traits : isInstanceOf;
 import std.typecons : Nullable;
 
+import juptune.core.ds : Array, String2;
 import juptune.core.util : Result;
 
 import juptune.data.json.builder : JsonBuilder;
 import juptune.data.json.parser : JsonParser;
+
+/// A Result error enum
+enum JsonSerialiseError
+{
+    none,
+
+    wrongType, /// During deserialisation - a value of type X was expected, but a value of type Y was given instead (e.g. a string was expected but a number was found).
+    keyRedefined, /// During deserialisation - a key was defined multiple times within the same JSON object.
+    keyNotRecognised, /// During deserialisation - a key was found that wasn't recognised as valid for the current type (e.g. when parsing a struct, a key with a non-field name was found).
+}
 
 /++
  + A UDA to be attached onto any fields of a type that is meant to be the target of JSON serialisation/deserialisation.
@@ -249,6 +260,359 @@ if(is(ToSerialiseT == ElementT[], ElementT) && !is(ToSerialiseT : const(char)[])
 
 /++ Deserialisation ++/
 
+/++
+ + Deserialises JSON into the desired type.
+ +
+ + Support:
+ +  All primitive types supported by `JsonParser.Token`.
+ +
+ +  Slices of any supported type. Slices cause this function to become @gc.
+ +
+ +  `Array!T` where `T` is any supported type.
+ +
+ +  `Array!char` is special-cased for only supporting strings.
+ +
+ +  `String2` is supported for strings.
+ +
+ +  `Nullable!T` where `T` is any supported type.
+ +
+ +  Structs, where fields are marked with `@Json` are subject to deserialisation.
+ +
+ +  `const(char)[]` is currently **NOT** supported since I don't know what I want to do with it right now.
+ +
+ + Notes:
+ +  This function doesn't call `.finish` on the `JsonParser`, the caller will need to do that
+ +  themselves when appropriate.
+ +
+ +  For "wrapper" types like `Nullable` and structs, if any subtype of these wrappers
+ +  calls into an @gc deserialiser (e.g. `string` or stuff like `int[]`), then this function
+ +  becomes `@gc` the whole way through.
+ +
+ +  For an `@nogc` invocation you may only use `@nogc` compatible types.
+ +
+ + Params:
+ +  json                = The `JsonParser` providing the tokens for deserialisation.
+ +  toDeserialiseInto   = The value to store the result into.
+ +
+ + Throws:
+ +  `wrongType` if an incorrect token is encountered during deserialisation.
+ +
+ +  `keyRedefined` for structs if the JSON input has a duplicate key.
+ +
+ +  `keyNotRecognised` for structs if the JSON input contains a key that doesn't exist inside of `ToDeserialiseInto`.
+ +
+ +  Anything that `JsonParser` can throw.
+ + ++/
+Result jsonDeserialise(ToDeserialiseT)(
+    scope ref JsonParser json, 
+    scope ref ToDeserialiseT toDeserialiseInto,
+)
+{
+    return jsonDeserialiseImpl!(ToDeserialiseT, Json())(json, toDeserialiseInto);
+}
+
+// Overload for strings (NOTE: if ToDeserialiseT is `string` then this function becomes @gc)
+private Result jsonDeserialiseImpl(ToDeserialiseT, Json Uda)(
+    scope ref JsonParser json, 
+    scope ref ToDeserialiseT toDeserialiseInto,
+)
+if(is(ToDeserialiseT == string) || is(ToDeserialiseT == String2) || is(ToDeserialiseT == Array!char))
+{
+    JsonParser.Token token;
+    auto result = json.next(token);
+    if(result.isError)
+        return result;
+    
+    if(token.type != JsonParser.Token.Type.string)
+    {
+        return Result.make(
+            JsonSerialiseError.wrongType,
+            "expected a string token when deserialising field of type "~ToDeserialiseT.stringof,
+            String2("got a token of type ", token.type, " instead")
+        );
+    }
+
+    return jsonToString(token, toDeserialiseInto);
+}
+
+// Overload for ints
+private Result jsonDeserialiseImpl(ToDeserialiseT, Json Uda)(
+    scope ref JsonParser json, 
+    scope ref ToDeserialiseT toDeserialiseInto,
+)
+if(__traits(isIntegral, ToDeserialiseT) && !is(ToDeserialiseT == bool))
+{
+    JsonParser.Token token;
+    auto result = json.next(token);
+    if(result.isError)
+        return result;
+    
+    if(token.type != JsonParser.Token.Type.integer)
+    {
+        return Result.make(
+            JsonSerialiseError.wrongType,
+            "expected an integer token when deserialising field of type "~ToDeserialiseT.stringof,
+            String2("got a token of type ", token.type, " instead")
+        );
+    }
+
+    return token.asInt(toDeserialiseInto);
+}
+
+// Overload for bools
+private Result jsonDeserialiseImpl(ToDeserialiseT, Json Uda)(
+    scope ref JsonParser json, 
+    scope ref ToDeserialiseT toDeserialiseInto,
+)
+if(is(ToDeserialiseT == bool))
+{
+    JsonParser.Token token;
+    auto result = json.next(token);
+    if(result.isError)
+        return result;
+    
+    if(token.type != JsonParser.Token.Type.boolean)
+    {
+        return Result.make(
+            JsonSerialiseError.wrongType,
+            "expected a boolean token when deserialising field of type "~ToDeserialiseT.stringof,
+            String2("got a token of type ", token.type, " instead")
+        );
+    }
+
+    toDeserialiseInto = token.asBool();
+    return Result.noError;
+}
+
+// Overload for arrays (NOTE: If ToDeserialiseT is a normal D slice, then this function becomes @gc)
+private Result jsonDeserialiseImpl(ToDeserialiseT, Json Uda)(
+    scope ref JsonParser json, 
+    scope out ToDeserialiseT toDeserialiseInto,
+)
+if(
+    (is(ToDeserialiseT == T[], T) || is(ToDeserialiseT == Array!T, T))
+    && !is(ToDeserialiseT : const(char)[]) // Exclude strings
+    && !is(ToDeserialiseT == Array!char) // ^^
+)
+{
+    static if(is(ToDeserialiseT == T[], T))
+        alias ElementT = T;
+    else static if(is(ToDeserialiseT == Array!T, T))
+        alias ElementT = T;
+    else static assert(false);
+
+    JsonParser.Token token;
+    auto result = json.next(token);
+    if(result.isError)
+        return result;
+    
+    if(token.type != JsonParser.Token.Type.arrayStart)
+    {
+        return Result.make(
+            JsonSerialiseError.wrongType,
+            "expected an array start token when deserialising field of type "~ToDeserialiseT.stringof,
+            String2("got a token of type ", token.type, " instead")
+        );
+    }
+
+    while(true)
+    {
+        auto peekJson = json;
+
+        result = peekJson.next(token);
+        if(result.isError)
+            return result;
+
+        if(token.type == JsonParser.Token.Type.arrayEnd)
+        {
+            json = peekJson;
+            break;
+        }
+
+        toDeserialiseInto.length = toDeserialiseInto.length + 1;
+        result = jsonDeserialiseImpl!(ElementT, Json())(json, toDeserialiseInto[$-1]);
+        if(result.isError)
+            return result;
+    }
+
+    return Result.noError;
+}
+
+// Overload for structs (NOTE: If any field contains a type that calls into an @gc deserilaiser, then this function also becomes @gc)
+private Result jsonDeserialiseImpl(ToDeserialiseT, Json Uda)(
+    scope ref JsonParser json, 
+    scope out ToDeserialiseT toDeserialiseInto,
+)
+if(
+    is(ToDeserialiseT == struct)
+    && !is(ToDeserialiseT == Array!_, _) // Except for some structs that are specially handled
+    && !is(ToDeserialiseT == String2) // ^^
+)
+{
+    import juptune.core.ds : ArrayNonShrink;
+
+    JsonParser.Token token;
+    auto result = json.next(token);
+    if(result.isError)
+        return result;
+    
+    if(token.type != JsonParser.Token.Type.objectStart)
+    {
+        return Result.make(
+            JsonSerialiseError.wrongType,
+            "expected an object start token when deserialising field of type "~ToDeserialiseT.stringof,
+            String2("got a token of type ", token.type, " instead")
+        );
+    }
+
+    ArrayNonShrink!char nameBuffer;
+    while(true)
+    {
+        result = json.next(token);
+        if(result.isError)
+            return result;
+
+        if(token.type == JsonParser.Token.Type.objectEnd)
+            break;
+
+        if(token.type != JsonParser.Token.Type.name)
+        {
+            return Result.make(
+                JsonSerialiseError.wrongType,
+                "expected an name token when deserialising next field of struct type "~ToDeserialiseT.stringof,
+                String2("got a token of type ", token.type, " instead")
+            );
+        }
+
+        bool[toDeserialiseInto.tupleof.length] found;
+        const(char)[] nameSlice;
+        if(token.hasEscapeChars)
+        {
+            nameBuffer.length = 0;
+            foreach(slice; token.asEscapedString)
+                nameBuffer.put(slice);
+            nameSlice = nameBuffer.slice;
+        }
+        else
+            nameSlice = token.asUnescapedString;
+
+        Switch: switch(nameSlice)
+        {
+            static foreach(i, MemberField; toDeserialiseInto.tupleof)
+            {
+                // MemberUda can be `null` if the field isn't marked with the @Json UDA, so ignore any that lack the marking.
+                static if(!is(typeof(JsonUdaOf!MemberField) == typeof(null)))
+                case JsonUdaOf!MemberField.name:
+                { // These brackets are important, it helps prevent a few compiler bugs when using static foreach inside a switch.
+                    alias MemberT = typeof(MemberField);
+                    enum MemberUda = JsonUdaOf!MemberField;
+                    if(found[i])
+                    {
+                        return Result.make(
+                            JsonSerialiseError.keyRedefined, 
+                            "when parsing struct type "~ToDeserialiseT.stringof~": the input JSON object has the field '"~MemberUda.name~"' defined multiple times." // @suppress(dscanner.style.long_line)
+                        );
+                    }
+
+                    found[i] = true;
+
+                    static if(is(MemberT == Nullable!_, _) || MemberUda.useNullForOmit)
+                    {
+                        JsonParser.Token peekToken;
+                        auto peekJson = json;
+                        result = peekJson.next(peekToken);
+                        if(result.isError)
+                            return result;
+
+                        if(peekToken.type == JsonParser.Token.Type.null_)
+                        {
+                            json = peekJson;
+                            break Switch; // Keep the Nullable as null/custom type as .init.
+                        }
+                    }
+
+                    static if(is(MemberT == Nullable!NullT, NullT))
+                    {
+                        toDeserialiseInto.tupleof[i] = NullT.init;
+                        result = jsonDeserialiseImpl!(NullT, MemberUda)(json, toDeserialiseInto.tupleof[i].get);
+                        if(result.isError)
+                            return result;
+                    }
+                    else
+                    {
+                        result = jsonDeserialiseImpl!(MemberT, MemberUda)(json, toDeserialiseInto.tupleof[i]);
+                        if(result.isError)
+                            return result;
+                    }
+                    break Switch;
+                }
+            }
+
+            default:
+                return Result.make(
+                    JsonSerialiseError.keyNotRecognised,
+                    "when parsing struct type "~ToDeserialiseT.stringof~": the input JSON object contains a key that does not correlate to a field within the struct.", // @suppress(dscanner.style.long_line)
+                    String2("key was: ", nameSlice)
+                );
+        }
+    }
+
+    return Result.noError;
+}
+
+// To GC string
+private Result jsonToString(JsonParser.Token token, scope ref string value) nothrow
+{
+    import core.attribute; 
+    import std.array : Appender;
+    import std.exception : assumeUnique;
+
+    if(token.hasEscapeChars)
+    {
+        Appender!(char[]) str;
+        str.reserve(token.asUnescapedString.length);
+        foreach(slice; token.asEscapedString)
+            str.put(slice);
+        value = str.data.assumeUnique;
+        return Result.noError;
+    }
+
+    value = token.asUnescapedString.idup;
+    return Result.noError;
+}
+
+// To @nogc string (String2 case)
+private Result jsonToString(JsonParser.Token token, scope out String2 value) @nogc nothrow
+{
+    if(token.hasEscapeChars)
+    {
+        Array!char str;
+        str.reserve(token.asUnescapedString.length);
+        foreach(slice; token.asEscapedString)
+            str.put(slice);
+        value = String2.fromDestroyingArray(str);
+        return Result.noError;
+    }
+
+    value = String2(token.asUnescapedString);
+    return Result.noError;
+}
+
+// To @nogc string (Array!char case)
+private Result jsonToString(JsonParser.Token token, scope out Array!char value) @nogc nothrow
+{
+    if(token.hasEscapeChars)
+    {
+        value.reserve(token.asUnescapedString.length);
+        foreach(slice; token.asEscapedString)
+            value.put(slice);
+        return Result.noError;
+    }
+
+    value.put(token.asUnescapedString);
+    return Result.noError;
+}
+
 /++ Unittests ++/
 
 @("jsonSerialise - General success cases")
@@ -335,6 +699,11 @@ unittest
             builder.jsonSerialise(TestCase.input).resultAssert;
 
             assert(buffer.slice == TestCase.expected, "Expected:\n---\n"~TestCase.expected~"\n---\nGot:\n---\n"~buffer.slice.idup); // @suppress(dscanner.style.long_line)
+
+            typeof(TestCase.input) reparsed;
+            auto parser = JsonParser(buffer.slice, new ubyte[8]);
+            parser.jsonDeserialise(reparsed).resultAssert;
+            assert(reparsed == TestCase.input);
         }
         catch(Throwable err) // @suppress(dscanner.suspicious.catch_em_all)
             assert(false, "\n["~TestCase.name~"]: "~err.msg);

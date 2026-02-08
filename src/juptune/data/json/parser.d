@@ -203,6 +203,113 @@ struct JsonParser
         }
 
         /++
+         + Provides an InputRange of `const(char)[]` which will provide the string value
+         + of this string/name token, but with any escape characters transformed into their
+         + underlying value.
+         +
+         + Example:
+         +  Given a JSON string of `"abc\n123"`, this range will produce `["abc", [cast(char)0x0A], "123"]`.
+         +
+         +  Given a JSON string of `"foobarbaz"` this range will produce `["foobarbaz"]`.
+         +
+         +  Given a JSON string of `"abc\n\n123"`, this range will produce `["abc", [cast(char)0x0A], [cast(char)0x0A], "123"]`.
+         + 
+         + Returns:
+         +  An InputRange of escaped slices.
+         + ++/
+        auto asEscapedString() @trusted @nogc nothrow pure const
+        in(this.type == Type.string || this.type == Type.name, "this token isn't for a string or name")
+        {
+            static struct R
+            {
+                const(char)[] text;
+                bool hasEscapeChars;
+                size_t cursor;
+
+                const(char)[] front;
+                bool empty;
+
+                this(const(char)[] text, bool hasEscapeChars) @nogc nothrow pure
+                {
+                    this.text = text;
+                    this.hasEscapeChars = hasEscapeChars;
+                    this.popFront();
+                }
+
+                void popFront() @nogc nothrow pure
+                in(!this.empty, "attempted to pop an empty range")
+                {
+                    // Fast path: we don't have to escape.
+                    if(!this.hasEscapeChars)
+                    {
+                        if(this.front.length > 0) // Have we already given them the final slice?
+                            this.empty = true;
+                        else
+                            this.front = text;
+                        return;
+                    }
+                    else if(this.cursor >= this.text.length)
+                    {
+                        this.empty = true;
+                        return;
+                    }
+
+                    const start = this.cursor;
+                    while(this.cursor < this.text.length)
+                    {
+                        const ch = this.text[this.cursor++];
+                        if(ch != '\\')
+                            continue;
+                        
+                        if(start != this.cursor - 1) // If we've been past any non-escape chars, then feed those back to the user first.
+                        {
+                            this.cursor--; // Keep the backslash around for next time.
+                            this.front = this.text[start..this.cursor];
+                            return;
+                        }
+
+                        const escape = this.text[this.cursor++];
+                        switch(escape)
+                        {
+                            case '"':
+                                this.front = `"`;
+                                return;
+                            case '\\':
+                                this.front = `\`;
+                                return;
+                            case '/':
+                                this.front = "/";
+                                return;
+                            case 'b':
+                                this.front = "\b";
+                                return;
+                            case 'f':
+                                this.front = "\f";
+                                return;
+                            case 'n':
+                                this.front = "\n";
+                                return;
+                            case 'r':
+                                this.front = "\r";
+                                return;
+                            case 't': 
+                                this.front = "\t";
+                                return;
+                            
+                            default:
+                                // JsonParser should've caught this case
+                                assert(false, "invalid escape character found - this shouldn't be possible");
+                        }
+                    }
+
+                    this.front = this.text[start..this.cursor];
+                }
+            }
+
+            return R(this._inner.asString.textNoQuotes, this._inner.asString.hasEscapeChars);
+        }
+
+        /++
          + Retrieves the value of this boolean token.
          + ++/
         bool asBool() @trusted @nogc nothrow pure const
@@ -849,7 +956,30 @@ unittest
         "empty string": T(`""`, tt.string, (t){ assert(t.asUnescapedString == ""); }),
         "basic string": T(`"abc123"`, tt.string, (t){ assert(t.asUnescapedString == "abc123"); }),
         "utf8 string": T(`"こんにちは"`, tt.string, (t){ assert(t.asUnescapedString == "こんにちは"); }),
-        "escape string": T(`"\"\\\/\b\f\n\r\t"`, tt.string, (t){ assert(t.asUnescapedString == `\"\\\/\b\f\n\r\t`); }),
+        "escape string": T(`"foo\"\\\/\b\f\n\r\tbar"`, tt.string, (t){
+            import std.algorithm : equal;
+            import std.format : format;
+
+            const expected = [
+                "foo",
+                `"`,
+                `\`,
+                "/",
+                "\b",
+                "\f",
+                "\n",
+                "\r",
+                "\t",
+                "bar",
+            ];
+
+            assert(t.asUnescapedString == `foo\"\\\/\b\f\n\r\tbar`); 
+            assert(t.asEscapedString.equal(expected), format(
+                "\nWanted: %s\nGot: %s",
+                expected,
+                t.asEscapedString,
+            ));
+        }),
 
         "number - single digit": T("1", tt.integer, (t){ assert(t.mustAsInt!int == 1); }),
         "number - multiple digits": T("12345", tt.integer, (t){ assert(t.mustAsInt!int == 12_345); }),
