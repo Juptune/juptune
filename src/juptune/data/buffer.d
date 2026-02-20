@@ -110,6 +110,27 @@ struct MemoryReader
     /// ditto
     alias peekBytes = tryBytes!(false);
 
+    bool tryNullTerminatedString(bool advanceCursor)(out scope const(char)[] result) @nogc @safe nothrow
+    {
+        auto charCursor = this._cursor;
+        while(charCursor < this._buffer.length)
+        {
+            if(this._buffer[charCursor++] == 0)
+            {
+                result = cast(const(char)[])this._buffer[this._cursor..charCursor-1];
+                static if(advanceCursor)
+                    this._cursor = charCursor;
+                return true;
+            }
+        }
+
+        return false;
+    }
+    /// ditto
+    alias readNullTerminatedString = tryNullTerminatedString!(true);
+    /// ditto
+    alias peekNullTerminatedString = tryNullTerminatedString!(false);
+
     /// The same thing as `tryBytes`, but throws an `Exception` if there's not enough bytes to read,
     /// which allows the function to return the value directly and rely on try-catch for error handling.
     const(ubyte)[] enforceBytes(bool advanceCursor)(size_t count) @safe

@@ -17,6 +17,18 @@ in(buffer.length > 0, "Buffer length must be greater than 0 - it's likely a bug 
     } else assert(false, "No implmentation for cryptoFillBuffer");
 }
 
+void cryptoFillBufferFromAlphabet(scope ubyte[] buffer, scope const(ubyte)[] alphabet) @trusted @nogc nothrow
+in(buffer.length > 0, "Buffer length must be greater than 0 - it's likely a bug otherwise")
+in(alphabet.length <= uint.max, "alphabet's length must fit into 32 bits (crypto library limitation)")
+{
+    version(Juptune_LibSodium)
+    {
+        import juptune.crypto.libsodium : randombytes_uniform;
+        foreach(ref byte_; buffer)
+            byte_ = alphabet[randombytes_uniform(cast(uint)alphabet.length)];
+    } else assert(false, "No implmentation for cryptoFillBufferFromAlphabet");
+}
+
 /++++ Unittests ++++/
 
 @("cryptoFillBuffer - making sure it doesn't crash")

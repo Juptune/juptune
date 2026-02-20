@@ -300,7 +300,7 @@ struct String
         Array!char buffer;
         foreach(ref value; values)
         {
-            static if(__traits(compiles, { buffer.put(value); }))
+            static if(__traits(compiles, { buffer.put(value); }) && !is(typeof(value) == enum))
                 buffer.put(value);
             else static if(
                 isInputRange!(typeof(value))

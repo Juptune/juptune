@@ -209,6 +209,9 @@ struct Result // @suppress(dscanner.suspicious.incomplete_operator_overloading)
     Result wrapError(string newError) @trusted
     {
         Result r = this;
+        if(!this.isError)
+            return r;
+
         static if(HaveContext)
         {
             r.context = String(r.error, " ", r.context.sliceMaybeFromStack);

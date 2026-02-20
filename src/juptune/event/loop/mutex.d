@@ -146,8 +146,7 @@ shared struct Mutex
         if(oldValue != LOCKED)
         {
             const inTeardownState = oldValue < TEARDOWN-1;
-            if(!inTeardownState)
-                atomicStore(this._futexValue, UNLOCKED);
+            atomicStore(this._futexValue, (inTeardownState) ? TEARDOWN : UNLOCKED);
 
             IoUringCompletion cqe;
 

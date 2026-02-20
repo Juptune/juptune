@@ -153,6 +153,17 @@ http_srcs = files(
     './src/juptune/http/tls/tls13.d',
 )
 
+postgres_srcs = files(
+    './src/juptune/postgres/protocol/auth.d',
+    './src/juptune/postgres/protocol/connection.d',
+    './src/juptune/postgres/protocol/datatypes.d',
+    './src/juptune/postgres/protocol/decode.d',
+    './src/juptune/postgres/protocol/encode.d',
+    './src/juptune/postgres/protocol/package.d',
+
+    './src/juptune/postgres/package.d',
+)
+
 #### Dependencies ####
 
 juptune_core_dep = declare_dependency(
@@ -186,8 +197,13 @@ juptune_http_dep = declare_dependency(
     dependencies: [juptune_asn1_dep, juptune_core_dep, juptune_crypto_dep, juptune_data_dep, juptune_event_dep],
 )
 
+juptune_postgres_dep = declare_dependency(
+    sources: postgres_srcs,
+    dependencies: [juptune_core_dep, juptune_crypto_dep, juptune_data_dep, juptune_event_dep],
+)
+
 juptune_all_dep = declare_dependency(
-    dependencies: [juptune_asn1_dep, juptune_core_dep, juptune_crypto_dep, juptune_data_dep, juptune_event_dep, juptune_http_dep],
+    dependencies: [juptune_asn1_dep, juptune_core_dep, juptune_crypto_dep, juptune_data_dep, juptune_event_dep, juptune_http_dep, juptune_postgres_dep],
 )
 
 juptune_test_dep = declare_dependency(
