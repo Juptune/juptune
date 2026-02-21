@@ -8,7 +8,14 @@ module juptune.postgres.protocol.encode;
 
 import juptune.core.ds : Array;
 import juptune.core.util : Result;
-import juptune.postgres.protocol.connection : PostgresProtocol, PostgresProtocolVersion, PostgresProtocolError;
+import juptune.postgres.protocol.connection 
+    : 
+        PostgresProtocol, 
+        PostgresProtocolVersion, 
+        PostgresProtocolError, 
+        PostgresColumnDescription
+    ;
+import juptune.postgres.protocol.datatypes : PostgresDataTypeOid;
 
 package Result sendStartupMessage(
     scope ref PostgresProtocol psql,
@@ -223,6 +230,210 @@ in(psql.bufferIsEmpty, "bug: buffer was expected to be empty")
         return result;
 
     result = psql.putLengthPrefixedBytes(() => psql.putStringz(query));
+    if(result.isError)
+        return result;
+
+    return psql.sendEntireBuffer();
+}
+
+package Result preparePrepareMessage(
+    scope ref PostgresProtocol psql,
+    scope const(char)[] name,
+    scope const(char)[] query,
+    scope const(PostgresDataTypeOid)[] paramTypes,
+) @nogc nothrow
+{
+    auto result = psql.putBytes(['P']); // type byte of Prepare
+    if(result.isError)
+        return result;
+
+    result = psql.putLengthPrefixedBytes((){
+        auto result = psql.putStringz(name);
+        if(result.isError)
+            return result;
+
+        result = psql.putStringz(query);
+        if(result.isError)
+            return result;
+
+        result = psql.putInt!short(cast(short)paramTypes.length); // TODO: Bounds check
+        if(result.isError)
+            return result;
+
+        foreach(type; paramTypes)
+        {
+            result = psql.putInt!int(type);
+            if(result.isError)
+                return result;
+        }
+
+        return Result.noError;
+    });
+    if(result.isError)
+        return result;
+
+    return Result.noError;
+}
+
+package Result prepareBindMessage(BindParameterT)(
+    scope ref PostgresProtocol psql,
+    scope const(char)[] portalName,
+    scope const(char)[] statementName,
+    scope const(PostgresColumnDescription.Format)[] paramFormatCodes,
+    scope const(PostgresColumnDescription.Format)[] resultFormatCodes,
+    scope BindParameterT bindParameterOrNull,
+)
+{
+    auto result = psql.putBytes(['B']); // type byte of Bind
+    if(result.isError)
+        return result;
+
+    result = psql.putLengthPrefixedBytes((){
+        auto result = psql.putStringz(portalName);
+        if(result.isError)
+            return result;
+
+        result = psql.putStringz(statementName);
+        if(result.isError)
+            return result;
+
+        result = psql.putInt!short(cast(short)paramFormatCodes.length); // TODO: Bounds check
+        if(result.isError)
+            return result;
+        foreach(type; paramFormatCodes)
+        {
+            result = psql.putInt!short(type);
+            if(result.isError)
+                return result;
+        }
+
+        const paramLengthCursor = psql.bufferCursor;
+        result = psql.putInt!short(0);
+        if(result.isError)
+            return result;
+
+        int paramCount;
+        bool moreParamsToBind = (bindParameterOrNull !is null);
+        while(moreParamsToBind)
+        {
+            result = psql.putLengthPrefixedBytes(
+                () => bindParameterOrNull(paramCount++, psql, moreParamsToBind),
+                includeLengthBytes: false,
+            );
+            if(result.isError)
+                return result;
+        }
+
+        psql.putIntAt!short(cast(short)paramCount, paramLengthCursor); // TODO: Bounds check
+
+        result = psql.putInt!short(cast(short)resultFormatCodes.length); // TODO: Bounds check
+        if(result.isError)
+            return result;
+        foreach(type; resultFormatCodes)
+        {
+            result = psql.putInt!short(type);
+            if(result.isError)
+                return result;
+        }
+
+        return Result.noError;
+    });
+    if(result.isError)
+        return result;
+
+    return Result.noError;
+}
+
+package Result prepareDescribeMessage(
+    scope ref PostgresProtocol psql,
+    char type,
+    scope const(char)[] name,
+) @nogc nothrow
+{
+    auto result = psql.putBytes(['D']); // type byte of Describe
+    if(result.isError)
+        return result;
+
+    result = psql.putLengthPrefixedBytes((){
+        auto result = psql.putBytes([cast(ubyte)type]);
+        if(result.isError)
+            return result;
+
+        result = psql.putStringz(name);
+        if(result.isError)
+            return result;
+
+        return Result.noError;
+    });
+    if(result.isError)
+        return result;
+
+    return Result.noError;
+}
+
+package Result prepareExecuteMessage(
+    scope ref PostgresProtocol psql,
+    scope const(char)[] portalName,
+    int maxRows,
+) @nogc nothrow
+{
+    auto result = psql.putBytes(['E']); // type byte of Execute
+    if(result.isError)
+        return result;
+
+    result = psql.putLengthPrefixedBytes((){
+        auto result = psql.putStringz(portalName);
+        if(result.isError)
+            return result;
+
+        result = psql.putInt!int(maxRows);
+        if(result.isError)
+            return result;
+
+        return Result.noError;
+    });
+    if(result.isError)
+        return result;
+
+    return Result.noError;
+}
+
+package Result prepareCloseMessage(
+    scope ref PostgresProtocol psql,
+    char type,
+    scope const(char)[] name,
+) @nogc nothrow
+{
+    auto result = psql.putBytes(['C']); // type byte of Execute
+    if(result.isError)
+        return result;
+
+    result = psql.putLengthPrefixedBytes((){
+        auto result = psql.putBytes([cast(ubyte)type]);
+        if(result.isError)
+            return result;
+
+        result = psql.putStringz(name);
+        if(result.isError)
+            return result;
+
+        return Result.noError;
+    });
+    if(result.isError)
+        return result;
+
+    return Result.noError;
+}
+
+package Result sendSyncMessage(scope ref PostgresProtocol psql) @nogc nothrow
+{
+    auto result = psql.putBytes(['S']); // type byte of Sync
+    if(result.isError)
+        return result;
+
+    result = psql.putLengthPrefixedBytes((){
+        return Result.noError;
+    });
     if(result.isError)
         return result;
 

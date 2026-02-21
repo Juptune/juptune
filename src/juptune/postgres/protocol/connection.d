@@ -158,6 +158,7 @@ struct PostgresProtocol
     import juptune.data : MemoryReader;
     import juptune.event.io : TcpSocket, IpAddress;
     import juptune.http.tls : TlsTcpSocket;
+    import juptune.postgres.protocol.datatypes : PostgresDataTypeOid;
 
     alias MessageHandlerT = Result delegate(PostgresMessageType type, scope ref MemoryReader reader) @nogc nothrow;
 
@@ -170,6 +171,9 @@ struct PostgresProtocol
     alias ColumnDescriptionHandlerGcT = Result delegate(ushort columnCount, scope NextColumnDescriptionT nextDescription); // @suppress(dscanner.style.long_line)
     alias DataRowHandlerGcT = Result delegate(ushort columnCount, scope NextColumnDataT nextData);
 
+    alias BindParameterHandlerT = Result delegate(const int paramIndex, scope ref PostgresProtocol psql, scope out bool moreParamsLeftToBind) @nogc nothrow; // @suppress(dscanner.style.long_line)
+    alias BindParameterHandlerGcT = Result delegate(const int paramIndex, scope ref PostgresProtocol psql, scope out bool moreParamsLeftToBind); // @suppress(dscanner.style.long_line)
+
     private
     {
         alias Machine = StateMachineTypes!(State, void*);
@@ -177,6 +181,8 @@ struct PostgresProtocol
             Machine.Transition(State.notConnected, State.readyForQuery),
             Machine.Transition(State.readyForQuery, State.handlingQuery),
             Machine.Transition(State.handlingQuery, State.readyForQuery),
+            Machine.Transition(State.handlingQuery, State.bindingParams),
+            Machine.Transition(State.bindingParams, State.handlingQuery),
         ]);
 
         enum State
@@ -185,6 +191,7 @@ struct PostgresProtocol
             notConnected,
             readyForQuery,
             handlingQuery,
+            bindingParams,
         }
 
         StateMachine _state;
@@ -337,6 +344,184 @@ struct PostgresProtocol
         return this.simpleQueryImpl(query, onRowDescriptionOrNull, onDataRowOrNull);
     }
 
+    Result prepare(
+        scope const(char)[] statementName,
+        scope const(char)[] query,
+        scope const(PostgresDataTypeOid)[] paramTypes,
+    ) @nogc nothrow
+    in(this._state.mustBeIn(State.readyForQuery))
+    in(this.bufferIsEmpty, "bug: buffer was expected to be empty")
+    {
+        import juptune.postgres.protocol.encode : preparePrepareMessage, sendSyncMessage;
+
+        this._state.mustTransition!(State.readyForQuery, State.handlingQuery);
+
+        auto result = preparePrepareMessage(this, statementName, query, paramTypes);
+        if(result.isError)
+            return result;
+
+        result = sendSyncMessage(this);
+        if(result.isError)
+            return result;
+
+        result = this.nextMessagesReadyForQueryCase(
+            (PostgresMessageType type, scope ref MemoryReader reader)
+            {
+                switch(type) with(PostgresMessageType)
+                {
+                    case parseComplete:
+                        // Just ignore it.
+                        return Result.noError;
+
+                    default:
+                        import juptune.core.ds : String;
+                        return Result.make(
+                            PostgresProtocolError.unexpectedMessage,
+                            "encountered unexpected message when reading reply to Prepare",
+                            String("got message of type ", type)
+                        );
+                }
+            },
+        );
+        if(result.isError)
+            return result;
+        
+        this.resetBuffer();
+        return Result.noError;
+    }
+
+    Result bindDescribeExecute(
+        scope const(char)[] portalName,
+        scope const(char)[] statementName,
+        scope const(PostgresColumnDescription.Format)[] paramFormatCodes,
+        scope const(PostgresColumnDescription.Format)[] resultFormatCodes,
+        scope BindParameterHandlerT bindParameterOrNull,
+        scope ColumnDescriptionHandlerT onRowDescriptionOrNull,
+        scope DataRowHandlerT onDataRowOrNull,
+    ) @nogc nothrow
+    in(this._state.mustBeIn(State.readyForQuery))
+    in(this.bufferIsEmpty, "bug: buffer was expected to be empty")
+    {
+        return this.bindDescribeExecuteImpl(portalName, statementName, paramFormatCodes, resultFormatCodes, bindParameterOrNull, onRowDescriptionOrNull, onDataRowOrNull); // @suppress(dscanner.style.long_line)
+    }
+
+    Result bindDescribeExecuteGc(
+        scope const(char)[] portalName,
+        scope const(char)[] statementName,
+        scope const(PostgresColumnDescription.Format)[] paramFormatCodes,
+        scope const(PostgresColumnDescription.Format)[] resultFormatCodes,
+        scope BindParameterHandlerGcT bindParameterOrNull,
+        scope ColumnDescriptionHandlerGcT onRowDescriptionOrNull,
+        scope DataRowHandlerGcT onDataRowOrNull,
+    )
+    in(this._state.mustBeIn(State.readyForQuery))
+    in(this.bufferIsEmpty, "bug: buffer was expected to be empty")
+    {
+        return this.bindDescribeExecuteImpl(portalName, statementName, paramFormatCodes, resultFormatCodes, bindParameterOrNull, onRowDescriptionOrNull, onDataRowOrNull); // @suppress(dscanner.style.long_line)
+    }
+
+    Result closeStatement(scope const(char)[] statementName) @nogc nothrow
+    in(this._state.mustBeIn(State.readyForQuery))
+    {
+        import juptune.postgres.protocol.encode : prepareCloseMessage, sendSyncMessage;
+
+        this._state.mustTransition!(State.readyForQuery, State.handlingQuery);
+
+        auto result = prepareCloseMessage(this, 'S', statementName);
+        if(result.isError)
+            return result;
+
+        result = sendSyncMessage(this);
+        if(result.isError)
+            return result;
+
+        return this.nextMessagesReadyForQueryCase((PostgresMessageType type, scope ref MemoryReader reader) {
+            switch(type) with(PostgresMessageType)
+            {
+                case closeComplete:
+                    // Just ignore it.
+                    return Result.noError;
+
+                default:
+                    import juptune.core.ds : String;
+                    return Result.make(
+                        PostgresProtocolError.unexpectedMessage,
+                        "encountered unexpected message when reading reply to Close",
+                        String("got message of type ", type)
+                    );
+            }
+        });
+    }
+
+    private Result bindDescribeExecuteImpl(BindParameterT, ColumnHandlerT, DataHandlerT)(
+        scope const(char)[] portalName,
+        scope const(char)[] statementName,
+        scope const(PostgresColumnDescription.Format)[] paramFormatCodes,
+        scope const(PostgresColumnDescription.Format)[] resultFormatCodes,
+        scope BindParameterT bindParameterOrNull,
+        scope ColumnHandlerT onRowDescriptionOrNull,
+        scope DataHandlerT onDataRowOrNull,
+    )
+    {
+        import juptune.postgres.protocol.decode : decodeRowDescription;
+        import juptune.postgres.protocol.encode : prepareBindMessage, prepareDescribeMessage, prepareExecuteMessage, sendSyncMessage; // @suppress(dscanner.style.long_line)
+
+        this._state.mustTransition!(State.readyForQuery, State.handlingQuery);
+
+        this._state.mustTransition!(State.handlingQuery, State.bindingParams);
+        auto result = prepareBindMessage(
+            this,
+            portalName,
+            statementName,
+            paramFormatCodes,
+            resultFormatCodes,
+            bindParameterOrNull
+        );
+        if(result.isError)
+            return result;
+        this._state.mustTransition!(State.bindingParams, State.handlingQuery);
+
+        result = prepareDescribeMessage(this, 'P', portalName);
+        if(result.isError)
+            return result;
+
+        result = prepareExecuteMessage(this, portalName, 0);
+        if(result.isError)
+            return result;
+
+        result = sendSyncMessage(this);
+        if(result.isError)
+            return result;
+
+        result = this.handleQueryMessages(onRowDescriptionOrNull, onDataRowOrNull);
+        if(result.isError)
+            return result;
+
+        this.resetBuffer();
+        return Result.noError;
+    }
+
+    private Result executeImpl(DataHandlerT)(
+        scope const(char)[] portalName,
+        int maxRowsToReturn,
+        scope DataHandlerT onDataRowOrNull,
+    )
+    {
+        import juptune.postgres.protocol.encode : prepareExecuteMessage, sendSyncMessage;
+
+        this._state.mustTransition!(State.readyForQuery, State.handlingQuery);
+        
+        auto result = prepareExecuteMessage(this, portalName, maxRowsToReturn);
+        if(result.isError)
+            return result;
+
+        result = sendSyncMessage(this);
+        if(result.isError)
+            return result;
+
+        return this.handleQueryMessages(null, onDataRowOrNull);
+    }
+
     private Result simpleQueryImpl(ColumnHandlerT, DataHandlerT)(
         scope const(char)[] query,
         scope ColumnHandlerT onRowDescriptionOrNull,
@@ -369,7 +554,56 @@ struct PostgresProtocol
         scope DataHandlerT onDataRowOrNull,
     )
     {
-        import juptune.postgres.protocol.decode : decodeErrorResponse, decodeRowDescription, decodeRowData;
+        import juptune.postgres.protocol.decode : decodeRowDescription, decodeRowData;
+
+        auto result = this.nextMessagesReadyForQueryCase(
+            (PostgresMessageType type, scope ref MemoryReader reader)
+            {
+                switch(type) with(PostgresMessageType)
+                {
+                    static if(!is(ColumnHandlerT == typeof(null)))
+                    {
+                        case rowDescription:
+                            if(onRowDescriptionOrNull is null)
+                                return Result.noError;
+                            return decodeRowDescription(reader, onRowDescriptionOrNull);
+                    }
+
+                    case dataRow:
+                        if(onDataRowOrNull is null)
+                            return Result.noError;
+                        return decodeRowData(reader, onDataRowOrNull);
+
+                    case emptyQueryResponse:
+                        return Result.make(PostgresProtocolError.emptyQuery, "query was empty");
+
+                    case bindComplete:
+                    case commandComplete:
+                        // Just ignore it.
+                        return Result.noError;
+
+                    default:
+                        import juptune.core.ds : String;
+                        return Result.make(
+                            PostgresProtocolError.unexpectedMessage,
+                            "encountered unexpected message when reading reply to simple Query/Execute",
+                            String("got message of type ", type)
+                        );
+                }
+            },
+        );
+
+        this.resetBuffer();
+        return result;
+    }
+
+    /++ Decode messages ++/
+
+    package Result nextMessagesReadyForQueryCase(HandlerT)(
+        scope HandlerT handler,
+    )
+    {
+        import juptune.postgres.protocol.decode : decodeErrorResponse;
 
         auto errorResponseResult = Result.noError;
 
@@ -391,40 +625,19 @@ struct PostgresProtocol
                 // Otherwise process the wider range of available messages
                 switch(type) with(PostgresMessageType)
                 {
-                    case rowDescription:
-                        if(onRowDescriptionOrNull is null)
-                            return Result.noError;
-                        return decodeRowDescription(reader, onRowDescriptionOrNull);
-
-                    case dataRow:
-                        if(onDataRowOrNull is null)
-                            return Result.noError;
-                        return decodeRowData(reader, onDataRowOrNull);
-
                     case readyForQuery:
                         ready = true;
                         this._state.mustTransition!(State.handlingQuery, State.readyForQuery);
-                        return Result.noError;
-
-                    case emptyQueryResponse:
-                        errorResponseResult = Result.make(PostgresProtocolError.emptyQuery, "query was empty");
                         return Result.noError;
 
                     case errorResponse:
                         errorResponseResult = decodeErrorResponse(reader);
                         return Result.noError;
 
-                    case commandComplete:
-                        // Just ignore it.
-                        return Result.noError;
-
                     default:
-                        import juptune.core.ds : String;
-                        errorResponseResult = Result.make(
-                            PostgresProtocolError.unexpectedMessage,
-                            "encountered unexpected message when reading reply to simple Query",
-                            String("got message of type ", type)
-                        );
+                        auto result = handler(type, reader);
+                        if(result.isError)
+                            errorResponseResult = result;
                         return Result.noError;
                 }
 
@@ -435,8 +648,6 @@ struct PostgresProtocol
 
         return (errorResponseResult.isError) ? errorResponseResult : result;
     }
-
-    /++ Decode messages ++/
     
     package Result nextMessagesImpl(HandlerT, MoreDataT)(
         scope /*MessageHandlerT*/ HandlerT handler,
@@ -571,10 +782,10 @@ struct PostgresProtocol
 
     package bool bufferIsEmpty() @nogc nothrow pure const => this._cursor == 0;
 
-    package Result putLengthPrefixedBytes(
-        scope Result delegate() @nogc nothrow putter, 
+    package Result putLengthPrefixedBytes(PutterT)(
+        scope /*Result delegate() @nogc nothrow*/ PutterT putter, 
         bool includeLengthBytes = true,
-    ) @nogc nothrow
+    )
     {
         const start = this._cursor;
         auto result = this.putBytes([0, 0, 0, 0]);
@@ -681,6 +892,11 @@ struct PostgresProtocol
     {
         return this._cursor;
     }
+
+    package bool mustBeBindingParams() @nogc nothrow
+    {
+        return this._state.mustBeIn(State.bindingParams);
+    }
 }
 
 @("DEBUG")
@@ -690,6 +906,7 @@ debug unittest
 
     import juptune.core.util : resultAssert;
     import juptune.event;
+    import juptune.postgres.protocol.datatypes : PostgresDataTypeOid;
 
     auto loop = EventLoop(EventLoopConfig());
     loop.addGCThread((){
@@ -703,7 +920,7 @@ debug unittest
             plaintextPassword: "password",
         )).resultAssert;
 
-        PostgresColumnDescription[] descs;
+        PostgresColumnDescription[] descs, resultDescs;
 
         import std;
         psql.simpleQueryGc(`
@@ -845,6 +1062,48 @@ debug unittest
             }
             return Result.noError;
         }).assumeWontThrow.resultAssert;
+
+        psql.prepare(
+            "",
+            "SELECT * FROM test WHERE b = $1",
+            [PostgresDataTypeOid.boolean]
+        ).resultAssert;
+        
+        psql.bindDescribeExecuteGc(
+            "",
+            "",
+            [PostgresColumnDescription.Format.binary],
+            [],
+            (const index, scope ref psql, scope out moreToBind){
+                assert(index == 0);
+
+                psql.putBytes([1]).resultAssert;
+                moreToBind = false;
+
+                return Result.noError;
+            },
+            null,
+            (ushort columnCount, scope PostgresProtocol.NextColumnDataT nextData){
+                import juptune.data.buffer : MemoryReader;
+                import juptune.postgres.protocol.datatypes;
+
+                writeln("======================");
+                writeln("        NEW ROW       ");
+                writeln("======================");
+                foreach(i; 0..columnCount)
+                {
+                    MemoryReader columnReader;
+                    bool isNull;
+                    nextData(columnReader, isNull).resultAssert;
+
+                    writeln(columnReader.buffer);
+                }
+                return Result.noError;
+            }
+        ).assumeWontThrow.resultAssert;
+
+        psql.closeStatement("").resultAssert;
+
         stdout.flush().assumeWontThrow;
         assert(false);
     });

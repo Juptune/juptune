@@ -17,6 +17,7 @@ import juptune.postgres.protocol.connection : PostgresParameters;
 enum PostgresDataTypeOid
 {
     FAILSAFE = -1,
+    unspecified = 0,
 
     boolean = 16,       // BOOLEAN
     int2 = 21,          // SMALLINT
