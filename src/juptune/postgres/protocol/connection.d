@@ -577,6 +577,7 @@ struct PostgresProtocol
                     case emptyQueryResponse:
                         return Result.make(PostgresProtocolError.emptyQuery, "query was empty");
 
+                    case noData:
                     case bindComplete:
                     case commandComplete:
                         // Just ignore it.
@@ -944,6 +945,9 @@ debug unittest
                 u UUID
             );
 
+            DROP TABLE IF EXISTS test2;
+            CREATE TABLE test2(d TIME PRIMARY KEY NOT NULL);
+
             INSERT INTO test(
                 b,
                 cn,
@@ -980,19 +984,19 @@ debug unittest
             import juptune.data.buffer : MemoryReader;
             import juptune.postgres.protocol.datatypes;
 
-            writeln("======================");
-            writeln("        NEW ROW       ");
-            writeln("======================");
+            // writeln("======================");
+            // writeln("        NEW ROW       ");
+            // writeln("======================");
             foreach(i; 0..columnCount)
             {
                 MemoryReader columnReader;
                 bool isNull;
                 nextData(columnReader, isNull).resultAssert;
 
-                write("col ", descs[i].nameDoNotCopy, ": <", descs[i].dataType, "> ");
+                // write("col ", descs[i].nameDoNotCopy, ": <", descs[i].dataType, "> ");
                 if(isNull)
                 {
-                    writeln("NULL");
+                    // writeln("NULL");
                     continue;
                 }
 
@@ -1001,19 +1005,19 @@ debug unittest
                     case int4:
                         int value;
                         decodeInt4Text(columnReader, value, psql.params).resultAssert;
-                        writeln(value);
+                        // writeln(value);
                         break;
 
                     case int2:
                         short value;
                         decodeInt2Text(columnReader, value, psql.params).resultAssert;
-                        writeln(value);
+                        // writeln(value);
                         break;
 
                     case boolean:
                         bool value;
                         decodeBooleanText(columnReader, value, psql.params).resultAssert;
-                        writeln(value);
+                        // writeln(value);
                         break;
 
                     case uuid:
@@ -1022,37 +1026,37 @@ debug unittest
                     case text:
                         const(char)[] value;
                         decodeTextText(columnReader, value, psql.params).resultAssert;
-                        writeln('"', value, '"');
+                        // writeln('"', value, '"');
                         break;
 
                     case date:
                         PostgresDate value;
                         decodeDateText(columnReader, value, psql.params).resultAssert;
-                        writeln(value);
+                        // writeln(value);
                         break;
 
                     case time:
                         Duration value;
                         decodeTimeText(columnReader, value, psql.params).resultAssert;
-                        writeln(value);
+                        // writeln(value);
                         break;
 
                     case timetz:
                         PostgresTimetz value;
                         decodeTimetzText(columnReader, value, psql.params).resultAssert;
-                        writeln(value);
+                        // writeln(value);
                         break;
 
                     case timestamp:
                         PostgresTimestamp value;
                         decodeTimestampText(columnReader, value, psql.params).resultAssert;
-                        writeln(value);
+                        // writeln(value);
                         break;
 
                     case timestamptz:
                         PostgresTimestamptz value;
                         decodeTimestamptzText(columnReader, value, psql.params).resultAssert;
-                        writeln(value);
+                        // writeln(value);
                         break;
 
                     default:
@@ -1065,38 +1069,36 @@ debug unittest
 
         psql.prepare(
             "",
-            "SELECT * FROM test WHERE b = $1",
-            [PostgresDataTypeOid.boolean]
+            "INSERT INTO test2(d) VALUES ($1)",
+            [PostgresDataTypeOid.time]
         ).resultAssert;
         
         psql.bindDescribeExecuteGc(
             "",
             "",
-            [PostgresColumnDescription.Format.binary],
+            [PostgresColumnDescription.Format.text],
             [],
             (const index, scope ref psql, scope out moreToBind){
+                import core.time : Duration, hours, minutes, seconds, msecs;
+                import juptune.postgres.protocol.datatypes;
                 assert(index == 0);
-
-                psql.putBytes([1]).resultAssert;
-                moreToBind = false;
-
-                return Result.noError;
+                return encodeTimestamptzText(psql, PostgresTimestamptz(PostgresDate(1234, 4, 5), PostgresTimetz(12.hours + 34.minutes + 56.seconds + 123.msecs, -2.hours)), psql.params);
             },
             null,
             (ushort columnCount, scope PostgresProtocol.NextColumnDataT nextData){
                 import juptune.data.buffer : MemoryReader;
                 import juptune.postgres.protocol.datatypes;
 
-                writeln("======================");
-                writeln("        NEW ROW       ");
-                writeln("======================");
+                // writeln("======================");
+                // writeln("        NEW ROW       ");
+                // writeln("======================");
                 foreach(i; 0..columnCount)
                 {
                     MemoryReader columnReader;
                     bool isNull;
                     nextData(columnReader, isNull).resultAssert;
 
-                    writeln(columnReader.buffer);
+                    // writeln(columnReader.buffer);
                 }
                 return Result.noError;
             }
