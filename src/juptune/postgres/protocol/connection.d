@@ -679,12 +679,12 @@ struct PostgresProtocol
      +  An errorful `Result` if something went wrong.
      + ++/
     Result bindDescribeExecute(
-        scope const(char)[] statementName,
+        scope const(char)[]                             statementName,
         scope const(PostgresColumnDescription.Format)[] paramFormatCodes,
         scope const(PostgresColumnDescription.Format)[] resultFormatCodes,
-        scope BindParameterHandlerT bindParameterOrNull,
-        scope ColumnDescriptionHandlerT onRowDescriptionOrNull,
-        scope DataRowHandlerT onDataRowOrNull,
+        scope BindParameterHandlerT                     bindParameterOrNull,
+        scope ColumnDescriptionHandlerT                 onRowDescriptionOrNull,
+        scope DataRowHandlerT                           onDataRowOrNull,
     ) @nogc nothrow
     in(this._state.mustBeIn(State.readyForQuery))
     in(this.bufferIsEmpty, "bug: buffer was expected to be empty")
@@ -694,12 +694,12 @@ struct PostgresProtocol
 
     /// ditto.
     Result bindDescribeExecuteGc(
-        scope const(char)[] statementName,
+        scope const(char)[]                             statementName,
         scope const(PostgresColumnDescription.Format)[] paramFormatCodes,
         scope const(PostgresColumnDescription.Format)[] resultFormatCodes,
-        scope BindParameterHandlerGcT bindParameterOrNull,
-        scope ColumnDescriptionHandlerGcT onRowDescriptionOrNull,
-        scope DataRowHandlerGcT onDataRowOrNull,
+        scope BindParameterHandlerGcT                   bindParameterOrNull,
+        scope ColumnDescriptionHandlerGcT               onRowDescriptionOrNull,
+        scope DataRowHandlerGcT                         onDataRowOrNull,
     )
     in(this._state.mustBeIn(State.readyForQuery))
     in(this.bufferIsEmpty, "bug: buffer was expected to be empty")
@@ -771,13 +771,13 @@ struct PostgresProtocol
     }
 
     private Result bindDescribeExecuteImpl(BindParameterT, ColumnHandlerT, DataHandlerT)(
-        scope const(char)[] portalName,
-        scope const(char)[] statementName,
+        scope const(char)[]                             portalName,
+        scope const(char)[]                             statementName,
         scope const(PostgresColumnDescription.Format)[] paramFormatCodes,
         scope const(PostgresColumnDescription.Format)[] resultFormatCodes,
-        scope BindParameterT bindParameterOrNull,
-        scope ColumnHandlerT onRowDescriptionOrNull,
-        scope DataHandlerT onDataRowOrNull,
+        scope BindParameterT                            bindParameterOrNull,
+        scope ColumnHandlerT                            onRowDescriptionOrNull,
+        scope DataHandlerT                              onDataRowOrNull,
     )
     {
         import juptune.postgres.protocol.decode : decodeRowDescription;
@@ -795,20 +795,43 @@ struct PostgresProtocol
             bindParameterOrNull
         );
         if(result.isError)
+        {
+            // Since we haven't actually sent any data, it's safe to error correct.
+            this._state.mustTransition!(State.bindingParams, State.handlingQuery);
+            this._state.mustTransition!(State.handlingQuery, State.readyForQuery);
+            this.resetBuffer();
             return result;
+        }
         this._state.mustTransition!(State.bindingParams, State.handlingQuery);
 
         result = prepareDescribeMessage(this, 'P', portalName);
         if(result.isError)
+        {
+            this._state.mustTransition!(State.handlingQuery, State.readyForQuery);
+            this.resetBuffer();
             return result;
+        }
 
         result = prepareExecuteMessage(this, portalName, 0);
         if(result.isError)
+        {
+            this._state.mustTransition!(State.handlingQuery, State.readyForQuery);
+            this.resetBuffer();
             return result;
+        }
 
         result = sendSyncMessage(this);
         if(result.isError)
+        {
+            // We wouldn't have sent any data in this case, so it's safe to error correct.
+            if(result.isError(PostgresProtocolError.bufferTooSmall))
+            {
+                this._state.mustTransition!(State.handlingQuery, State.readyForQuery);
+                this.resetBuffer();
+            }
+
             return result;
+        }
 
         result = this.handleQueryMessages(onRowDescriptionOrNull, onDataRowOrNull);
         if(result.isError)
@@ -1215,214 +1238,4 @@ struct PostgresProtocol
     {
         return this._state.mustBeIn(State.bindingParams);
     }
-}
-
-@("DEBUG")
-debug unittest
-{
-    import std.exception : assumeWontThrow;
-
-    import juptune.core.util : resultAssert;
-    import juptune.event;
-    import juptune.postgres.protocol.datatypes : PostgresDataTypeOid;
-
-    auto loop = EventLoop(EventLoopConfig());
-    loop.addGCThread((){
-        IpAddress local;
-        IpAddress.parse(local, "127.0.0.1", 5432).resultAssert;
-
-        auto psql = PostgresProtocol(PostgresProtocolConfig());
-        psql.connect(local, PostgresConnectInfo(
-            tlsMode: PostgresTlsMode.never,
-            user: "postgres",
-            plaintextPassword: "password",
-        )).resultAssert;
-
-        PostgresColumnDescription[] descs, resultDescs;
-
-        import std;
-        psql.simpleQueryGc(`
-            DROP TABLE IF EXISTS test;
-            CREATE TABLE test(
-                id SERIAL PRIMARY KEY NOT NULL,
-
-                b BOOLEAN,
-                cn CHARACTER (10),
-                cnv CHARACTER VARYING (10),
-                d DATE,
-                dp DOUBLE PRECISION,
-                i INTEGER,
-                r REAL,
-                si SMALLINT,
-                t TEXT,
-                ti TIME,
-                tiz TIME WITH TIME ZONE,
-                ts TIMESTAMP,
-                tsz TIMESTAMP WITH TIME ZONE,
-                u UUID
-            );
-
-            DROP TABLE IF EXISTS test2;
-            CREATE TABLE test2(d TIME PRIMARY KEY NOT NULL);
-
-            INSERT INTO test(
-                b,
-                cn,
-                cnv,
-                d,
-                dp,
-                i,
-                r,
-                si,
-                t,
-                ti,
-                tiz,
-                ts,
-                tsz,
-                u
-            ) VALUES 
-                (TRUE, '123', '1234', '1234-01-02', 123.456, 123, 123.456, 123, '123', '01:02:03.456', '01:02:03.456+7', '1234-01-02 01:02:03', '1234-01-02 01:02:03.456+7', 'dfc17952-6eaa-4aca-a455-0b7f5eed2b46'),
-                (FALSE, '321', '4321', '4321-10-20', 654.321, 321, 654.321, 321, '321', '06:05:04.321', '07:06:05.432+1', '4321-10-20 03:02:01', '4321-10-20 07:06:05.432+1', 'dfc17952-6eaa-4aca-a455-0b7f5eed2b46')
-            ;
-
-            SELECT * FROM test;
-        `,
-        (ushort columnCount, scope PostgresProtocol.NextColumnDescriptionT nextColumnDescription) {
-            descs.length = columnCount;
-
-            foreach(i; 0..columnCount)
-            {
-                nextColumnDescription(descs[i]).resultAssert;
-                descs[i].nameDoNotCopy = descs[i].nameDoNotCopy.dup;
-            }
-            return Result.noError;
-        },
-        (ushort columnCount, scope PostgresProtocol.NextColumnDataT nextData){
-            import juptune.data.buffer : MemoryReader;
-            import juptune.postgres.protocol.datatypes;
-
-            // writeln("======================");
-            // writeln("        NEW ROW       ");
-            // writeln("======================");
-            foreach(i; 0..columnCount)
-            {
-                MemoryReader columnReader;
-                bool isNull;
-                nextData(columnReader, isNull).resultAssert;
-
-                // write("col ", descs[i].nameDoNotCopy, ": <", descs[i].dataType, "> ");
-                if(isNull)
-                {
-                    // writeln("NULL");
-                    continue;
-                }
-
-                switch(descs[i].dataType) with(PostgresDataTypeOid)
-                {
-                    case int4:
-                        int value;
-                        decodeInt4Text(columnReader, value, psql.params).resultAssert;
-                        // writeln(value);
-                        break;
-
-                    case int2:
-                        short value;
-                        decodeInt2Text(columnReader, value, psql.params).resultAssert;
-                        // writeln(value);
-                        break;
-
-                    case boolean:
-                        bool value;
-                        decodeBooleanText(columnReader, value, psql.params).resultAssert;
-                        // writeln(value);
-                        break;
-
-                    case uuid:
-                    case bpchar:
-                    case varchar:
-                    case text:
-                        const(char)[] value;
-                        decodeTextText(columnReader, value, psql.params).resultAssert;
-                        // writeln('"', value, '"');
-                        break;
-
-                    case date:
-                        PostgresDate value;
-                        decodeDateText(columnReader, value, psql.params).resultAssert;
-                        // writeln(value);
-                        break;
-
-                    case time:
-                        Duration value;
-                        decodeTimeText(columnReader, value, psql.params).resultAssert;
-                        // writeln(value);
-                        break;
-
-                    case timetz:
-                        PostgresTimetz value;
-                        decodeTimetzText(columnReader, value, psql.params).resultAssert;
-                        // writeln(value);
-                        break;
-
-                    case timestamp:
-                        PostgresTimestamp value;
-                        decodeTimestampText(columnReader, value, psql.params).resultAssert;
-                        // writeln(value);
-                        break;
-
-                    case timestamptz:
-                        PostgresTimestamptz value;
-                        decodeTimestamptzText(columnReader, value, psql.params).resultAssert;
-                        // writeln(value);
-                        break;
-
-                    default:
-                        // writeln("<UNHANDLED> ", descs[i].dataType);
-                        break;
-                }
-            }
-            return Result.noError;
-        }).assumeWontThrow.resultAssert;
-
-        psql.prepare(
-            "",
-            "INSERT INTO test2(d) VALUES ($1)",
-            [PostgresDataTypeOid.time]
-        ).resultAssert;
-        
-        psql.bindDescribeExecuteGc(
-            "",
-            [PostgresColumnDescription.Format.text],
-            [],
-            (const index, scope ref psql, scope out moreToBind){
-                import core.time : Duration, hours, minutes, seconds, msecs;
-                import juptune.postgres.protocol.datatypes;
-                assert(index == 0);
-                return encodeTimestamptzText(psql, PostgresTimestamptz(PostgresDate(1234, 4, 5), PostgresTimetz(12.hours + 34.minutes + 56.seconds + 123.msecs, -2.hours)), psql.params);
-            },
-            null,
-            (ushort columnCount, scope PostgresProtocol.NextColumnDataT nextData){
-                import juptune.data.buffer : MemoryReader;
-                import juptune.postgres.protocol.datatypes;
-
-                // writeln("======================");
-                // writeln("        NEW ROW       ");
-                // writeln("======================");
-                foreach(i; 0..columnCount)
-                {
-                    MemoryReader columnReader;
-                    bool isNull;
-                    nextData(columnReader, isNull).resultAssert;
-
-                    // writeln(columnReader.buffer);
-                }
-                return Result.noError;
-            }
-        ).assumeWontThrow.resultAssert;
-
-        psql.closeStatement("").resultAssert;
-
-        stdout.flush().assumeWontThrow;
-    });
-    loop.join();
 }

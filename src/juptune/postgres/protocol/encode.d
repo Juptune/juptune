@@ -276,12 +276,12 @@ package Result preparePrepareMessage(
 }
 
 package Result prepareBindMessage(BindParameterT)(
-    scope ref PostgresProtocol psql,
-    scope const(char)[] portalName,
-    scope const(char)[] statementName,
+    scope ref PostgresProtocol                      psql,
+    scope const(char)[]                             portalName,
+    scope const(char)[]                             statementName,
     scope const(PostgresColumnDescription.Format)[] paramFormatCodes,
     scope const(PostgresColumnDescription.Format)[] resultFormatCodes,
-    scope BindParameterT bindParameterOrNull,
+    scope BindParameterT                            bindParameterOrNull,
 )
 {
     auto result = psql.putBytes(['B']); // type byte of Bind

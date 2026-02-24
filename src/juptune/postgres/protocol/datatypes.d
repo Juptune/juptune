@@ -234,7 +234,7 @@ Result decodeDateText(scope ref MemoryReader reader, scope out PostgresDate valu
 
     const year = slice[0..4];
     const month = slice[5..7];
-    const day = slice[8..9];
+    const day = slice[8..10];
 
     string error;
     value.year = fromBase10!uint(year, error);
@@ -329,7 +329,7 @@ Result decodeTimeText(scope ref MemoryReader reader, scope out Duration value, s
         if(slice[8] != '.')
             return Result.make(PostgresDataTypeError.invalidEncoding, "when decoding TIME text format, expected '.' following seconds component"); // @suppress(dscanner.style.long_line)
     
-        msecs = fromBase10!uint(slice[9..$], error);
+        msecsStr = fromBase10!uint(slice[9..$], error);
         if(error.length > 0)
             return Result.make(PostgresDataTypeError.invalidEncoding, "when decoding TIME text format, failed to convert msecs to an integer", String(error)); // @suppress(dscanner.style.long_line)
     }
@@ -435,7 +435,7 @@ Result decodeTimetzText(scope ref MemoryReader reader, scope out PostgresTimetz 
             cursor++;
         const number = slice[start..cursor];
 
-        msecs = fromBase10!uint(number, error);
+        msecsStr = fromBase10!uint(number, error);
         if(error.length > 0)
             return Result.make(PostgresDataTypeError.invalidEncoding, "when decoding TIME WITH TIME ZONE text format, failed to convert msecs to an integer", String(error)); // @suppress(dscanner.style.long_line)
     }
@@ -577,7 +577,7 @@ Result decodeTimestampText(scope ref MemoryReader reader, scope out PostgresTime
             cursor++;
         const number = slice[start..cursor];
 
-        msecs = fromBase10!uint(number, error);
+        msecsStr = fromBase10!uint(number, error);
         if(error.length > 0)
             return Result.make(PostgresDataTypeError.invalidEncoding, "when decoding TIMESTAMP text format, failed to convert msecs to an integer", String(error)); // @suppress(dscanner.style.long_line)
     }
@@ -712,7 +712,7 @@ Result decodeTimestamptzText(scope ref MemoryReader reader, scope out PostgresTi
             cursor++;
         const number = slice[start..cursor];
 
-        msecs = fromBase10!uint(number, error);
+        msecsStr = fromBase10!uint(number, error);
         if(error.length > 0)
             return Result.make(PostgresDataTypeError.invalidEncoding, "when decoding TIMESTAMP text format, failed to convert msecs to an integer", String(error)); // @suppress(dscanner.style.long_line)
     }

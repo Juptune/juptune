@@ -8,7 +8,9 @@ integration_test_postgres_exe = executable(
     'integration-test-postgres',
     dependencies: [juptune_all_dep],
     sources: files(
+        './protocol_tests/errors.d',
         './protocol_tests/general.d',
+        './protocol_tests/querying.d',
 
         './config.d',
         './main.d',

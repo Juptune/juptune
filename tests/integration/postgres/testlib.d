@@ -1,6 +1,7 @@
 module testlib;
 
-import std.sumtype : SumType, match;
+import std.sumtype  : SumType, match;
+import std.typecons : Nullable;
 
 import juptune.core.util : Result;
 
@@ -19,6 +20,19 @@ struct Test
 {
     string name;
     TestRunType runType = TestRunType.sharedEventLoopThread;
+}
+
+struct ExpectResult(EnumT_)
+{
+    alias EnumT = EnumT_;
+
+    // If defined, then this exact error code must be produced, otherwise only the error type itself is checked.
+    Nullable!EnumT value;
+
+    this(EnumT value)
+    {
+        this.value = value;
+    }
 }
 
 /++ Test Runner ++/
@@ -56,6 +70,33 @@ mixin template RegisterTests(alias ModuleSymbol)
             testCase.runType = TestUda.runType;
             testCase.testFunc = () => TestFuncSymbol();
 
+            alias ExpectedResultUdas = getUDAs!(TestFuncSymbol, ExpectResult);
+            static if(ExpectedResultUdas.length > 0)
+            {
+                testCase.isExpectedResultFunc = (result) {
+                    static foreach(UdaOrSymbol; ExpectedResultUdas)
+                    {{
+                        static if(!__traits(compiles, { auto _ = UdaOrSymbol.value; }))
+                            enum Uda = UdaOrSymbol();
+                        else
+                            enum Uda = UdaOrSymbol;
+
+                        static if(Uda.value.isNull)
+                        {
+                            if(result.isErrorType!(Uda.EnumT))
+                                return true;
+                        }
+                        else
+                        {
+                            if(result.isError(Uda.value.get))
+                                return true;
+                        }
+                    }}
+
+                    return false;
+                };
+            }
+
             TestHarness.instance.add(ModuleFqn, testCase);
         }}
     }
@@ -64,12 +105,14 @@ mixin template RegisterTests(alias ModuleSymbol)
 shared synchronized class TestHarness
 {
     alias TestFuncT = Result delegate();
+    alias IsExpectedResultT = bool delegate(Result) nothrow;
 
     static struct Case
     {
         string name;
         TestRunType runType;
         TestFuncT testFunc;
+        IsExpectedResultT isExpectedResultFunc;
     }
 
     private static struct CaseExecution
@@ -141,7 +184,8 @@ private bool printResultsAsTap(TestHarness.CaseExecution[][] groups...)
     size_t totalTestCount;
     foreach(group; groups)
         totalTestCount += group.length;
-
+    
+    writeln("TAP version 14");
     writeln("1..", totalTestCount);
 
     size_t indexOffset = 0;
@@ -157,32 +201,32 @@ private bool printResultsAsTap(TestHarness.CaseExecution[][] groups...)
                     anyErrors = true;
 
                     writefln("not ok %s - %s", index, exec.testCase.name);
-                    writeln("#  ---");
+                    writeln("  ---");
                     if(failed.thrownException !is null)
                     {
-                        writeln("#  failType: exception");
-                        writeln("#  exception:");
-                        writeln("#    message: |");
+                        writeln("  failType: exception");
+                        writeln("  exception:");
+                        writeln("    message: |");
 
                         const msg = failed.thrownException.toString();
                         foreach(line; msg.lineSplitter)
-                            writeln("#      ", line);
+                            writeln("      ", (line.length == 0) ? "<emptyline>" : line);
                     }
                     else if(failed.thrownResult !is null)
                     {
-                        writeln("#  failType: result");
-                        writeln("#  result:");
-                        writeln("#    errorType: ", failed.thrownResult.errorType);
-                        writeln("#    errorCode: ", failed.thrownResult.errorCode);
-                        writeln("#    location:  ", failed.thrownResult.file, ":", failed.thrownResult.line);
-                        writeln("#    function:  ", failed.thrownResult.function_);
-                        writeln("#    fullMessage: |");
+                        writeln("  failType: result");
+                        writeln("  result:");
+                        writeln("    errorType: ", failed.thrownResult.errorType);
+                        writeln("    errorCode: ", failed.thrownResult.errorCode);
+                        writeln("    location:  ", failed.thrownResult.file, ":", failed.thrownResult.line);
+                        writeln("    function:  ", failed.thrownResult.function_);
+                        writeln("    fullMessage: |");
 
-                        const msg = failed.thrownResult.error ~ "\n" ~ failed.thrownResult.context.slice;
+                        const msg = "[error] " ~ failed.thrownResult.error ~ "\n[context] " ~ failed.thrownResult.context.slice; // @suppress(dscanner.style.long_line)
                         foreach(line; msg.lineSplitter)
-                            writeln("#      ", line);
+                            writeln("      ", (line.length == 0) ? "<emptyline>" : line);
                     }
-                    writeln("#  ...\n");
+                    writeln("  ...\n");
                 }
             );
         }
@@ -194,13 +238,24 @@ private bool printResultsAsTap(TestHarness.CaseExecution[][] groups...)
 
 private void executeTestGroup(scope TestHarness.CaseExecution[] group) nothrow
 {
-    foreach(ref exec; group)
+    import std.exception : enforce;
+
+    // TODO: Run each test in an `async` so it goes by a bit faster... Juptune needs something like Go's WaitGroup first.
+    foreach(i, ref exec; group)
     {
+        const expectErrorResult = exec.testCase.isExpectedResultFunc !is null;
+
         try
         {
             auto result = exec.testCase.testFunc();
             if(result.isError)
             {
+                if(expectErrorResult && exec.testCase.isExpectedResultFunc(result))
+                {
+                    exec.result = TestPassed();
+                    continue;
+                }
+
                 import core.memory : GC;
 
                 TestFailed failed;
@@ -211,6 +266,7 @@ private void executeTestGroup(scope TestHarness.CaseExecution[] group) nothrow
                 continue;
             }
 
+            enforce(!expectErrorResult, "test did not generate expected errorful result");
             exec.result = TestPassed();
         }
         catch(Exception ex)

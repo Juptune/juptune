@@ -2,7 +2,7 @@ module protocol_tests.general;
 
 import juptune.core.util : Result;
 
-import config : connectToPsql;
+import config  : connectToPsql;
 import testlib : Test, RegisterTests;
 
 mixin RegisterTests!(protocol_tests.general);
