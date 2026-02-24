@@ -1,1 +1,5 @@
 option('lightweight-results', type: 'boolean', value: false, description: 'If true, then the Result type will be compiled with less information - this is faster but provides less debug info.')
+option('build-unittests', type: 'boolean', value: true, description: 'If true, unittest executables are included.')
+option('build-integration-tests', type: 'boolean', value: true, description: 'If true, integration test executables are included.')
+option('build-examples', type: 'boolean', value: true, description: 'If true, example executables are included.')
+option('build-dasn1', type: 'boolean', value: true, description: 'If true, dasn1\'s executable is included.')

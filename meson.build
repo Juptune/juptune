@@ -32,6 +32,11 @@ endif
 
 #### Options ####
 
+build_unittests = get_option('build-unittests')
+build_examples = get_option('build-examples')
+build_integration_tests = get_option('build-integration-tests')
+build_dasn1 = get_option('build-dasn1')
+
 if get_option('lightweight-results')
     juptune_d_versions += [
         'Juptune_Result_NoLineInfo',
@@ -220,26 +225,36 @@ examples = {
     'https-wines': ['./examples/https-wines/main.d'],
 }
 
-example_exes = []
-foreach example_name, example_srcs : examples
-    example_exes += executable(
-        'juptune-'+example_name, 
-        example_srcs,
-        dependencies: [juptune_all_dep],
-        build_by_default: false,
-    )
-endforeach
-alias_target('examples', example_exes)
+if build_examples
+    example_exes = []
+    foreach example_name, example_srcs : examples
+        example_exes += executable(
+            'juptune-'+example_name, 
+            example_srcs,
+            dependencies: [juptune_all_dep],
+            build_by_default: false,
+        )
+    endforeach
+    alias_target('examples', example_exes)
+endif
 
-juptune_all_unittest_exe = executable(
-    'juptune-unittest', 
-    dependencies: [juptune_test_dep],
-    d_unittest: true,
-)
+if build_unittests
+    juptune_all_unittest_exe = executable(
+        'juptune-unittest', 
+        dependencies: [juptune_test_dep],
+        d_unittest: true,
+    )
+endif
 
 #### Subdirs ####
 
-subdir('tools/dasn1')
+if build_dasn1
+    subdir('tools/dasn1')
+endif
+
+if build_integration_tests
+    subdir('tests/integration/postgres')
+endif
 
 #### Install ####
 
@@ -264,4 +279,6 @@ pkgc.generate(
 
 #### Tests ####
 
-test('juptune-unittest', juptune_all_unittest_exe)
+if build_unittests
+    test('juptune-unittest', juptune_all_unittest_exe, suite: 'unittest')
+endif

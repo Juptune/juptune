@@ -17,4 +17,4 @@ test_adhoc_exe = executable(
     d_unittest: true
 )
 
-test('dasn1-test-adhoc', test_adhoc_exe)
+test('dasn1-test-adhoc', test_adhoc_exe, suite: 'unittest')

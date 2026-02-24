@@ -305,6 +305,9 @@ struct ArrayBase(
     @property
     void length(size_t l)
     {
+        if(l == this._length)
+            return;
+
         const oldLength = this._length;
         this._length = l;
 

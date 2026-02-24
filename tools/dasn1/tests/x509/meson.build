@@ -19,4 +19,4 @@ test_x509_exe = executable(
     d_unittest: true
 )
 
-test('dasn1-test-x509', test_x509_exe)
+test('dasn1-test-x509', test_x509_exe, suite: 'unittest')

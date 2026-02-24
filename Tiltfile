@@ -10,9 +10,11 @@ local('''
 
 #### Development ####
 
+docker_compose('./devops/docker/integration-test-services.docker-compose.yml')
+
 local_resource(
-    'test',
-    cmd='meson test -C build juptune-unittest || cat build/meson-logs/testlog.txt',
+    '0: unittests',
+    cmd='meson test -C build --suite unittest juptune-unittest || cat build/meson-logs/testlog.txt',
     deps=['meson.build', 'src/'],
     labels=['development']
 )
@@ -22,6 +24,14 @@ cmd_button(
     text='Open logs',
     argv=['bash', '-c', '$GUI_EDITOR build/meson-logs/testlog.txt'],
     inputs=[text_input('GUI_EDITOR', 'Editor', default='code')]
+)
+
+local_resource(
+    '1: integration tests',
+    cmd='meson test -C build --suite integration || cat build/meson-logs/testlog.txt',
+    deps=['meson.build', 'tests/integration/'],
+    labels=['development'],
+    auto_init=False
 )
 
 local_resource(

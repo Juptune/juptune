@@ -10,6 +10,7 @@ import core.time : Duration;
 
 import juptune.core.util : Result;
 
+/// `Result` error enum
 enum PostgresProtocolError
 {
     none,
@@ -25,6 +26,7 @@ enum PostgresProtocolError
     emptyQuery,
 }
 
+/// Enum of recognised versions for the Postgres Protocol
 enum PostgresProtocolVersion
 {
     FAILSAFE,
@@ -32,30 +34,137 @@ enum PostgresProtocolVersion
     v3_2 = (3 << 16) | (2),
 }
 
+/// Supported modes for negotiating a TLS.
 enum PostgresTlsMode
 {
     FAILSAFE,
+
+    /// Never attempt to negotiate TLS.
     never,
+
+    /// Attempt to negotiate TLS, but fallback to plaintext if the server doesn't want to use it.
     ifPossible,
+
+    /// Attempt to negotiate TLS, but fail the connection if the server doesn't want to use it.
     always,
 }
 
+/// Information for connecting to a Postgres instance.
 struct PostgresConnectInfo
 {
     import juptune.data.x509 : X509CertificateStore;
 
     // Connection info
-    const(char)[] user;
-    const(char)[] databaseOrNull;
-    const(char)[] plaintextPassword;
+    const(char)[] user; /// The username to connect as.
+    const(char)[] databaseOrNull; /// The database to connect to. If `null` then the value of `user` is used as the database name.
+    const(char)[] plaintextPassword; /// The plaintext password to use if password authentication is required.
 
     // TLS info
-    PostgresTlsMode tlsMode;
-    X509CertificateStore* customStore;
-    X509CertificateStore.SecurityPolicy x509Policy;
+    PostgresTlsMode tlsMode; /// TLS negotiation mode.
+    X509CertificateStore* customStore; /// If not `null`, then this store is used to validate the cluster's server certificate. If `null` then the host platform's default store is used instead.
+    X509CertificateStore.SecurityPolicy x509Policy; /// Policy for authenticating the server's certificate.
 }
 
-enum PostgresMessageType : char
+/// General configuration for the low-level `PostresProtocol` struct.
+struct PostgresProtocolConfig
+{
+    /// The minimum amount of buffer space (for reading and writing) to keep allocated at all times.
+    size_t minBufferSpace = 1024 * 8;
+
+    /++
+     + The maximum amount of buffer space (for reading an writing) that's allowed to be dynamically allocated
+     + when sending/reading messages.
+     +
+     + If this limit is exceeded then `PostgresProtocolError.bufferTooSmall` will be thrown by most `PostgresProtocol` functions.
+     +
+     + The buffer's length gets reset to `minBufferSpace` after every flush to the network. (Note: Due to how `Array`'s default capacity
+     + mechanism works, once the buffer has grown it will likely always be slightly larger than `minBufferSpace` in reality).
+     + ++/
+    size_t maxBufferSpace = size_t.max;
+
+    /// Timeout for any socket write operations.
+    Duration writeTimeout = Duration.zero;
+
+    /// Timeout for any socket read operations.
+    Duration readTimeout = Duration.zero;
+
+    @safe @nogc nothrow:
+
+    PostgresProtocolConfig withMinBufferSize(size_t value) { this.minBufferSpace = value; return this; }
+    PostgresProtocolConfig withMaxBufferSize(size_t value) { this.maxBufferSpace = value; return this; }
+    PostgresProtocolConfig withWriteTimeout(Duration value) { this.writeTimeout = value; return this; }
+    PostgresProtocolConfig withReadTimeout(Duration value) { this.readTimeout = value; return this; }
+}
+
+/++
+ + A collection of parameters that are meaningful to Juptune in some way.
+ + ++/
+struct PostgresParameters
+{
+    /// What format textual dates use (but only if they're not already in ISO YMD format, e.g. the first 4 characters aren't the year).
+    enum DateStyle
+    {
+        FAILSAFE,
+        iso,
+    }
+
+    /// What format textual dates order the year-month-day triple (but only if they're not already in ISO YMD format).
+    enum DateOrder
+    {
+        FAILSAFE,
+        ymd,
+        dmy,
+        mdy,
+    }
+
+    DateStyle dateStyle = DateStyle.iso;
+    DateOrder dateOrder = DateOrder.mdy;
+}
+
+/++
+ + Contains information about a particular column. This represents either a column in a table, or
+ + a column within a query's return result.
+ + ++/
+struct PostgresColumnDescription
+{
+    import juptune.postgres.protocol.datatypes : PostgresDataTypeOid;
+
+    /// What wire format the value will be in.
+    enum Format : byte
+    {
+        FAILSAFE = -1,
+        text = 0,
+        binary = 1,
+    }
+
+    /++
+     + The name of the column. This will almost always be provided as an internal slice into `PostgresProtocol`'s buffer,
+     + so **please perform a full copy of the memory within the slice** rather than a by-value copy of just the slice itself,
+     + if the name needs to be persisted.
+     + ++/
+    const(char)[] nameDoNotCopy;
+
+    /// If applicable, the object ID of the table this column belongs to. Otherwise 0.
+    int tableObjectId;
+
+    /// If applicable, the attribute number of this column from within a table. Otherwise 0.
+    ushort columnAttributeNumber;
+
+    /// The data type stored by this column.
+    PostgresDataTypeOid dataType;
+
+    /// The exact amount of bytes taken up by this data type (I _believe_ when in its binary format).
+    /// A value < 0 indicates a variable length type.
+    short dataTypeSize;
+
+    /// Some data types have additional modifiers which are expressed via this field on a per-datatype basis.
+    int dataTypeModifier;
+
+    /// How the value of this column is transferred over the wire.
+    Format format;
+}
+
+package enum PostgresMessageType : char
 {
     FAILSAFE,
     authentication = 'R',
@@ -96,61 +205,44 @@ enum PostgresMessageType : char
     terminate = 'X',
 }
 
-struct PostgresProtocolConfig
-{
-    size_t minBufferSpace = 1024 * 8;
-    size_t maxBufferSpace = size_t.max;
-    Duration writeTimeout = Duration.zero;
-    Duration readTimeout = Duration.zero;
-
-    @safe @nogc nothrow:
-
-    PostgresProtocolConfig withMinBufferSize(size_t value) { this.minBufferSpace = value; return this; }
-    PostgresProtocolConfig withMaxBufferSize(size_t value) { this.maxBufferSpace = value; return this; }
-    PostgresProtocolConfig withWriteTimeout(Duration value) { this.writeTimeout = value; return this; }
-    PostgresProtocolConfig withReadTimeout(Duration value) { this.readTimeout = value; return this; }
-}
-
-struct PostgresParameters
-{
-    enum DateStyle
-    {
-        FAILSAFE,
-        iso,
-    }
-
-    enum DateOrder
-    {
-        FAILSAFE,
-        ymd,
-        dmy,
-        mdy,
-    }
-
-    DateStyle dateStyle = DateStyle.iso;
-    DateOrder dateOrder = DateOrder.mdy;
-}
-
-struct PostgresColumnDescription
-{
-    import juptune.postgres.protocol.datatypes : PostgresDataTypeOid;
-
-    enum Format : byte
-    {
-        FAILSAFE = -1,
-        text = 0,
-        binary = 1,
-    }
-
-    const(char)[] nameDoNotCopy;
-    int tableObjectId;
-    ushort columnAttributeNumber;
-    PostgresDataTypeOid dataType; // NOTE: Not all OIDs are defined in the enum (yet)
-    short dataTypeSize;
-    int dataTypeModifier;
-    Format format;
-}
-
+/++
+ + A lowish-level client providing functionality for connecting and communicating to a server using the Postgres protocol.
+ +
+ + The idea of this particular struct is to be a very raw, straightforward-yet-clunky way of accessing the actual
+ + Postgres protocol with as little overhead as possible, and that other higher-level abstractions can be built on 
+ + top of it for more comfortable use cases.
+ +
+ + Memory:
+ +  Unlike a lot of other protocol implementations within Juptune, this struct will dynamically manage its own memory rather
+ +  than using preallocated user-provided buffers.
+ +
+ +  This is because the easiest way (by far) to deal with Postgres protocol messages is to read them entirely into memory first before
+ +  processing them, rather than trying to piece a bunch of network reads together using a single smaller buffer.
+ +
+ +  Due to the natural variability of payload sizes when using a database like Postgres, it's inevitable that said buffer would either
+ +  need to be _very_ large to handle the occasional large payload, or _dynamic_ so that it can handle general workloads without wasting
+ +  as much memory all the time.
+ +
+ +  This is of course a tradeoff, however it is exceedingly more likely that Postgres itself will be the bottleneck rather than the ultimately
+ +  minimal performance costs of constantly (in the worst case) resizing an internal buffer.
+ +
+ + Usage:
+ +  Internally a state machine is used to ensure correct usage of this struct.
+ +
+ +  First call `.connect` to connect and authenticate to a Postgres instance.
+ +
+ +  For simple querying (where you don't need any external parameters being passed in), use `.simpleQuery`.
+ +
+ +  For advanced/prepared querying, first call `.prepare` to prepare the query; then call `bindDescribeExecute` to actually
+ +  execute the query, and optionally call `.close` so that the server can release resources associated with the prepared statement.
+ +
+ + Limitations:
+ +  Currently only SCRAM-SHA-256 is supported as the authentication method.
+ +
+ +  Unix sockets as a transport medium are not supported.
+ +
+ +  Not all parts of the protocol are implemented, e.g. replication streaming, COPY support, query cancellation.
+ + ++/
 struct PostgresProtocol
 {
     import juptune.core.ds : Array;
@@ -160,18 +252,25 @@ struct PostgresProtocol
     import juptune.http.tls : TlsTcpSocket;
     import juptune.postgres.protocol.datatypes : PostgresDataTypeOid;
 
+    /// Delegate for handling a raw incoming Postgres message - currently not used by the public API.
     alias MessageHandlerT = Result delegate(PostgresMessageType type, scope ref MemoryReader reader) @nogc nothrow;
 
+    /// A callback provided by `PostgresProtocol` which will fetch the next `PostgresColumnDescription` from a protocol message.
     alias NextColumnDescriptionT = Result delegate(scope out PostgresColumnDescription desc) @nogc nothrow;
+    /// A callback provided by `PostgresProtocol` which will fetch the next raw bytes of a column value from a protocol message.
     alias NextColumnDataT = Result delegate(scope out MemoryReader valueReader, scope out bool isNull) @nogc nothrow;
 
+    /// A callback provided by the user which gives them a chance to inspect all `PostgresColumnDescription` for a query/table.
+    /// The `nextDescription` callback can only be called up to `columnCount` amount of times.
     alias ColumnDescriptionHandlerT = Result delegate(ushort columnCount, scope NextColumnDescriptionT nextDescription) @nogc nothrow; // @suppress(dscanner.style.long_line)
+    /// A callback provided by the user which gives them a chance to retrieve all data for a query.
+    /// The `nextData` callback can only be called up to `columnCount` amount of times.
     alias DataRowHandlerT = Result delegate(ushort columnCount, scope NextColumnDataT nextData) @nogc nothrow;
+    /// A callback provided by the user which gives them a chance to bind as many parameters as they desire to a prepared statement.
+    alias BindParameterHandlerT = Result delegate(const int paramIndex, scope ref PostgresProtocol psql, scope out bool moreParamsLeftToBind) @nogc nothrow; // @suppress(dscanner.style.long_line)
 
     alias ColumnDescriptionHandlerGcT = Result delegate(ushort columnCount, scope NextColumnDescriptionT nextDescription); // @suppress(dscanner.style.long_line)
     alias DataRowHandlerGcT = Result delegate(ushort columnCount, scope NextColumnDataT nextData);
-
-    alias BindParameterHandlerT = Result delegate(const int paramIndex, scope ref PostgresProtocol psql, scope out bool moreParamsLeftToBind) @nogc nothrow; // @suppress(dscanner.style.long_line)
     alias BindParameterHandlerGcT = Result delegate(const int paramIndex, scope ref PostgresProtocol psql, scope out bool moreParamsLeftToBind); // @suppress(dscanner.style.long_line)
 
     private
@@ -208,6 +307,12 @@ struct PostgresProtocol
 
     @disable this(this);
 
+    /++ 
+     + Initialises a new `PostgresProtocol` instance. You should call `.connect` after this.
+     +
+     + Params:
+     +   config = Configuration on how to handle certain aspects of the protocol/networking.
+     + ++/
     this(PostgresProtocolConfig config) @nogc nothrow pure
     {
         this._config = config;
@@ -216,6 +321,45 @@ struct PostgresProtocol
 
     /++ Public API (connecting) ++/
 
+    /++
+     + Attempts to connect to the server at the given IP address. 
+     +
+     + The client will attempt to negotiate whether to use a TLS socket, or a TCP socket as per `connectInfo.tlsMode`.
+     +
+     + The client will automatically attempt to use `connectInfo.password` for authentication if challenged by the server.
+     + It will also automatically handle any supported authentication schemes.
+     +
+     + Assertions:
+     +  You can only call this function once per `PostgresProtocol` instance, please reconstruct the instance if you'd like
+     +  to attempt another connection.
+     +
+     + Params:
+     +  address     = The IP address & port of the server to connect to.
+     +  connectInfo = Information on how to attempt the connection.
+     +
+     + Throws:
+     +  `PostgresProtocolError.noValidSaslAlgorithm` if a SASL-based authentication scheme was chosen, however none of the available
+     +  schemes are supported by `PostgresProcotol`.
+     +
+     +  `PostgresProtocolError.unsupportedAuthScheme` if no supported auth schemes are available.
+     +
+     +  `PostgresProtocolError.missingMessage` if the server didn't send an Authentication message when expected.
+     +
+     +  `PostgresProtocolError.bufferTooSmall` if the buffer would exceed `PostgresProtocolConfig.maxBufferSize` when reading or writing.
+     +
+     +  `PostgresProtocolError.unexpectedMessage` if an unexpected message was returned by the server.
+     +
+     +  `PostgresProtocolError.invalidMessage` if a message returned by the server is in some way malformed.
+     +
+     +  `PostgresProtocolError.notEnoughBytes` if the server didn't send enough bytes than expected (more likely a Juptune parsing bug).
+     +
+     +  `PostgresProtocolError.errorResponse` if the server returned an ErrorResponse message.
+     +
+     +  Anything that `TcpSocket` and `TlsSocket` can throw.
+     +
+     + Returns:
+     +  An errorful `Result` if something went wrong.
+     + ++/
     Result connect(IpAddress address, scope PostgresConnectInfo connectInfo) @nogc nothrow
     in(this._state.mustBeIn(State.notConnected))
     {
@@ -317,13 +461,77 @@ struct PostgresProtocol
         return Result.noError;
     }
 
-    ref const(PostgresParameters) params() @nogc nothrow pure const
+    /// The current set of parameters the client & server are operation under.
+    ref const(PostgresParameters) params() @nogc nothrow const
     {
         return this._parameters;
     }
 
+    /++
+     + Whether or not this instance is "safe" to use/ready to issues query-related messages.
+     +
+     + The primary usage of this function is to check if the connection is still viable after handling
+     + an errorful `Result` from a query-related function.
+     +
+     + If this function returns `false` after an errorful `Result` is produced, cease using this instance immediately
+     + as you'll otherwise trigger an assert to fail (hopefully).
+     + ++/
+    bool isReadyToQuery() @nogc nothrow
+    {
+        return this._state.isIn(State.readyForQuery);
+    }
+
     /++ Public API (querying) ++/
 
+    /++
+     + Sends a simple Query message and calls the user-provided callbacks to handle any results.
+     +
+     + Simple querying is useful for queries that have more than 1 statement and/or don't require the use of placeholders
+     + for their parameters.
+     +
+     + Notes: 
+     +  All slices that are passed to `onRowDescriptionOrNull` and `onDataRowNull` are slices to the internal buffer of this struct,
+     +  you must perform a **full memory copy of these slices** if you wish to persist any of the data returned to you.
+     +
+     +  Failure to do this will lead to values being changed under your nose, and in the worst case memory corruption/security exploits.
+     +
+     +  Under most circumstances, when an error is produced it is safe to continue using an instance of this struct as it
+     +  will attempt to self-correct. User code should use `.isReadyToQuery` to double check whether continued use is safe.
+     +
+     + Assertions:
+     +  This function can only be called once `.connect` succesfully executes.
+     +
+     +  If either `onRowDescriptionOrNull` or `onDataRowOrNull` are `null`, then they _both_ must be `null`. You're either handling the results,
+     +  or you're not.
+     +
+     + Params:
+     +  query                   = The SQL query to execute.
+     +  onRowDescriptionOrNull  = If not null, then this function is called a single time once the colmun descriptions 
+     +                            for the query's return results are available.
+     +  onDataRowOrNull         = If not null, then this function is called multiple times - once for each row
+     +                            returned by the query - when the raw bytes for the row's values are available.
+     +                            This function should call into the decode functions within `juptune.postgres.protocol.datatype`.
+     +
+     + Throws:
+     +  Anything that `onRowDescriptionOrNull` and `onDataRowOrNull` can throw.
+     +
+     +  `PostgresProtocolError.emptyQuery` if the server returned an EmptyQuery response.
+     +
+     +  `PostgresProtocolError.bufferTooSmall` if the buffer would exceed `PostgresProtocolConfig.maxBufferSize` when reading or writing.
+     +
+     +  `PostgresProtocolError.unexpectedMessage` if an unexpected message was returned by the server.
+     +
+     +  `PostgresProtocolError.invalidMessage` if a message returned by the server is in some way malformed.
+     +
+     +  `PostgresProtocolError.notEnoughBytes` if the server didn't send enough bytes than expected (more likely a Juptune parsing bug).
+     +
+     +  `PostgresProtocolError.errorResponse` if the server returned an ErrorResponse message.
+     +
+     +  Anything that `.put` and `.recieve` for `TcpSocket` and `TlsSocket` can throw.
+     +
+     + Returns:
+     +  An errorful `Result` if something went wrong.
+     + ++/
     Result simpleQuery(
         scope const(char)[] query,
         scope ColumnDescriptionHandlerT onRowDescriptionOrNull,
@@ -334,6 +542,7 @@ struct PostgresProtocol
         return this.simpleQueryImpl(query, onRowDescriptionOrNull, onDataRowOrNull);
     }
 
+    // ditto.
     Result simpleQueryGc(
         scope const(char)[] query,
         scope ColumnDescriptionHandlerGcT onRowDescriptionOrNull,
@@ -344,6 +553,39 @@ struct PostgresProtocol
         return this.simpleQueryImpl(query, onRowDescriptionOrNull, onDataRowOrNull);
     }
 
+    /++
+     + Sends a Prepare message (followed by a Sync message), which generates a prepared query that can then be used with `bindDescribeExecute`.
+     +
+     + Notes: 
+     +  Under most circumstances, when an error is produced it is safe to continue using an instance of this struct as it
+     +  will attempt to self-correct. User code should use `.isReadyToQuery` to double check whether continued use is safe.
+     +
+     + Assertions:
+     +  This function can only be called once `.connect` succesfully executes.
+     +
+     + Params:
+     +  statementName   = The name to give the prepared statement, can be null/empty.
+     +  query           = The prepared statment, reminder that the placeholder syntax is `$1`, `$2`, etc. 
+     +  paramTypes      = Pre-specifies the data types of placeholders within the query, e.g. paramTypes[0] is the type of `$1` and so on.
+     +                    This can be any length, extras are ignored, and if a placeholder isn't given an explcit type then Postgres
+     +                    will try to infer it. You can also define placeholders like `$1::time` within the query itself.
+     +
+     + Throws:
+     +  `PostgresProtocolError.bufferTooSmall` if the buffer would exceed `PostgresProtocolConfig.maxBufferSize` when reading or writing.
+     +
+     +  `PostgresProtocolError.unexpectedMessage` if an unexpected message was returned by the server.
+     +
+     +  `PostgresProtocolError.invalidMessage` if a message returned by the server is in some way malformed.
+     +
+     +  `PostgresProtocolError.notEnoughBytes` if the server didn't send enough bytes than expected (more likely a Juptune parsing bug).
+     +
+     +  `PostgresProtocolError.errorResponse` if the server returned an ErrorResponse message.
+     +
+     +  Anything that `.put` and `.recieve` for `TcpSocket` and `TlsSocket` can throw.
+     +
+     + Returns:
+     +  An errorful `Result` if something went wrong.
+     + ++/
     Result prepare(
         scope const(char)[] statementName,
         scope const(char)[] query,
@@ -390,8 +632,53 @@ struct PostgresProtocol
         return Result.noError;
     }
 
+    /++
+     + Sends a Bind, Describe, and Execute message (followed by a Sync message) simultaneously, which effectively
+     + binds parameters onto a prepared statement; describes what the return results are, and then executes the query
+     + which provides the actual return results.
+     +
+     + Notes: 
+     +  Under most circumstances, when an error is produced it is safe to continue using an instance of this struct as it
+     +  will attempt to self-correct. User code should use `.isReadyToQuery` to double check whether continued use is safe.
+     +
+     + Assertions:
+     +  This function can only be called once `.connect` succesfully executes.
+     +
+     + Params:
+     +  statementName           = The name of a prepared statement previously prepared by `.prepare`. This may be null/empty.
+     +  paramFormatCodes        = Describes the wire format for all parameters. `null` means "everything is text", a single
+     +                            value means "everything is what I specify", otherwise it must match the number of parameters
+     +                            bound by `bindParameterOrNull` where each value corresponds to a single parameter.
+     +  resultFormatCodes       = Describes the wire format for all return values. Follows the same logic as `paramFormatCodes`
+     +                            except for the count of returned columns per row, rather than the count of bound parameters.
+     +  bindParameterOrNull     = If not null, this callback is repeatedly called until the `moreParamsLeftToBind` passed into it
+     +                            becomes `false`. Each time this function is called, it should call into one of the encode functions
+     +                            within `juptune.postgres.protocol.datatypes` to encode a single parameter.
+     +  onRowDescriptionOrNull  = If not null, then this function is called a single time once the colmun descriptions 
+     +                            for the query's return results are available. 
+     +  onDataRowOrNull         = If not null, then this function is called multiple times - once for each row
+     +                            returned by the query - when the raw bytes for the row's values are available.
+     +                            This function should call into the decode functions within `juptune.postgres.protocol.datatype`.
+     +
+     + Throws:
+     +  Anything that `bindParameterOrNull`, `onRowDescriptionOrNull`, and `onDataRowOrNull` can throw.
+     +
+     +  `PostgresProtocolError.bufferTooSmall` if the buffer would exceed `PostgresProtocolConfig.maxBufferSize` when reading or writing.
+     +
+     +  `PostgresProtocolError.unexpectedMessage` if an unexpected message was returned by the server.
+     +
+     +  `PostgresProtocolError.invalidMessage` if a message returned by the server is in some way malformed.
+     +
+     +  `PostgresProtocolError.notEnoughBytes` if the server didn't send enough bytes than expected (more likely a Juptune parsing bug).
+     +
+     +  `PostgresProtocolError.errorResponse` if the server returned an ErrorResponse message.
+     +
+     +  Anything that `.put` and `.recieve` for `TcpSocket` and `TlsSocket` can throw.
+     +
+     + Returns:
+     +  An errorful `Result` if something went wrong.
+     + ++/
     Result bindDescribeExecute(
-        scope const(char)[] portalName,
         scope const(char)[] statementName,
         scope const(PostgresColumnDescription.Format)[] paramFormatCodes,
         scope const(PostgresColumnDescription.Format)[] resultFormatCodes,
@@ -402,11 +689,11 @@ struct PostgresProtocol
     in(this._state.mustBeIn(State.readyForQuery))
     in(this.bufferIsEmpty, "bug: buffer was expected to be empty")
     {
-        return this.bindDescribeExecuteImpl(portalName, statementName, paramFormatCodes, resultFormatCodes, bindParameterOrNull, onRowDescriptionOrNull, onDataRowOrNull); // @suppress(dscanner.style.long_line)
+        return this.bindDescribeExecuteImpl("", statementName, paramFormatCodes, resultFormatCodes, bindParameterOrNull, onRowDescriptionOrNull, onDataRowOrNull); // @suppress(dscanner.style.long_line)
     }
 
+    /// ditto.
     Result bindDescribeExecuteGc(
-        scope const(char)[] portalName,
         scope const(char)[] statementName,
         scope const(PostgresColumnDescription.Format)[] paramFormatCodes,
         scope const(PostgresColumnDescription.Format)[] resultFormatCodes,
@@ -417,9 +704,39 @@ struct PostgresProtocol
     in(this._state.mustBeIn(State.readyForQuery))
     in(this.bufferIsEmpty, "bug: buffer was expected to be empty")
     {
-        return this.bindDescribeExecuteImpl(portalName, statementName, paramFormatCodes, resultFormatCodes, bindParameterOrNull, onRowDescriptionOrNull, onDataRowOrNull); // @suppress(dscanner.style.long_line)
+        return this.bindDescribeExecuteImpl("", statementName, paramFormatCodes, resultFormatCodes, bindParameterOrNull, onRowDescriptionOrNull, onDataRowOrNull); // @suppress(dscanner.style.long_line)
     }
 
+    /++
+     + Sends a Close message (followed by a Sync message) simultaneously, which tells the backend to close a prepared
+     + statement by its name. If no prepared statement for the given name exists, then nothing happens.
+     +
+     + Notes: 
+     +  Under most circumstances, when an error is produced it is safe to continue using an instance of this struct as it
+     +  will attempt to self-correct. User code should use `.isReadyToQuery` to double check whether continued use is safe.
+     +
+     + Assertions:
+     +  This function can only be called once `.connect` succesfully executes.
+     +
+     + Params:
+     +  statementName           = The name of a prepared statement previously prepared by `.prepare`. This may be null/empty.
+     +
+     + Throws:
+     +  `PostgresProtocolError.bufferTooSmall` if the buffer would exceed `PostgresProtocolConfig.maxBufferSize` when reading or writing.
+     +
+     +  `PostgresProtocolError.unexpectedMessage` if an unexpected message was returned by the server.
+     +
+     +  `PostgresProtocolError.invalidMessage` if a message returned by the server is in some way malformed.
+     +
+     +  `PostgresProtocolError.notEnoughBytes` if the server didn't send enough bytes than expected (more likely a Juptune parsing bug).
+     +
+     +  `PostgresProtocolError.errorResponse` if the server returned an ErrorResponse message.
+     +
+     +  Anything that `.put` and `.recieve` for `TcpSocket` and `TlsSocket` can throw.
+     +
+     + Returns:
+     +  An errorful `Result` if something went wrong.
+     + ++/
     Result closeStatement(scope const(char)[] statementName) @nogc nothrow
     in(this._state.mustBeIn(State.readyForQuery))
     {
@@ -1060,7 +1377,7 @@ debug unittest
                         break;
 
                     default:
-                        writeln("<UNHANDLED> ", descs[i].dataType);
+                        // writeln("<UNHANDLED> ", descs[i].dataType);
                         break;
                 }
             }
@@ -1074,7 +1391,6 @@ debug unittest
         ).resultAssert;
         
         psql.bindDescribeExecuteGc(
-            "",
             "",
             [PostgresColumnDescription.Format.text],
             [],
@@ -1107,7 +1423,6 @@ debug unittest
         psql.closeStatement("").resultAssert;
 
         stdout.flush().assumeWontThrow;
-        assert(false);
     });
     loop.join();
 }

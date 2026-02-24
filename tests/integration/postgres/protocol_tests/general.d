@@ -1,0 +1,15 @@
+module protocol_tests.general;
+
+import juptune.core.util : Result;
+
+import config : connectToPsql;
+import testlib : Test, RegisterTests;
+
+mixin RegisterTests!(protocol_tests.general);
+
+@Test("should be able to connect via SCRAM-SHA-256")
+Result test_connect()
+{
+    auto _ = connectToPsql();
+    return Result.noError;
+}

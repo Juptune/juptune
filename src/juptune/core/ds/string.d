@@ -185,26 +185,30 @@ struct String
     @disable this(scope ref return immutable String other);
 
     /// Copy ctor - either increases the payload's ref count, or copies the small string into the stack buffer.
-    this(scope ref return const String other) @trusted
+    this(scope ref return inout String other) @trusted inout
     {
-        if(this._payload !is null)
-            this.__xdtor();
+        // We need `inout` so the compiler doesn't force us to write copy ctors everywhere for stupid reasons,
+        // however we don't actually fully support anything other than mutable `String`, so we have to hack around the type system a bit.
+        scope mutableThisPtr = cast(String*)&this;
+
+        if(mutableThisPtr._payload !is null)
+            mutableThisPtr.__xdtor();
 
         if(other.isBig)
         {
             // While we _are_ casting away the payload's const, due to our usage of
             // the underlying memory, `other` is technically left unmodified.
-            this.markBig();
-            this._payload = cast(Payload*)other._payload;
-            this._length = other._length;
+            mutableThisPtr.markBig();
+            mutableThisPtr._payload = cast(Payload*)other._payload;
+            mutableThisPtr._length = other._length;
 
-            if(this._payload !is null)
-                this._payload.acquire();
+            if(mutableThisPtr._payload !is null)
+                mutableThisPtr._payload.acquire();
         }
         else
         {
-            this._ssoLength = other._ssoLength;
-            this._ssoData = other._ssoData;
+            mutableThisPtr._ssoLength = other._ssoLength;
+            mutableThisPtr._ssoData = other._ssoData;
         }
     }
 
@@ -354,27 +358,27 @@ struct String
         return ret;
     }
 
-    // TODO: Document this once I figure out why the compiler isn't doing what the spec says it should.
-    const(OpSlice) opSlice(size_t start, size_t end) @safe const
-    in(start <= end, "Start index is greater than end index")
-    in(end <= this.length, "End index is greater than the string length")
-    {
-        return OpSlice(start, end);
-    }
+    // // TODO: Document this once I figure out why the compiler isn't doing what the spec says it should.
+    // const(OpSlice) opSlice(size_t start, size_t end) @safe const
+    // in(start <= end, "Start index is greater than end index")
+    // in(end <= this.length, "End index is greater than the string length")
+    // {
+    //     return OpSlice(start, end);
+    // }
 
-    // TODO: Document this once I figure out why the compiler isn't doing what the spec says it should.
-    String opIndex(const OpSlice slice) @trusted const
-    {
-        if(slice.start > 0)
-            return String(this.sliceMaybeFromStack()[slice.start..slice.end]);
+    // // TODO: Document this once I figure out why the compiler isn't doing what the spec says it should.
+    // String opIndex(const OpSlice slice) @trusted const
+    // {
+    //     if(slice.start > 0)
+    //         return String(this.sliceMaybeFromStack()[slice.start..slice.end]);
 
-        if(slice.end == 0)
-            return String.init;
+    //     if(slice.end == 0)
+    //         return String.init;
 
-        String ret = this;
-        ret._length = slice.end;
-        return ret;
-    }
+    //     String ret = this;
+    //     ret._length = slice.end;
+    //     return ret;
+    // }
 
     /// Simple [] operator to access the character at the given index.
     char opIndex(const size_t index) @trusted const
