@@ -5,7 +5,7 @@ import std.exception : enforce;
 import juptune.core.util : Result, resultEnforce;
 import juptune.postgres.protocol : PostgresProtocol, PostgresProtocolError;
 
-import config  : connectToPsql;
+import config  : connectToPsqlProtocol;
 import testlib : Test, ExpectResult, RegisterTests;
 
 mixin RegisterTests!(protocol_tests.errors);
@@ -16,7 +16,7 @@ enum DummyError { e }
 @ExpectResult!DummyError
 Result test_onRowDescriptionOrNull_error_forwarded()
 {
-    PostgresProtocol psql = connectToPsql();
+    PostgresProtocol psql = connectToPsqlProtocol();
     auto result = psql.simpleQueryGc(
         `
             DROP TABLE IF EXISTS test_onRowDescriptionOrNull_error_forwarded;
@@ -38,7 +38,7 @@ Result test_onRowDescriptionOrNull_error_forwarded()
 @ExpectResult!DummyError
 Result test_onDataRowOrNull_error_forwarded()
 {
-    PostgresProtocol psql = connectToPsql();
+    PostgresProtocol psql = connectToPsqlProtocol();
     auto result = psql.simpleQueryGc(
         `
             DROP TABLE IF EXISTS test_onDataRowOrNull_error_forwarded;
@@ -60,7 +60,7 @@ Result test_onDataRowOrNull_error_forwarded()
 @ExpectResult!PostgresProtocolError(PostgresProtocolError.emptyQuery)
 Result test_simpleQuery_emptyQuery()
 {
-    PostgresProtocol psql = connectToPsql();
+    PostgresProtocol psql = connectToPsqlProtocol();
     auto result = psql.simpleQueryGc("", null, null);
     enforce(psql.isReadyToQuery, "PostgresProtocol should've error corrected");
     return result;
@@ -75,7 +75,7 @@ Result test_errorResponse()
     string queryWithInvalidChar;
     queryWithInvalidChar.length = 1;
 
-    PostgresProtocol psql = connectToPsql();
+    PostgresProtocol psql = connectToPsqlProtocol();
     auto result = psql.simpleQueryGc(queryWithInvalidChar, null, null);
     enforce(psql.isReadyToQuery, "PostgresProtocol should've error corrected");
     return result;
@@ -85,7 +85,7 @@ Result test_errorResponse()
 @ExpectResult!DummyError
 Result test_bindDescribeExecute_onRowDescriptionOrNull_error_forwarded()
 {
-    PostgresProtocol psql = connectToPsql();
+    PostgresProtocol psql = connectToPsqlProtocol();
     psql.simpleQuery(`
         DROP TABLE IF EXISTS test_onRowDescriptionOrNull_error_forwarded;
         
@@ -115,7 +115,7 @@ Result test_bindDescribeExecute_onRowDescriptionOrNull_error_forwarded()
 @ExpectResult!DummyError
 Result test_bindDescribeExecute_onDataRowOrNull_error_forwarded()
 {
-    PostgresProtocol psql = connectToPsql();
+    PostgresProtocol psql = connectToPsqlProtocol();
     psql.simpleQuery(`
         DROP TABLE IF EXISTS test_onDataRowOrNull_error_forwarded;
         
@@ -145,7 +145,7 @@ Result test_bindDescribeExecute_onDataRowOrNull_error_forwarded()
 @ExpectResult!DummyError
 Result test_bindDescribeExecute_bindParameterOrNull_error_forwarded()
 {
-    PostgresProtocol psql = connectToPsql();
+    PostgresProtocol psql = connectToPsqlProtocol();
     psql.simpleQuery(`
         DROP TABLE IF EXISTS test_bindDescribeExecute_bindParameterOrNull_error_forwarded;
         

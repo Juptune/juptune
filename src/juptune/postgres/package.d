@@ -5,3 +5,8 @@
  * Author: Bradley Chatha
  */
 module juptune.postgres;
+
+public import
+    juptune.postgres.client,
+    juptune.postgres.protocol
+;

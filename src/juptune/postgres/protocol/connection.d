@@ -707,6 +707,21 @@ struct PostgresProtocol
         return this.bindDescribeExecuteImpl("", statementName, paramFormatCodes, resultFormatCodes, bindParameterOrNull, onRowDescriptionOrNull, onDataRowOrNull); // @suppress(dscanner.style.long_line)
     }
 
+    /// ditto.
+    Result bindDescribeExecuteInfer(BindParameterT, ColumnHandlerT, DataHandlerT)(
+        scope const(char)[]                             statementName,
+        scope const(PostgresColumnDescription.Format)[] paramFormatCodes,
+        scope const(PostgresColumnDescription.Format)[] resultFormatCodes,
+        scope BindParameterT                            bindParameterOrNull,
+        scope ColumnHandlerT                            onRowDescriptionOrNull,
+        scope DataHandlerT                              onDataRowOrNull,
+    )
+    in(this._state.mustBeIn(State.readyForQuery))
+    in(this.bufferIsEmpty, "bug: buffer was expected to be empty")
+    {
+        return this.bindDescribeExecuteImpl("", statementName, paramFormatCodes, resultFormatCodes, bindParameterOrNull, onRowDescriptionOrNull, onDataRowOrNull); // @suppress(dscanner.style.long_line)
+    }
+
     /++
      + Sends a Close message (followed by a Sync message) simultaneously, which tells the backend to close a prepared
      + statement by its name. If no prepared statement for the given name exists, then nothing happens.
@@ -719,7 +734,7 @@ struct PostgresProtocol
      +  This function can only be called once `.connect` succesfully executes.
      +
      + Params:
-     +  statementName           = The name of a prepared statement previously prepared by `.prepare`. This may be null/empty.
+     +  statementName = The name of a prepared statement previously prepared by `.prepare`. This may be null/empty.
      +
      + Throws:
      +  `PostgresProtocolError.bufferTooSmall` if the buffer would exceed `PostgresProtocolConfig.maxBufferSize` when reading or writing.

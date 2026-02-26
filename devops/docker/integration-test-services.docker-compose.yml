@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:18
     restart: always
+    # command: ["postgres", "-c", "log_statement=all"]
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password

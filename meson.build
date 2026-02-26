@@ -166,6 +166,7 @@ postgres_srcs = files(
     './src/juptune/postgres/protocol/encode.d',
     './src/juptune/postgres/protocol/package.d',
 
+    './src/juptune/postgres/client.d',
     './src/juptune/postgres/package.d',
 )
 

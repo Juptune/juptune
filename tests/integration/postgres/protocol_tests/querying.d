@@ -7,7 +7,7 @@ import juptune.core.util         : Result, resultEnforce;
 import juptune.data              : MemoryReader;
 import juptune.postgres.protocol : PostgresProtocol, PostgresColumnDescription, PostgresDataTypeOid;
 
-import config  : connectToPsql;
+import config  : connectToPsqlProtocol;
 import testlib : Test, RegisterTests;
 
 mixin RegisterTests!(protocol_tests.querying);
@@ -15,7 +15,7 @@ mixin RegisterTests!(protocol_tests.querying);
 @Test("onRowDescription & onDataRow - most types with a directly provided decoder - text format")
 Result onRowDescription_onDataRow_supportedTypes_text()
 {
-    PostgresProtocol psql = connectToPsql();
+    PostgresProtocol psql = connectToPsqlProtocol();
     psql.simpleQueryGc(`
         DROP TABLE IF EXISTS onRowDescription_onDataRow_supportedTypes_text;
         CREATE TABLE onRowDescription_onDataRow_supportedTypes_text(
@@ -253,7 +253,7 @@ Result onRowDescription_onDataRow_supportedTypes_text()
 @Test("bindParameter - most types with a directly provided encoder - text format")
 Result bindParameter_supportedTypes_text()
 {
-    PostgresProtocol psql = connectToPsql();
+    PostgresProtocol psql = connectToPsqlProtocol();
     psql.simpleQueryGc(`
         DROP TABLE IF EXISTS bindParameter_supportedTypes_text;
         CREATE TABLE bindParameter_supportedTypes_text(
