@@ -3,6 +3,7 @@ module config;
 import core.time : seconds;
 
 import juptune.core.util : resultAssert, resultEnforce;
+import juptune.data.x509 : X509CertificateStore;
 import juptune.event : IpAddress;
 import juptune.postgres.protocol : PostgresProtocol, PostgresConnectInfo, PostgresTlsMode, PostgresProtocolConfig;
 import juptune.postgres.client : PostgresClient;
@@ -26,7 +27,8 @@ PostgresProtocol connectToPsqlProtocol()
     psql.connect(POSTGRES_HOST, PostgresConnectInfo(
         user: POSTGRES_USER,
         plaintextPassword: POSTGRES_PASSWORD,
-        tlsMode: PostgresTlsMode.never,
+        tlsMode: PostgresTlsMode.ifPossible,
+        x509Policy: X509CertificateStore.SecurityPolicy().withAllowSelfSignedChain(true),
     )).resultEnforce;
 
     return psql;
@@ -42,7 +44,8 @@ PostgresClient connectToPsqlClient()
     psql.connect(POSTGRES_HOST, PostgresConnectInfo(
         user: POSTGRES_USER,
         plaintextPassword: POSTGRES_PASSWORD,
-        tlsMode: PostgresTlsMode.never,
+        tlsMode: PostgresTlsMode.ifPossible,
+        x509Policy: X509CertificateStore.SecurityPolicy().withAllowSelfSignedChain(true),
     )).resultEnforce;
 
     return psql;

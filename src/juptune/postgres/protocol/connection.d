@@ -24,6 +24,7 @@ enum PostgresProtocolError
     limitation,
     errorResponse,
     emptyQuery,
+    noTls,
 }
 
 /// Enum of recognised versions for the Postgres Protocol
@@ -297,6 +298,7 @@ struct PostgresProtocol
         PostgresProtocolConfig _config;
         PostgresParameters _parameters;
 
+        Array!ubyte _tlsBuffers;
         TcpSocket _plaintextSocket;
         TlsTcpSocket _encryptedSocket;
         bool _useEncryptedSocket;
@@ -343,6 +345,8 @@ struct PostgresProtocol
      +
      +  `PostgresProtocolError.unsupportedAuthScheme` if no supported auth schemes are available.
      +
+     +  `PostgresProtocolError.noTls` if TLS is configured as required but the server refuses to negotiate a TLS session.
+     +
      +  `PostgresProtocolError.missingMessage` if the server didn't send an Authentication message when expected.
      +
      +  `PostgresProtocolError.bufferTooSmall` if the buffer would exceed `PostgresProtocolConfig.maxBufferSize` when reading or writing.
@@ -365,9 +369,11 @@ struct PostgresProtocol
     {
         import std.typecons : Nullable;
 
-        import juptune.postgres.protocol.auth : AuthScheme, authenticate;
+        import juptune.data.x509                : x509GetPlatformDefaultStore;
+        import juptune.http.tls                 : TlsConfig, TlsClientHelloOutSettings, TlsServerHelloInSettings;
+        import juptune.postgres.protocol.auth   : AuthScheme, authenticate;
         import juptune.postgres.protocol.decode : decodeAuthentication, decodeParameterStatus;
-        import juptune.postgres.protocol.encode : sendStartupMessage;
+        import juptune.postgres.protocol.encode : sendStartupMessage, sendSslRequest;
 
         // Connect and negotiate TLS
         auto result = this._plaintextSocket.open();
@@ -384,8 +390,61 @@ struct PostgresProtocol
             
             case ifPossible:
             case always:
-                this._useEncryptedSocket = true;
-                assert(false, "TODO: Implement negotiation message");
+                result = sendSslRequest(this);
+                if(result.isError)
+                    return result;
+
+                char sslChar;
+                while(this._cursor < 1)
+                {
+                    result = this.fetchIntoBuffer();
+                    if(result.isError)
+                        return result;
+                }
+                sslChar = this._buffer[0];
+                this.resetBuffer();
+
+                if(sslChar == 'N')
+                {
+                    if(connectInfo.tlsMode == always)
+                        return Result.make(PostgresProtocolError.noTls, "tlsMode was set to always, however server is refusing to negotiate TLS"); // @suppress(dscanner.style.long_line)
+                    // Break and keep using the plaintext socket
+                }
+                else if (sslChar == 'S')
+                {
+                    this._useEncryptedSocket = true;
+
+                    // TODO: Make some of this configurable.
+                    enum WRITE_BUFFER_SIZE      = 1024 * 8;
+                    enum READ_BUFFER_SIZE       = 1024 * 17;
+                    enum STAGING_BUFFER_SIZE    = 1024 * 32;
+
+                    Array!ubyte staging;
+                    staging.length = STAGING_BUFFER_SIZE;
+
+                    this._tlsBuffers.length = WRITE_BUFFER_SIZE + READ_BUFFER_SIZE;
+                    this._encryptedSocket = TlsTcpSocket(
+                        &this._plaintextSocket,
+                        this._tlsBuffers[0..READ_BUFFER_SIZE],
+                        this._tlsBuffers[READ_BUFFER_SIZE..$],
+                        staging[0..$],
+                        TlsConfig()
+                            .withWriteTimeout(this._config.writeTimeout)
+                            .withReadTimeout(this._config.readTimeout)
+                    );
+
+                    auto clientHello = TlsClientHelloOutSettings();
+                    auto serverHello = TlsServerHelloInSettings(
+                        (connectInfo.customStore is null) ? x509GetPlatformDefaultStore() : connectInfo.customStore,
+                        connectInfo.x509Policy
+                    );
+                    result = this._encryptedSocket.handshakeAsClient(clientHello, serverHello);
+                    if(result.isError)
+                        return result;
+                }
+                else
+                    return Result.make(PostgresProtocolError.invalidMessage, "unexpected value in SSLRequest");
+                break;
 
             case FAILSAFE: assert(false, "FAILSAFE");
         }

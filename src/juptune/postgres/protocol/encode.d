@@ -17,6 +17,17 @@ import juptune.postgres.protocol.connection
     ;
 import juptune.postgres.protocol.datatypes : PostgresDataTypeOid;
 
+package Result sendSslRequest(scope ref PostgresProtocol psql) @nogc nothrow
+in(psql.bufferIsEmpty, "bug: buffer was expected to be empty")
+{
+    enum SSL_REQUEST_MAGIC_NUMBER = 80_877_103;
+    auto result = psql.putLengthPrefixedBytes(() => psql.putInt!int(SSL_REQUEST_MAGIC_NUMBER));
+    if(result.isError)
+        return result;
+
+    return psql.sendEntireBuffer();
+}
+
 package Result sendStartupMessage(
     scope ref PostgresProtocol psql,
     scope const(char)[] user, 
