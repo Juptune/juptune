@@ -866,7 +866,7 @@ struct GenericIoDriver
      + If the `growFunc` is null, then the default action is to first grow to 4096 bytes, and then
      + keep doubling the length.
      +
-     + This is a high level helper around the `recieve` function.
+     + This is a high level helper around the `receive` function.
      +
      + This overload is specifically @nogc, and makes use of `juptune.core.ds.array.Array` for storage.
      +
@@ -878,7 +878,7 @@ struct GenericIoDriver
      + Throws:
      +  Asserts that `growFunc` has grown `buffer.length` if it returns a non-error `Result`.
      +
-     +  Any error that the platform-specific `recieve` function returns.
+     +  Any error that the platform-specific `receive` function returns.
      +
      + Returns:
      +  A `Result`
@@ -895,7 +895,7 @@ struct GenericIoDriver
      + If the `growFunc` is null, then the default action is to first grow to 4096 bytes, and then
      + keep doubling the length.
      +
-     + This is a high level helper around the `recieve` function.
+     + This is a high level helper around the `receive` function.
      +
      + This overload is specifically @gc, and makes use of normal D arrays for storage.
      +
@@ -907,7 +907,7 @@ struct GenericIoDriver
      + Throws:
      +  Asserts that `growFunc` has grown `buffer.length` if it returns a non-error `Result`.
      +
-     +  Any error that the platform-specific `recieve` function returns.
+     +  Any error that the platform-specific `receive` function returns.
      +
      + Returns:
      +  A `Result`
@@ -948,7 +948,7 @@ struct GenericIoDriver
             }
 
             void[] inSlice;
-            auto result = this._driver.recieve(buffer[cursor..$], inSlice, timeout);
+            auto result = this._driver.receive(buffer[cursor..$], inSlice, timeout);
             if(result.isError)
                 return result;
             else if(inSlice.length == 0 || inSlice.length < (buffer.length - cursor))
@@ -1029,7 +1029,7 @@ private struct PosixGenericIoDriver
         return Result.noError;
     }
 
-    Result recieve(void[] buffer, out void[] sliceWithData, Duration timeout = Duration.zero)
+    Result receive(void[] buffer, out void[] sliceWithData, Duration timeout = Duration.zero)
     {
         auto op = IoUringRecv();
         op.fd = this.fd;
@@ -1041,7 +1041,7 @@ private struct PosixGenericIoDriver
             return submitResult;
 
         if(cqe.result < 0)
-            return getPosixResult("failed to recieve data from socket", cqe.result);
+            return getPosixResult("failed to receive data from socket", cqe.result);
 
         assert(cqe.result >= 0);
         sliceWithData = buffer[0..cqe.result];
@@ -1141,7 +1141,7 @@ private struct PosixGenericIoDriver
         if(cqe.result < 0)
         {
             static if(is(OpT == IoUringReadv))
-                static immutable message = "failed to recieve data from socket via scatter input";
+                static immutable message = "failed to receive data from socket via scatter input";
             else
                 static immutable message = "failed to send data to socket via gather output";
 
@@ -1303,7 +1303,7 @@ unittest
             ubyte[128] buffer;
             void[] got;
 
-            socket.recieve(buffer[], got).resultAssert;
+            socket.receive(buffer[], got).resultAssert;
 
             assert(got.length == buffer.length);
             foreach(i; 0..buffer.length)
@@ -1334,7 +1334,7 @@ unittest
         TcpSocket.makePair(pairs).resultAssert;
 
         testResult(pairs[0].readv([buffer[]], bytes, 1.msecs));
-        testResult(pairs[0].recieve(buffer[], slice, 1.msecs));
+        testResult(pairs[0].receive(buffer[], slice, 1.msecs));
         // Hard to tests writes currently, as I have no idea how to consistently block the write call.
     });
     loop.join();

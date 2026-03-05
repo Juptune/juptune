@@ -42,7 +42,7 @@ struct TlsSocket(UnderlyingSocketT)
         MemoryWriter _recordWriter;
         MemoryWriter _stagingBuffer;
 
-        MemoryReader _leftoverReader; // If non-empty, then recieve wasn't able to pass all the data back to the user, so this reader holds the remaining leftovers (subreader of _readBuffer)
+        MemoryReader _leftoverReader; // If non-empty, then receive wasn't able to pass all the data back to the user, so this reader holds the remaining leftovers (subreader of _readBuffer)
     }
 
     this(
@@ -269,7 +269,7 @@ struct TlsSocket(UnderlyingSocketT)
         return this.sendAsCiphertextRecords!true(TlsPlaintext.ContentType.applicationData, cast(const(ubyte)[])buffer);
     }
 
-    Result recieve(void[] buffer, out void[] sliceWithData, Duration timeout = Duration.zero) @nogc nothrow
+    Result receive(void[] buffer, out void[] sliceWithData, Duration timeout = Duration.zero) @nogc nothrow
     in(this._state.mustBeIn(State.applicationData))
     {
         import std.algorithm : min;
@@ -308,7 +308,7 @@ struct TlsSocket(UnderlyingSocketT)
             // This will _usually_ be the server sending us a session ticket after the initial handshake.
             // Handling this is honestly really annoying, so _for now_ I'll just blindly ignore handshake messages, even though
             // that's not completely correct behaviour.
-            return recieve(buffer, sliceWithData, timeout); // I really hope this triggers tail call optimisation lol.
+            return receive(buffer, sliceWithData, timeout); // I really hope this triggers tail call optimisation lol.
         }
         else if(plaintext.type != TlsPlaintext.ContentType.applicationData)
             return Result.make(TlsError.alertUnexpectedMessage, "when receiving ciphertext record, record has unexpected message type"); // @suppress(dscanner.style.long_line)
@@ -718,7 +718,7 @@ struct TlsSocket(UnderlyingSocketT)
             return Result.make(TlsError.dataExceedsBuffer, "attempted to fetch record data while buffer is full - in-process record is too large for the provided buffer"); // @suppress(dscanner.style.long_line)
 
         void[] got;
-        auto result = this._socket.recieve(this._readBuffer[cursor..$], got, this._config.readTimeout);
+        auto result = this._socket.receive(this._readBuffer[cursor..$], got, this._config.readTimeout);
         if(result.isError)
             return result.wrapError("when fetching data from socket into read buffer:");
 

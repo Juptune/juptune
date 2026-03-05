@@ -224,7 +224,7 @@ struct Http1ResponseLine
  +
  +  You are not provided an entire chunk at once, but rather a slice of the chunk which is 
  +  determined by either the size of the buffer, the size of the chunk, or the size of the
- +  data recieved by the incoming TCP packet.
+ +  data received by the incoming TCP packet.
  + ++/
 struct Http1BodyChunk
 {
@@ -1258,7 +1258,7 @@ struct Http1ReaderBase(SocketT)
             return Result.make(Http1Error.dataExceedsBuffer, response!("422", "when fetching next set of data, the buffer was full")); // @suppress(dscanner.style.long_line)
 
         void[] got;
-        auto result = this._socket.recieve(this._buffer[this._writeCursor..$], got, this._config.readTimeout);
+        auto result = this._socket.receive(this._buffer[this._writeCursor..$], got, this._config.readTimeout);
         if(result.isError)
             return result;
 
@@ -3310,7 +3310,7 @@ unittest
                 
                 ubyte[512] buffer;
                 void[] usedBuffer;
-                pair.socket.recieve(buffer[], usedBuffer).resultAssert;
+                pair.socket.receive(buffer[], usedBuffer).resultAssert;
 
                 import std.algorithm : equal, substitute;
                 import std.format : format;

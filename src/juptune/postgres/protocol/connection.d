@@ -420,7 +420,7 @@ struct PostgresProtocol
                     enum STAGING_BUFFER_SIZE    = 1024 * 32;
 
                     Array!ubyte staging;
-                    staging.length = STAGING_BUFFER_SIZE;
+                    staging.length = STAGING_BUFFER_SIZE; // The staging buffer is only needed during the handshake, it can be discarded after.
 
                     this._tlsBuffers.length = WRITE_BUFFER_SIZE + READ_BUFFER_SIZE;
                     this._encryptedSocket = TlsTcpSocket(
@@ -586,7 +586,7 @@ struct PostgresProtocol
      +
      +  `PostgresProtocolError.errorResponse` if the server returned an ErrorResponse message.
      +
-     +  Anything that `.put` and `.recieve` for `TcpSocket` and `TlsSocket` can throw.
+     +  Anything that `.put` and `.receive` for `TcpSocket` and `TlsSocket` can throw.
      +
      + Returns:
      +  An errorful `Result` if something went wrong.
@@ -640,7 +640,7 @@ struct PostgresProtocol
      +
      +  `PostgresProtocolError.errorResponse` if the server returned an ErrorResponse message.
      +
-     +  Anything that `.put` and `.recieve` for `TcpSocket` and `TlsSocket` can throw.
+     +  Anything that `.put` and `.receive` for `TcpSocket` and `TlsSocket` can throw.
      +
      + Returns:
      +  An errorful `Result` if something went wrong.
@@ -717,7 +717,7 @@ struct PostgresProtocol
      +                            for the query's return results are available. 
      +  onDataRowOrNull         = If not null, then this function is called multiple times - once for each row
      +                            returned by the query - when the raw bytes for the row's values are available.
-     +                            This function should call into the decode functions within `juptune.postgres.protocol.datatype`.
+     +                            This function should call into the decode functions within `juptune.postgres.protocol.datatypes`.
      +
      + Throws:
      +  Anything that `bindParameterOrNull`, `onRowDescriptionOrNull`, and `onDataRowOrNull` can throw.
@@ -732,7 +732,7 @@ struct PostgresProtocol
      +
      +  `PostgresProtocolError.errorResponse` if the server returned an ErrorResponse message.
      +
-     +  Anything that `.put` and `.recieve` for `TcpSocket` and `TlsSocket` can throw.
+     +  Anything that `.put` and `.receive` for `TcpSocket` and `TlsSocket` can throw.
      +
      + Returns:
      +  An errorful `Result` if something went wrong.
@@ -806,7 +806,7 @@ struct PostgresProtocol
      +
      +  `PostgresProtocolError.errorResponse` if the server returned an ErrorResponse message.
      +
-     +  Anything that `.put` and `.recieve` for `TcpSocket` and `TlsSocket` can throw.
+     +  Anything that `.put` and `.receive` for `TcpSocket` and `TlsSocket` can throw.
      +
      + Returns:
      +  An errorful `Result` if something went wrong.
@@ -1182,9 +1182,9 @@ struct PostgresProtocol
         auto result = Result.noError;
         void[] got;
         if(this._useEncryptedSocket)
-            result = this._encryptedSocket.recieve(this._buffer[0..$], got, this._config.readTimeout);
+            result = this._encryptedSocket.receive(this._buffer[0..$], got, this._config.readTimeout);
         else
-            result = this._plaintextSocket.recieve(this._buffer[0..$], got, this._config.readTimeout);
+            result = this._plaintextSocket.receive(this._buffer[0..$], got, this._config.readTimeout);
 
         if(result.isError)
             return result.wrapError("when fetching from postgres network socket:");
