@@ -28,13 +28,38 @@ enum TlsError
     unsupportedAlgorithm,
     verificationFailed,
 
+    /++ Other errors ++/
+    invalidAlert,
+
     /++ Protocol alerts ++/
-    alertRecordOverflow,
+    alertCloseNotify,
     alertUnexpectedMessage,
-    alertIllegalParameter,
-    alertMissingExtension,
     alertBadRecordMac,
+    alertRecordOverflow,
+    alertHandshakeFailure,
+    alertBadCertificate,
+    alertUnsupportedCertificate,
+    alertCertificateRevoked,
+    alertCertificateExpired,
+    alertCertificateUnknown,
+    alertIllegalParameter,
+    alertUnknownCa,
+    alertAccessDenied,
+    alertDecodeError,
     alertDecryptError,
+    alertProtocolVersion,
+    alertInsufficientSecurity,
+    alertInternalError,
+    alertInappropriateFallback,
+    alertUserCanceled,
+    alertMissingExtension,
+    alertUnsupportedExtension,
+    alertUnrecognizedName,
+    alertBadCertificateStatusResponse,
+    alertUnknownPskIdentity,
+    alertCertificateRequired,
+    alertNoApplicationProtocol,
+    alertGeneric,
 }
 
 struct TlsConfig
@@ -66,6 +91,7 @@ alias TlsStateMachine = Machine.Static!([
     Machine.Transition(State.readServerHello,               State.readEncryptedServerHello),
     Machine.Transition(State.readEncryptedServerHello,      State.writeClientChangeCipherSpec),
     Machine.Transition(State.writeClientChangeCipherSpec,   State.applicationData),
+    Machine.Transition(State.applicationData,               State.alertOrClosed),
 ]);
 
 enum State
@@ -84,7 +110,7 @@ enum State
     applicationData,
 
     // Special states
-    fatalAlert,
+    alertOrClosed,
 }
 
 struct EncryptionContext
@@ -505,3 +531,4 @@ size_t enumIndexOf(EnumT)(EnumT value) @safe @nogc nothrow pure
         default: return -1;
     }
 }
+

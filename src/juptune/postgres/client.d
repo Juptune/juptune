@@ -243,6 +243,10 @@ struct PostgresClient
          +    This is less of an actual error, and more a provide an easier way of detecting the "no rows returned" case.
          +    (The values in the return value set are undefined).
          +
+         + It's _highly_ recommended to add `LIMIT 1` onto your query as postgres will otherwise return the entire
+         + set of results which then still needs to be partially procesesd (even though they're being ignored), 
+         + ultimately wasting time for no reason.
+         +
          + Throws:
          +  `PostgresClientError.noData` if no rows are returned by your query.
          +
