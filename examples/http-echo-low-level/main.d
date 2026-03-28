@@ -28,12 +28,11 @@ void nogcInsaneServer()
             .withBlockStackSize(1024 * 16)
         )
     );
-    loop.addNoGCThread(() @nogc nothrow {
+    loop.execNoGC(() @nogc nothrow {
         server.open().resultAssert;
         server.listen("127.0.0.1:19000", 4000).resultAssert;
         juptuneEventLoopCancelThread();
     });
-    loop.join();
 
     foreach(i; 0..8)
     {
@@ -221,12 +220,11 @@ void nogcSaneServer()
             .withBlockStackSize(1024 * 16)
         )
     );
-    loop.addNoGCThread(() @nogc nothrow {
+    loop.execNoGC(() @nogc nothrow {
         server.open().resultAssert;
         server.listen("127.0.0.1:19000", 4000).resultAssert;
         juptuneEventLoopCancelThread();
     });
-    loop.join();
 
     foreach(i; 0..8)
     {

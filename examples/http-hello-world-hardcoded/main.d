@@ -18,12 +18,11 @@ void nogcServer()
 {
     __gshared TcpSocket server;
     auto loop = EventLoop(EventLoopConfig());
-    loop.addNoGCThread(() @nogc nothrow {
+    loop.execNoGC(() @nogc nothrow {
         server.open().resultAssert;
         server.listen("127.0.0.1:19000", 4000).resultAssert;
         juptuneEventLoopCancelThread();
     });
-    loop.join();
 
     foreach(i; 0..8)
     {
@@ -51,12 +50,11 @@ void gcServer()
 {
     __gshared TcpSocket server;
     auto loop = EventLoop(EventLoopConfig());
-    loop.addGCThread(() @nogc nothrow {
+    loop.execNoGC(() @nogc nothrow {
         server.open().resultAssert;
         server.listen("127.0.0.1:19000", 4000).resultAssert;
         juptuneEventLoopCancelThread();
     });
-    loop.join();
 
     foreach(i; 0..8)
     {

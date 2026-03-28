@@ -8,13 +8,6 @@ struct Wine
     {
         @Json String average;
         @Json String reviews;
-
-        // For some reason the compiler can't figure out how to generate this automatically ;_;
-        this(scope ref return const Rating rating) @nogc nothrow
-        {
-            this.average = average;
-            this.reviews = reviews;
-        }
     }
 
     @Json String winery;
@@ -23,17 +16,6 @@ struct Wine
     @Json String image;
     @Json Rating rating;
     @Json int    id;
-
-    // For some reason the compiler can't figure out how to generate this automatically ;_;
-    this(scope ref return const Wine wine) @nogc nothrow
-    {
-        this.winery = wine.winery;
-        this.wine = wine.wine;
-        this.location = wine.location;
-        this.image = wine.image;
-        this.rating = wine.rating;
-        this.id = wine.id;
-    }
 }
 
 struct WineGC

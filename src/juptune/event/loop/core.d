@@ -135,12 +135,7 @@ struct EventLoop
      + ++/
     void addNoGCThread(JuptuneFiber.EntryPointNoGC initialFiber)
     {
-        this._threads ~= new LoopThread();
-        this._threads[$-1].loop = cast(shared)&this;
-        this._threads[$-1].isGCThread = false;
-        this._threads[$-1].lowLevelEntry = initialFiber;
-        this._threads[$-1].fiberAllocatorConfig = this._config.fiberAllocator;
-        this._threads[$-1].ioUringConfig = this._config.ioUring;
+        this._threads ~= this.initThreadNoGc(initialFiber);
 
         const index = this._threads.length-1; // @suppress(dscanner.suspicious.length_subtraction)
         this._threads[$-1].lowLevelThread = createLowLevelThread((){
@@ -166,18 +161,42 @@ struct EventLoop
      + ++/
     void addGCThread(JuptuneFiber.EntryPointGC initialFiber)
     {
-        this._threads ~= new LoopThread();
-        this._threads[$-1].loop = cast(shared)&this;
-        this._threads[$-1].isGCThread = true;
-        this._threads[$-1].gcEntry = initialFiber;
-        this._threads[$-1].fiberAllocatorConfig = this._config.fiberAllocator;
-        this._threads[$-1].ioUringConfig = this._config.ioUring;
+        this._threads ~= this.initThreadGc(initialFiber);
 
         const index = this._threads.length-1; // @suppress(dscanner.suspicious.length_subtraction)
         this._threads[$-1].gcThread = new Thread((){
             loopThreadMain!true(this._threads[index]);
         });
         this._threads[$-1].gcThread.start();
+    }
+
+    /++
+     + Similar to `addNoGCThread` and `addGCThread`, except the caller thread will immediately block until, 
+     + waiting until the thread spawned by this function resolves.
+     +
+     + This function is useful if some preliminary or one-off work that makes use of Juptune's event loop is needed
+     + before calling `join`.
+     +
+     + e.g. This function can be used to open a socket that is then shared across multiple different event loop threads.
+     + ++/
+    void execNoGC(JuptuneFiber.EntryPointNoGC fiber)
+    {
+        auto thread = this.initThreadNoGc(fiber);
+        thread.lowLevelThread = createLowLevelThread((){
+            loopThreadMain!false(thread);
+        });
+        this.joinThread(thread);
+    }
+
+    /// ditto.
+    void execGC(JuptuneFiber.EntryPointGC fiber)
+    {
+        auto thread = this.initThreadGc(fiber);
+        thread.gcThread = new Thread((){
+            loopThreadMain!true(thread);
+        });
+        thread.gcThread.start();
+        this.joinThread(thread);
     }
 
     /++
@@ -192,15 +211,8 @@ struct EventLoop
      + ++/
     void join()
     {
-        import std.exception : assumeWontThrow;
-
         foreach(ref thread; this._threads)
-        {
-            if(thread.isGCThread)
-                thread.gcThread.join(false).assumeWontThrow;
-            else
-                joinLowLevelThread(thread.lowLevelThread);
-        }
+            this.joinThread(thread);
 
         this._threads.length = 0;
         *_cancelToken = CancelToken();
@@ -215,6 +227,42 @@ struct EventLoop
     void cancelAllThreads() @nogc shared
     {
         this._cancelToken.cancel();
+    }
+
+    private void joinThread(LoopThread* thread)
+    {
+        import std.exception : assumeWontThrow;
+
+        if(thread.isGCThread)
+            thread.gcThread.join(false).assumeWontThrow;
+        else
+            joinLowLevelThread(thread.lowLevelThread);
+}
+
+    private LoopThread* initThreadNoEntrypoint()
+    {
+        auto thread = new LoopThread();
+        thread.loop = cast(shared)&this;
+        thread.fiberAllocatorConfig = this._config.fiberAllocator;
+        thread.ioUringConfig = this._config.ioUring;
+
+        return thread;
+    }
+
+    private LoopThread* initThreadNoGc(JuptuneFiber.EntryPointNoGC initialFiber)
+    {
+        auto thread = this.initThreadNoEntrypoint();
+        thread.isGCThread = false;
+        thread.lowLevelEntry = initialFiber;
+        return thread;
+    }
+
+    private LoopThread* initThreadGc(JuptuneFiber.EntryPointGC initialFiber)
+    {
+        auto thread = this.initThreadNoEntrypoint();
+        thread.isGCThread = true;
+        thread.gcEntry = initialFiber;
+        return thread;
     }
 }
 

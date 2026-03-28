@@ -262,13 +262,13 @@ package Result decodeErrorResponse(
         const(char)[] message; // Will be subslice of PostgresProtocol's read buffer
         const(char)[] detail; // Will be subslice of PostgresProtocol's read buffer
         const(char)[] hint; // Will be subslice of PostgresProtocol's read buffer
-        const(char)[] position;
-        const(char)[] where;
-        const(char)[] schema;
-        const(char)[] table;
-        const(char)[] column;
-        const(char)[] dataType;
-        const(char)[] constraint;
+        const(char)[] position; // Will be subslice of PostgresProtocol's read buffer
+        const(char)[] where; // Will be subslice of PostgresProtocol's read buffer
+        const(char)[] schema; // Will be subslice of PostgresProtocol's read buffer
+        const(char)[] table; // Will be subslice of PostgresProtocol's read buffer
+        const(char)[] column; // Will be subslice of PostgresProtocol's read buffer
+        const(char)[] dataType; // Will be subslice of PostgresProtocol's read buffer
+        const(char)[] constraint; // Will be subslice of PostgresProtocol's read buffer
     }
 
     /++ Read in the actual response ++/

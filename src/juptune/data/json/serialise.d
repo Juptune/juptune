@@ -52,7 +52,7 @@ struct Json
     /++
      + Similar to `omitWhenEmpty`, except the omission only occurs if the field is null when serialising.
      +
-     + A field is null if:
+     + A field is null if one of the following is true:
      +
      +  * It supports the `is null` syntax, and `is null` returns true.
      +  * It is a type with a `.isNull` field, and it returns true.
