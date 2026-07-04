@@ -615,10 +615,7 @@ unittest
 {
     import std.file : fileRead = read, exists;
     import juptune.core.util : resultAssert;
-    import juptune.asn1.decode.bcd.encoding 
-        : Asn1DecodeError, Asn1ComponentHeader, Asn1Ruleset, asn1ReadContentBytes, asn1DecodeComponentHeader;
-    import juptune.data.buffer : MemoryReader;
-    import juptune.data.x509 : X509Certificate, x509FromAsn1;
+    import juptune.data.x509 : X509Certificate, x509FromDerBytes;
     import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : Certificate;
 
     X509Certificate readCert(string path)
@@ -626,18 +623,10 @@ unittest
         if(!path.exists) // Check if we're running from the build dir instead of the root dir (e.g. because of `meson test`).
             path = "../"~path;
 
-        auto memory = MemoryReader(cast(ubyte[])fileRead(path));
-        
-        Asn1ComponentHeader header;
-        MemoryReader content;
-        asn1DecodeComponentHeader!(Asn1Ruleset.der)(memory, header).resultAssert;
-        asn1ReadContentBytes(memory, header.length, content).resultAssert;
-
         Certificate asn1Cert;
-        asn1Cert.fromDecoding!(Asn1Ruleset.der)(content, header.identifier).resultAssert;
-
         X509Certificate cert;
-        x509FromAsn1(asn1Cert, cert).resultAssert;
+        const bytes = cast(ubyte[])fileRead(path);
+        x509FromDerBytes(bytes, asn1Cert, cert).resultAssert;
 
         return cert;
     }

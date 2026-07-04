@@ -542,6 +542,64 @@ struct X509Certificate
     const(ubyte)[] tbsCertificateRawDerEncoding; // Used for signature validation.
 }
 
+/++ 
+ + A helper function that decodes raw DER bytes into its ASN.1 `Certificate` type, before passing the certificate
+ + into `x509FromAsn1`.
+ +
+ + Notes:
+ +  Please adhear to `x509FromAsn1`'s notes, since they all apply to this function as well (namely the lifetime of `cert` MUST be directly tied to `derBytes`).
+ +
+ + Params:
+ +  derBytes = The raw DER bytes containing a single certificate.
+ +  asn1Cert = The raw ASN.1 version of the certificate to decode the bytes into, in case that's also useful.
+ +  cert     = The result.
+ +
+ + Throws:
+ +  Anything that `x509FromAsn1` can throw.
+ +
+ +  Anything that `asn1DecodeComponentHeader` can throw.
+ +
+ +  Anything that `Certificate.fromDecoding` can throw.
+ +
+ + Returns:
+ +  An errorful `Result` if something went wrong.
+ + ++/
+Result x509FromDerBytes(
+    return scope const(ubyte)[] derBytes, 
+    out Certificate asn1Cert,
+    out X509Certificate cert
+) @nogc nothrow
+in(derBytes.length > 0, "bug: derBytes is null/empty")
+{
+    import juptune.asn1.decode.bcd.encoding 
+        : 
+            Asn1ComponentHeader, 
+            asn1DecodeComponentHeader, 
+            asn1ReadContentBytes, 
+            Asn1Ruleset
+        ;
+    
+    import juptune.data.buffer : MemoryReader;
+
+    auto result = Result.noError;
+    auto derMem = MemoryReader(derBytes);
+
+    Asn1ComponentHeader header;
+    result = asn1DecodeComponentHeader!(Asn1Ruleset.der)(derMem, header);
+    if(result.isError)
+        return result.wrapError("when decoding ASN.1 Certificate's first component header:");
+
+    result = asn1Cert.fromDecoding!(Asn1Ruleset.der)(derMem, header.identifier);
+    if(result.isError)
+        return result.wrapError("when decoding ASN.1 Certificate:");
+
+    result = x509FromAsn1(asn1Cert, cert);
+    if(result.isError)
+        return result.wrapError("when converting ASN.1 Certificate into an X509Certificate:");
+
+    return Result.noError;
+}
+
 /++
  + Flattens the given `asn1Cert` into the more easier to use structure of `cert`, while performing light amounts of validation.
  +
@@ -1710,18 +1768,11 @@ unittest
         0x30,  0xdb,  0x9b,  0x60,  0xfb,  0x34,  0xdc,  0x95,  0xbe,  0x53,  0x27,  0x4e,  0x02,  0x65,  0x57,  0xf5,
         0xfa,  0xd8,  0xea,  0xbb,  0x92,  0xe3,  0xe4,  0xa7,  0x12,  0x36 
     ];
-    auto memory = MemoryReader(asn1);
-    
-    Asn1ComponentHeader header;
-    MemoryReader content;
-    asn1DecodeComponentHeader!(Asn1Ruleset.der)(memory, header).resultAssert;
-    asn1ReadContentBytes(memory, header.length, content).resultAssert;
 
     Certificate asn1Cert;
-    asn1Cert.fromDecoding!(Asn1Ruleset.der)(content, header.identifier).resultAssert;
-
     X509Certificate cert;
-    x509FromAsn1(asn1Cert, cert).resultAssert;
+
+    x509FromDerBytes(asn1, asn1Cert, cert).resultAssert;
 
     string[X509Certificate.NameComponentKind] issuerComps;
     x509ForeachNameComponentGC(cert.issuer, (element){

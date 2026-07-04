@@ -489,28 +489,10 @@ in(state.mustBeIn(State.readEncryptedServerHello))
             if(isFirst) // TODO: It's a bit annoying we have to parse the first cert twice - maybe CertificateStore could have a more friendly way of doing this sort of stuff?
             {
                 import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : Certificate;
-                import juptune.data.x509.asn1convert : x509FromAsn1;
-                import juptune.asn1.decode.bcd.encoding 
-                    : Asn1ComponentHeader, asn1DecodeComponentHeader, asn1ReadContentBytes,
-                    Asn1Ruleset;
+                import juptune.data.x509.asn1convert : x509FromDerBytes;
 
-                isFirst = false;
-
-                auto derMem = MemoryReader(derBytes);
-
-                Asn1ComponentHeader header;
-                result = asn1DecodeComponentHeader!(Asn1Ruleset.der)(derMem, header);
-                if(result.isError)
-                    return result.wrapError("when decoding TLS cert header:");
-
-                Certificate asn1Cert;
-                result = asn1Cert.fromDecoding!(Asn1Ruleset.der)(derMem, header.identifier);
-                if(result.isError)
-                    return result.wrapError("when decoding TLS cert body:");
-
-                result = x509FromAsn1(asn1Cert, peerCert);
-                if(result.isError)
-                    return result.wrapError("when converting TLS ASN.1 to higher level structure:");
+                Certificate _;
+                result = x509FromDerBytes(entry.data, _, peerCert);
             }
 
             return Result.noError;

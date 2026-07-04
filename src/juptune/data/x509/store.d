@@ -729,12 +729,8 @@ struct X509CertificateStore
     {
         import core.stdc.stdlib : free;
 
-        import juptune.data.buffer : MemoryReader;
         import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : Certificate;
-        import juptune.data.x509.asn1convert : x509FromAsn1;
-        import juptune.asn1.decode.bcd.encoding 
-            : Asn1ComponentHeader, asn1DecodeComponentHeader, asn1ReadContentBytes,
-              Asn1Ruleset;
+        import juptune.data.x509.asn1convert : x509FromDerBytes;
 
         bool success;
         scope(exit) if(!success)
@@ -743,25 +739,14 @@ struct X509CertificateStore
             free(cert);
         }
 
-        auto derMem = MemoryReader(cert.underlyingBytes.slice);
-
-        Asn1ComponentHeader header;
-        auto result = asn1DecodeComponentHeader!(Asn1Ruleset.der)(derMem, header);
-        if(result.isError)
-            return result;
-
         Certificate asn1Cert;
-        result = asn1Cert.fromDecoding!(Asn1Ruleset.der)(derMem, header.identifier);
+        auto result = x509FromDerBytes(cert.underlyingBytes.slice, asn1Cert, cert.certificate);
         if(result.isError)
-            return result;
-
-        result = x509FromAsn1(asn1Cert, cert.certificate);
-        if(result.isError)
-            return result;
+            return result.wrapError("when loading certificate into X509Certificatestore:");
 
         result = X509ExtensionStore.fromCertificate(cert.certificate, cert.extensions);
         if(result.isError)
-            return result;
+            return result.wrapError("when loading certificate's extensions into X509EXtensionStore:");
 
         success = true;
         return Result.noError;

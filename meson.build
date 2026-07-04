@@ -5,6 +5,7 @@ project(
     'd',
     license: 'MPL-2.0',
     version: '0.0.1',
+    meson_version: '>=1.1'
 )
 
 # Meson has crappy bugs for its basic functionality that will take 200 years to be addressed:
