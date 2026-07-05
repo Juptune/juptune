@@ -27,6 +27,7 @@ struct TlsServerHelloInSettings
 
 struct TlsSocket(UnderlyingSocketT)
 {
+    import juptune.core.ds     : Array;
     import juptune.data.buffer : MemoryReader, MemoryWriter;
 
     private
@@ -43,6 +44,9 @@ struct TlsSocket(UnderlyingSocketT)
         MemoryWriter _stagingBuffer;
 
         MemoryReader _leftoverReader; // If non-empty, then receive wasn't able to pass all the data back to the user, so this reader holds the remaining leftovers (subreader of _readBuffer)
+
+        Array!ubyte     _peerCertBytes; // NOTE: Currently the max size is indirectly controlled by the size of _readBuffer
+        X509Certificate _peerCert;
     }
 
     this(
@@ -171,7 +175,6 @@ struct TlsSocket(UnderlyingSocketT)
         // Read encrypted ServerHello
         
         ulong messageMask;
-        X509Certificate peerCert;
 
         while((messageMask & (1 << enumIndexOf(TlsHandshake.Type.finished))) == 0) // Keep reading until we've hit the finished message
         {
@@ -197,9 +200,12 @@ struct TlsSocket(UnderlyingSocketT)
                             return handleServerHelloCertificate(
                                 messageReader, 
                                 this._state,
-                                peerCert,
+                                this._peerCertBytes,
+                                this._peerCert,
                                 shSettings.certStore,
-                                shSettings.certPolicy
+                                shSettings.certPolicy,
+                                this._config.dumpCerts,
+                                chSettings.serverNameIndicator,
                             ).wrapError("when reading certificate:");
 
                         case certificateVerify:
@@ -208,7 +214,7 @@ struct TlsSocket(UnderlyingSocketT)
                             return handleServerHelloCertificateVerify(
                                 messageReader,
                                 this._state,
-                                peerCert,
+                                this._peerCert,
                                 verifyHash
                             ).wrapError("when reading certificateVerify");
 
@@ -255,7 +261,7 @@ struct TlsSocket(UnderlyingSocketT)
 
     /++ Driver interface ++/
 
-    bool isOpen() @nogc nothrow => this._socket.isOpen;
+    bool isOpen() @nogc nothrow => (this._socket is null ? false : this._socket.isOpen);
 
     Result close() @nogc nothrow => this._socket.close();
 
@@ -334,8 +340,16 @@ struct TlsSocket(UnderlyingSocketT)
 
     Result put(const(void)[] buffer, Duration timeout = Duration.zero) @nogc nothrow
     {
-        size_t _;
-        return this.send(buffer, _, timeout);
+        while(buffer.length > 0)
+        {
+            size_t bytesSent;
+            auto result = this.send(buffer, bytesSent, timeout);
+            if(result.isError)
+                return result;
+            buffer = buffer[bytesSent..$];
+        }
+
+        return Result.noError;
     }
 
     /++ Helpers ++/
@@ -417,33 +431,33 @@ struct TlsSocket(UnderlyingSocketT)
         this._state.mustTransition!(State.applicationData, State.alertOrClosed);
         switch(descriptionByte)
         {
-            case 0: /* close_notify */ return Result.make(TlsError.alertCloseNotify, "peer has closed their end of the connection"); // @suppress(dscanner.style.long_line)
-            case 10: /* unexpected_message */ return Result.make(TlsError.alertUnexpectedMessage, "peer received an unexpected message from our end"); // @suppress(dscanner.style.long_line)
-            case 20: /* bad_record_mac */ return Result.make(TlsError.alertBadRecordMac, "peer was unable to decrypt or verify a message from our end"); // @suppress(dscanner.style.long_line)
-            case 22: /* record_overflow */ return Result.make(TlsError.alertRecordOverflow, "peer received a mesage that was too large"); // @suppress(dscanner.style.long_line)
-            case 40: /* handshake_failure */ return Result.make(TlsError.alertHandshakeFailure, "peer was not able to agree with our available security parameters"); // @suppress(dscanner.style.long_line)
-            case 42: /* bad_certificate */ return Result.make(TlsError.alertBadCertificate, "peer was unable to to verify or parse a certificate we sent"); // @suppress(dscanner.style.long_line)
-            case 43: /* unsupported_certificate */ return Result.make(TlsError.alertUnsupportedCertificate, "peer was unable to support a certificate we sent"); // @suppress(dscanner.style.long_line)
-            case 44: /* certificate_revoked */ return Result.make(TlsError.alertCertificateRevoked, "peer received a certificate from us that was revoked"); // @suppress(dscanner.style.long_line)
-            case 45: /* certificate_expired */ return Result.make(TlsError.alertCertificateExpired, "peer received a certificate from us that has expired"); // @suppress(dscanner.style.long_line)
-            case 46: /* certificate_unknown */ return Result.make(TlsError.alertCertificateUnknown, "peer had an unspecified error when handling a certificate we sent"); // @suppress(dscanner.style.long_line)
-            case 47: /* illegal_parameter */ return Result.make(TlsError.alertIllegalParameter, "peer received a handshake message that it determined to be invalid or inconsistent"); // @suppress(dscanner.style.long_line)
-            case 48: /* unknown_ca */ return Result.make(TlsError.alertUnknownCa, "peer could not locate the CA for a certificate chain we sent"); // @suppress(dscanner.style.long_line)
-            case 49: /* access_denied */ return Result.make(TlsError.alertAccessDenied, "peer decided our certificate is not allowed to access it"); // @suppress(dscanner.style.long_line)
-            case 50: /* decode_error */ return Result.make(TlsError.alertDecodeError, "peer received a message that was corrupted or does not follow a constraint defined in RFC8446"); // @suppress(dscanner.style.long_line)
-            case 51: /* decrypt_error */ return Result.make(TlsError.alertDecryptError, "peer failed to decrypt or verify a handshake-specific message from our end"); // @suppress(dscanner.style.long_line)
-            case 70: /* protocol_version */ return Result.make(TlsError.alertProtocolVersion, "peer was unable to negotiate a mutually supported version of TLS"); // @suppress(dscanner.style.long_line)
-            case 71: /* insufficient_security */ return Result.make(TlsError.alertInsufficientSecurity, "peer desires security parameters that are stricter than the ones we support"); // @suppress(dscanner.style.long_line)
-            case 80: /* internal_error */ return Result.make(TlsError.alertInternalError, "peer ran into an unspecified error"); // @suppress(dscanner.style.long_line)
-            case 86: /* inappropriate_fallback */ return Result.make(TlsError.alertInappropriateFallback, "peer failed to accept our reconnection attempt"); // @suppress(dscanner.style.long_line)
-            case 90: /* user_canceled */ return Result.make(TlsError.alertUserCanceled, "peer's user has requested to cancel the connection"); // @suppress(dscanner.style.long_line)
-            case 109: /* missing_extension */ return Result.make(TlsError.alertMissingExtension, "peer did not receive a mandatory or negotiated extension from us"); // @suppress(dscanner.style.long_line)
-            case 110: /* unsupported_extension */ return Result.make(TlsError.alertUnsupportedExtension, "peer received an extension from us that is prohibited or was not negotiated for"); // @suppress(dscanner.style.long_line)
-            case 112: /* unrecognized_name */ return Result.make(TlsError.alertUnrecognizedName, "peer does not provide support for the specified SNI"); // @suppress(dscanner.style.long_line)
-            case 113: /* bad_certificate_status_response */ return Result.make(TlsError.alertBadCertificateStatusResponse, "peer was provided an invalid OCSP response"); // @suppress(dscanner.style.long_line)
-            case 115: /* unknown_psk_identity */ return Result.make(TlsError.alertUnknownPskIdentity, "peer did not receive an acceptable PSK identity from us"); // @suppress(dscanner.style.long_line)
-            case 116: /* certificate_required */ return Result.make(TlsError.alertCertificateRequired, "peer did not receive a certificate from us"); // @suppress(dscanner.style.long_line)
-            case 120: /* no_application_protocol */ return Result.make(TlsError.alertNoApplicationProtocol, "peer does not support any protocols we listed via ALPN"); // @suppress(dscanner.style.long_line)
+            case 0: /* close_notify */ return Result.make(TlsError.alertCloseNotify, "[close_notify] peer has closed their end of the connection"); // @suppress(dscanner.style.long_line)
+            case 10: /* unexpected_message */ return Result.make(TlsError.alertUnexpectedMessage, "[unexpected_message] peer received an unexpected message from our end"); // @suppress(dscanner.style.long_line)
+            case 20: /* bad_record_mac */ return Result.make(TlsError.alertBadRecordMac, "[bad_record_mac] peer was unable to decrypt or verify a message from our end"); // @suppress(dscanner.style.long_line)
+            case 22: /* record_overflow */ return Result.make(TlsError.alertRecordOverflow, "[record_overflow] peer received a mesage that was too large"); // @suppress(dscanner.style.long_line)
+            case 40: /* handshake_failure */ return Result.make(TlsError.alertHandshakeFailure, "[handshake_failure] peer was not able to agree with our available security parameters"); // @suppress(dscanner.style.long_line)
+            case 42: /* bad_certificate */ return Result.make(TlsError.alertBadCertificate, "[bad_certificate] peer was unable to to verify or parse a certificate we sent"); // @suppress(dscanner.style.long_line)
+            case 43: /* unsupported_certificate */ return Result.make(TlsError.alertUnsupportedCertificate, "[unsupported_certificate] peer was unable to support a certificate we sent"); // @suppress(dscanner.style.long_line)
+            case 44: /* certificate_revoked */ return Result.make(TlsError.alertCertificateRevoked, "[certificate_revoked] peer received a certificate from us that was revoked"); // @suppress(dscanner.style.long_line)
+            case 45: /* certificate_expired */ return Result.make(TlsError.alertCertificateExpired, "[certificate_expired] peer received a certificate from us that has expired"); // @suppress(dscanner.style.long_line)
+            case 46: /* certificate_unknown */ return Result.make(TlsError.alertCertificateUnknown, "[certificate_unknown] peer had an unspecified error when handling a certificate we sent"); // @suppress(dscanner.style.long_line)
+            case 47: /* illegal_parameter */ return Result.make(TlsError.alertIllegalParameter, "[illegal_parameter] peer received a handshake message that it determined to be invalid or inconsistent"); // @suppress(dscanner.style.long_line)
+            case 48: /* unknown_ca */ return Result.make(TlsError.alertUnknownCa, "[unknown_ca] peer could not locate the CA for a certificate chain we sent"); // @suppress(dscanner.style.long_line)
+            case 49: /* access_denied */ return Result.make(TlsError.alertAccessDenied, "[access_denied] peer decided our certificate is not allowed to access it"); // @suppress(dscanner.style.long_line)
+            case 50: /* decode_error */ return Result.make(TlsError.alertDecodeError, "[decode_error] peer received a message that was corrupted or does not follow a constraint defined in RFC8446"); // @suppress(dscanner.style.long_line)
+            case 51: /* decrypt_error */ return Result.make(TlsError.alertDecryptError, "[decrypt_error] peer failed to decrypt or verify a handshake-specific message from our end"); // @suppress(dscanner.style.long_line)
+            case 70: /* protocol_version */ return Result.make(TlsError.alertProtocolVersion, "[protocol_version] peer was unable to negotiate a mutually supported version of TLS"); // @suppress(dscanner.style.long_line)
+            case 71: /* insufficient_security */ return Result.make(TlsError.alertInsufficientSecurity, "[insufficient_security] peer desires security parameters that are stricter than the ones we support"); // @suppress(dscanner.style.long_line)
+            case 80: /* internal_error */ return Result.make(TlsError.alertInternalError, "[internal_error] peer ran into an unspecified error"); // @suppress(dscanner.style.long_line)
+            case 86: /* inappropriate_fallback */ return Result.make(TlsError.alertInappropriateFallback, "[inappropriate_fallback] peer failed to accept our reconnection attempt"); // @suppress(dscanner.style.long_line)
+            case 90: /* user_canceled */ return Result.make(TlsError.alertUserCanceled, "[user_canceled] peer's user has requested to cancel the connection"); // @suppress(dscanner.style.long_line)
+            case 109: /* missing_extension */ return Result.make(TlsError.alertMissingExtension, "[missing_extension] peer did not receive a mandatory or negotiated extension from us"); // @suppress(dscanner.style.long_line)
+            case 110: /* unsupported_extension */ return Result.make(TlsError.alertUnsupportedExtension, "[unsupported_extension] peer received an extension from us that is prohibited or was not negotiated for"); // @suppress(dscanner.style.long_line)
+            case 112: /* unrecognized_name */ return Result.make(TlsError.alertUnrecognizedName, "[unrecognized_name] peer does not provide support for the specified SNI"); // @suppress(dscanner.style.long_line)
+            case 113: /* bad_certificate_status_response */ return Result.make(TlsError.alertBadCertificateStatusResponse, "[bad_certificate_status_response] peer was provided an invalid OCSP response"); // @suppress(dscanner.style.long_line)
+            case 115: /* unknown_psk_identity */ return Result.make(TlsError.alertUnknownPskIdentity, "[unknown_psk_identity] peer did not receive an acceptable PSK identity from us"); // @suppress(dscanner.style.long_line)
+            case 116: /* certificate_required */ return Result.make(TlsError.alertCertificateRequired, "[certificate_required] peer did not receive a certificate from us"); // @suppress(dscanner.style.long_line)
+            case 120: /* no_application_protocol */ return Result.make(TlsError.alertNoApplicationProtocol, "[no_application_protocol] peer does not support any protocols we listed via ALPN"); // @suppress(dscanner.style.long_line)
             default: return Result.make(TlsError.alertGeneric, "Alert contains an unrecognised description");
         }
     }
@@ -817,12 +831,12 @@ debug unittest
         // import juptune.http;
 
         // IpAddress ip;
-        // IpAddress.parse(ip, "104.16.124.96", 443).resultAssert;
+        // IpAddress.parse(ip, "45.84.74.9", 443).resultAssert;
 
         // auto client = HttpClient(HttpClientConfig().withTlsConfig(
-        //     TlsConfig().withReadTimeout(2.seconds)
+        //     TlsConfig().withReadTimeout(2.seconds).withDumpCerts(true)
         // ));
-        // client.connectTls(ip, "www.cloudflare.com").resultAssert;
+        // client.connectTls(ip, "man7.org").resultAssert;
 
         // HttpRequest req;
         // req.withMethod("GET");

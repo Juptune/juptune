@@ -6,9 +6,10 @@
  */
 module juptune.http.tls.client_messages;
 
-import juptune.core.util : Result;
+import juptune.core.ds     : Array;
+import juptune.core.util   : Result;
 import juptune.data.buffer : MemoryWriter, MemoryReader;
-import juptune.data.x509 : X509CertificateStore, X509Certificate;
+import juptune.data.x509   : X509CertificateStore, X509Certificate;
 
 import juptune.http.tls.common, juptune.http.tls.models, juptune.http.tls.encode, juptune.http.tls.decode; // Intentionally everything
 
@@ -456,12 +457,31 @@ in(state.mustBeIn(State.readEncryptedServerHello))
 Result handleServerHelloCertificate(
     scope ref MemoryReader reader,
     scope ref TlsStateMachine state,
+    scope ref Array!ubyte peerCertBytes, // This gets populated by this function, it's not being read in.
     scope out X509Certificate peerCert,
     scope X509CertificateStore* certStore,
     X509CertificateStore.SecurityPolicy certPolicy,
+    bool dumpCerts,
+    scope const(char)[] dumpCertsDirName,
 ) @nogc nothrow
 in(state.mustBeIn(State.readEncryptedServerHello))
 {
+    version(Posix)
+    {
+        import juptune.core.ds : String;
+        String dumpDir;
+
+        if(dumpCerts)
+        {
+            import core.sys.posix.sys.stat : mkdir, S_IFDIR, S_IRUSR, S_IWUSR, S_IXUSR;
+
+            dumpDir = String("/tmp/juptune/tls-cert-dump/", dumpCertsDirName);
+            mkdir("/tmp/juptune", S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR);
+            mkdir("/tmp/juptune/tls-cert-dump", S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR);
+            mkdir(dumpDir.slice.ptr, S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR);
+        }
+    }
+
     TlsHandshake.Certificate handshakeCert;
     auto result = autoDecode!"TlsHandshake.Certificate"(reader, handshakeCert);
     if(result.isError)
@@ -469,6 +489,7 @@ in(state.mustBeIn(State.readEncryptedServerHello))
     if(reader.bytesLeft > 0)
         return Result.make(TlsError.tooManyBytes, "when decoding Certificate message - not all bytes were read"); // @suppress(dscanner.style.long_line)
 
+    int certCount;
     bool isFirst = true;
     auto entryReader = MemoryReader(handshakeCert.certificateList);
     return certStore.validateChainFromCopyingDerBytes(
@@ -491,10 +512,37 @@ in(state.mustBeIn(State.readEncryptedServerHello))
                 import juptune.asn1.generated.raw.PKIX1Explicit88_1_3_6_1_5_5_7_0_18 : Certificate;
                 import juptune.data.x509.asn1convert : x509FromDerBytes;
 
+                isFirst = false;
+                peerCertBytes.put(entry.data);
+
                 Certificate _;
-                result = x509FromDerBytes(entry.data, _, peerCert);
+                result = x509FromDerBytes(peerCertBytes.slice, _, peerCert);
             }
 
+            version(Posix) if(dumpCerts)
+            {
+                // TODO: Juptune needs a native file driver
+                import juptune.core.ds : String;
+                import core.stdc.stdio : fopen, fwrite, fclose;
+                
+                auto dumpFile = String(dumpDir, "/", certCount, ".der");
+                scope filePtr = fopen(dumpFile.slice.ptr, "wt");
+                if(filePtr)
+                {
+                    scope(exit) fclose(filePtr);
+                    size_t cursor;
+                    while(cursor < entry.data.length)
+                    {
+                        auto slice = entry.data[cursor..$];
+                        cursor += fwrite(slice.ptr, 1, slice.length, filePtr);
+
+                        import std;
+                        debug writeln(slice.length, " ", cursor);
+                    }
+                }
+            }
+
+            certCount++;
             return Result.noError;
         },
         certPolicy,

@@ -246,6 +246,11 @@ struct HttpClient
         client._isConnected = true;
     }
 
+    version(unittest) ref TlsTcpSocket getTlsSocketForUnittests() @nogc nothrow
+    {
+        return this._tlsSocket;
+    }
+
     /++
      + Connects this client to the given IP address.
      +
@@ -369,6 +374,8 @@ struct HttpClient
     {
         auto closeResult = this.dispatch!"close"();
         auto socketResult = this._socket.close();
+        
+        Result tlsSocketResult = this._tlsSocket.isOpen ? this._tlsSocket.close() : Result.noError;
 
         this._isConnected = false;
         this._selectedVersion = HttpClientVersion.FAILSAFE;
@@ -382,6 +389,8 @@ struct HttpClient
             return closeResult;
         if(socketResult.isError)
             return socketResult; // It's not too big a deal if this gets dropped in favour of closeResult
+        if(tlsSocketResult.isError)
+            return tlsSocketResult; // It's not too big a deal if this gets dropped in favour of closeResult
         return Result.noError;
     }
 

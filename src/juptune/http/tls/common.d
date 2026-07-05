@@ -73,12 +73,15 @@ struct TlsConfig
 
     ubyte maxFragmentReadAttempts = ubyte.max; /// How many attempts are made to fully read in a record's fragment data before an error is thrown
 
+    bool dumpCerts = false; /// A debug-oriented flag to dump any certs encountered.
+
     @safe @nogc nothrow pure:
 
     TlsConfig withReadTimeout(Duration v) { this.readTimeout = v; return this; }
     TlsConfig withWriteTimeout(Duration v) { this.writeTimeout = v; return this; }
     TlsConfig withMaxFragmentReadAttempts(ubyte v) { this.maxFragmentReadAttempts = v; return this; }
     TlsConfig withAlwaysTimeout(bool v) { this.alwaysTimeout = v; return this; }
+    TlsConfig withDumpCerts(bool v) { this.dumpCerts = v; return this; }
 }
 
 package:

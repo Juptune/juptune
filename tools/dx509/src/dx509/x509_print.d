@@ -69,7 +69,7 @@ int onX509PrintCommand(string[] args)
             buffer.clear();
             return Result.noError;
         },
-        onCertificate: (Certificate asn1Cert, X509Certificate x509Cert) {
+        onCertificate: (Certificate _, X509Certificate x509Cert) {
             X509ExtensionStore extensions;
             X509ExtensionStore.fromCertificate(x509Cert, extensions).resultEnforce;
 
