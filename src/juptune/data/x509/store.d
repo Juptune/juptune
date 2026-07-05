@@ -149,6 +149,9 @@ struct X509ExtensionStore
     
     ///
     ref const(Array!(X509Extension.Unknown)) getUnknownExtensions() @nogc nothrow const => this._unknowns;
+
+    /// (warning: this is fairly low level since it uses an internal type - this is exposed for debugging rather than for features)
+    void getKnownExtensions(scope out NullableTypes types) @nogc nothrow const { types = this._extensions; }
     
     /++
      + Gets the value of an extension if it was set, or null.
@@ -356,6 +359,8 @@ struct X509CertificateStore
         import juptune.asn1.decode.bcd.encoding : Asn1DecodeError;
         import juptune.data.pem : PemParser;
 
+        // TODO: Swap to x509FromPem
+
         ArrayNonShrink!ubyte buffer;
         auto parser = PemParser(pem);
         while(!parser.eof)
@@ -423,6 +428,7 @@ struct X509CertificateStore
 
         ArrayNonShrink!ubyte buffer;
         auto parser = PemParser(pem);
+        // TODO: Swap to x509FromPem
 
         return this.validateChainFromCopyingDerBytes(
             (scope out derBytes, scope out success){
@@ -570,6 +576,39 @@ struct X509CertificateStore
     {
         const hash = this.hashKey(subjectKeyId);
         return this._certByHashedSubjectKey.get(hash, default_: null);
+    }
+
+    /++
+     + Iterates over all certificates found inside of the store, and calls the user provided callback on all of them.
+     +
+     + Notes:
+     +  For your own sanity (and memory safety), you MUST NOT modify the `Cert*` provided to the callback or any of the data inside of it.
+     +
+     +  If D's `const` wasn't such a PITA to deal with it would've been marked as such.
+     +
+     + Params:
+     +  onCert = The callback to call for each ceritificate in the store.
+     +
+     + Throws:
+     +  Anything that `onCert` can throw.
+     +
+     + Returns:
+     +  Any errorful `Result` produced by `onCert`, otherwise `Reult.noError`.
+     + ++/
+    alias foreachCert = foreachCertImpl!(Result delegate(Cert*) @nogc nothrow);
+    alias foreachCertGc = foreachCertImpl!(Result delegate(Cert*));
+
+    private Result foreachCertImpl(DelegateT)(scope DelegateT onCert)
+    in(onCert !is null, "onCert must not be null")
+    {
+        foreach(cert; this._certs.slice)
+        {
+            auto result = onCert(cert);
+            if(result.isError)
+                return result;
+        }
+
+        return Result.noError;
     }
 
     private X509Certificate.Time currTime() @nogc nothrow

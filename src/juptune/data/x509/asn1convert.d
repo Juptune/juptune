@@ -51,6 +51,9 @@ enum X509Error
     algorithmHasParameters, /// A Signing/Key algorithm contains parameters when it shouldn't.
 
     criticalExtensionNotHandled, /// (Useful for user code) an extension marked as critical was unable to be handled.
+
+    // Helper parsing related
+    wrongPemLabel, /// A certificate within a PEM encoded file contains the wrong label.
 }
 
 /// Namespace class used to store all supported signature algorithms.
@@ -517,6 +520,31 @@ struct X509Certificate
         {
             return this != other && !this.isBefore(other);
         }
+
+        void toString(SinkT)(scope SinkT sink)
+        {
+            import juptune.core.util.conv : toBase10, IntToCharBuffer;
+
+            IntToCharBuffer buffer;
+
+            sink(this.year.toBase10(buffer));
+            sink("-");
+            sink(this.month.toBase10(buffer));
+            sink("-");
+            sink(this.day.toBase10(buffer));
+            sink(" ");
+            if(this.hour < 10)
+                sink("0");
+            sink(this.hour.toBase10(buffer));
+            sink(":");
+            if(this.minute < 10)
+                sink("0");
+            sink(this.minute.toBase10(buffer));
+            sink(":");
+            if(this.second < 10)
+                sink("0");
+            sink(this.second.toBase10(buffer));
+        }
     }
 
     // From "Certificate"
@@ -596,6 +624,125 @@ in(derBytes.length > 0, "bug: derBytes is null/empty")
     result = x509FromAsn1(asn1Cert, cert);
     if(result.isError)
         return result.wrapError("when converting ASN.1 Certificate into an X509Certificate:");
+
+    return Result.noError;
+}
+
+/++
+ + Parses all certificates from the given PEM-encoded string, and passes them to the user provided callback.
+ +
+ + Notes:
+ +  The user code is completely in charge of managing the memory used by this function, via teh `onPutBytes` and `onFinishBytes` callbacks.
+ +
+ +  The result of `onFinishBytes` MUST stay valid until `onCertificate` is called for the certificate represented by those "finished bytes".
+ +  In other words, once `onCertificate` is called, the underlying bytes can be immediately freed if the user code wishes, though that will
+ +  also invalidate the `Certificate` and `X509Certificate` that was parsed from it.
+ +
+ +  If the user code needs to preserve either form of the parse certificate, then it MUST keep the underlying "finished bytes" for it alive as well,
+ +  as their lifetimes are all tied together.
+ +
+ + Callback Examples:
+ +
+ +  ```
+ +  import std.array : Appender;
+ + 
+ +  Appender!(ubyte[]) buffer;
+ +  X509Certificate[] certs;
+ +
+ +  x509FromPemGC(
+ +    getPemCertificateSomehow(),
+ +    onPutBytes: (scope bytes) { buffer.put(bytes); return Result.noError; },
+ +    onFinishBytes: (scope out bytes) { bytes = buffer.data.idup; buffer.clear(); return Result.noError; },
+ +    onCertificate: (asn1Cert, x509Cert) { certs ~= x509Cert; return Result.noError; } // Safe since we copied the underlying bytes
+ +  );
+ +  ```
+ +
+ + Params:
+ +  pem             = The PEM-encoded string to parse.
+ +  onPutBytes      = Called whenever the next set of bytes for a certificate are parsed from `pem`. All bytes must be preserved and eventually returned via `onFinishBytes`.
+ +                    After each call to `onFinishBytes`, this callback MUST start pushing data into a separate/emptied buffer, as all future bytes will be for a different certificate.
+ +  onFinishBytes   = Finalises the buffer being used by `onPutBytes`, and returns a slice for all data that was provided to `onPutBytes` representing the DER bytes
+ +                    for a SINGLE certificate. This data must be valid until `onCertificate` is called, after which it may be discarded (with caveats, see Notes).
+ +  onCertificate   = Callback for handling the `Certificate` (raw ASN.1 form) and `X509Certificate` (more structured form) that were decoded from the bytes provided by the other two callbacks.
+ +
+ + Throws:
+ +  Anything that `onPutBytes` can throw.
+ +
+ +  Anything that `onFinishBytes` can throw.
+ +
+ +  Anything that `onCertificate` can throw.
+ +
+ +  Anything that `PemParser.parseNextInfer` can throw.
+ +
+ +  Anything that `x509FromDerBytes` can throw.
+ +
+ +  `X509Error.wrongPemLabel` if any PEM label is not "CERTIFICATE" (TODO: Some PEMs also have a PRIVATE KEY label, need to figure out how to best handle that case).
+ +
+ + Returns:
+ +  A result indicating if an error occurred or not.
+ + ++/
+alias x509FromPem = x509FromPemImpl!(
+    Result delegate(scope const(ubyte)[] bytes) @nogc nothrow,
+    Result delegate(out const(ubyte)[] finishedBytes) @nogc nothrow,
+    Result delegate(Certificate asn1Cert, X509Certificate cert) @nogc nothrow,
+);
+alias x509FromPemGC = x509FromPemImpl!(
+    Result delegate(scope const(ubyte)[] bytes),
+    Result delegate(out const(ubyte)[] finishedBytes),
+    Result delegate(Certificate asn1Cert, X509Certificate cert),
+);
+
+// See above aliases for public overloads
+private Result x509FromPemImpl(
+    PutBytesDelegateT,
+    FinishBytesDelegateT,
+    OnCertificateDelegateT,
+)(
+    scope const(char)[] pem,
+    scope PutBytesDelegateT onPutBytes,
+    scope FinishBytesDelegateT onFinishBytes,
+    scope OnCertificateDelegateT onCertificate,
+)
+{
+    import juptune.core.ds  : String;
+    import juptune.data.pem : PemParser;
+
+    auto parser = PemParser(pem);
+
+    while(!parser.eof)
+    {
+        auto result = parser.parseNextInfer(
+            onStart: (scope const(char[]) label){
+                if(label != "CERTIFICATE")
+                {
+                    return Result.make(
+                        X509Error.wrongPemLabel,
+                        "expected data boundary in PEM to have label CERTIFICATE",
+                        String("got label '", label, "'")
+                    );
+                }
+                return Result.noError; 
+            },
+            onData: (scope const(ubyte)[] data) => onPutBytes(data),
+            onEnd: (){
+                const(ubyte)[] derBytes;
+                auto result = onFinishBytes(derBytes);
+                if(result.isError)
+                    return result.wrapError("when calling onFinishBytes:");
+
+                Certificate asn1Cert;
+                X509Certificate cert;
+                result = x509FromDerBytes(derBytes, asn1Cert, cert);
+                if(result.isError)
+                    return result;
+
+                return onCertificate(asn1Cert, cert);
+            },
+        );
+
+        if(result.isError)
+            return result.wrapError("when parsing certificates from PEM:");
+    }
 
     return Result.noError;
 }

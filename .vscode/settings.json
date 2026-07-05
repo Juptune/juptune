@@ -1,3 +1,8 @@
 {
-    "mesonbuild.configureOnOpen": false
+    "mesonbuild.configureOnOpen": false,
+    "d.projectImportPaths": [
+        "src/",
+        "tools/dasn1/src/",
+        "tools/dx509/src/"
+    ]
 }

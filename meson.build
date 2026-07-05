@@ -37,6 +37,7 @@ build_unittests = get_option('build-unittests')
 build_examples = get_option('build-examples')
 build_integration_tests = get_option('build-integration-tests')
 build_dasn1 = get_option('build-dasn1')
+build_dx509 = get_option('build-dx509')
 
 if get_option('lightweight-results')
     juptune_d_versions += [
@@ -252,6 +253,10 @@ endif
 
 if build_dasn1
     subdir('tools/dasn1')
+endif
+
+if build_dx509
+    subdir('tools/dx509')
 endif
 
 if build_integration_tests

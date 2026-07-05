@@ -49,6 +49,13 @@ struct PemParser
     )
         => this.parseNextImpl(onStart, onData, onEnd);
 
+    Result parseNextInfer(OnStartDelegateT, OnDataDelegateT, OnEndDelegateT)(
+        scope OnStartDelegateT onStart,
+        scope OnDataDelegateT onData,
+        scope OnEndDelegateT onEnd,
+    )
+        => this.parseNextImpl(onStart, onData, onEnd);
+
     private Result parseNextImpl(OnStartT, OnDataT, OnEndT)(
         scope OnStartT onStart,
         scope OnDataT onData,

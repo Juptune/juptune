@@ -51,6 +51,14 @@ local_resource(
     auto_init=False
 )
 
+local_resource(
+    'compile dx509',
+    cmd='meson compile dx509 -C build',
+    deps=['meson.build', 'tools/dx509/src'],
+    labels=['development'],
+    auto_init=False
+)
+
 #### Refresh ASN.1 Models ####
 
 refresh_resources = []
