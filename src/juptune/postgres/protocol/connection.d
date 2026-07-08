@@ -427,7 +427,6 @@ struct PostgresProtocol
                         &this._plaintextSocket,
                         this._tlsBuffers[0..READ_BUFFER_SIZE],
                         this._tlsBuffers[READ_BUFFER_SIZE..$],
-                        staging[0..$],
                         TlsConfig()
                             .withWriteTimeout(this._config.writeTimeout)
                             .withReadTimeout(this._config.readTimeout)
@@ -438,7 +437,7 @@ struct PostgresProtocol
                         (connectInfo.customStore is null) ? x509GetPlatformDefaultStore() : connectInfo.customStore,
                         connectInfo.x509Policy
                     );
-                    result = this._encryptedSocket.handshakeAsClient(clientHello, serverHello);
+                    result = this._encryptedSocket.handshakeAsClient(clientHello, serverHello, staging[0..$]);
                     if(result.isError)
                         return result;
                 }

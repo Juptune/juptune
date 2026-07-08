@@ -390,6 +390,8 @@ private Result readExtensions(
                 break;
             
             case serverName:
+                // Servers are allowed to send an empty serverName response to us if they end up using SNI.
+                // It's optional and informational.
                 autoDecodeExt!(TlsExtension.EmptyExtensionData);
                 break;
 
@@ -475,9 +477,10 @@ in(state.mustBeIn(State.readEncryptedServerHello))
         {
             import core.sys.posix.sys.stat : mkdir, S_IFDIR, S_IRUSR, S_IWUSR, S_IXUSR;
 
-            dumpDir = String("/tmp/juptune/tls-cert-dump/", dumpCertsDirName);
+            dumpDir = String("/tmp/juptune/tls-cert-dump/from-server/", dumpCertsDirName);
             mkdir("/tmp/juptune", S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR);
             mkdir("/tmp/juptune/tls-cert-dump", S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR);
+            mkdir("/tmp/juptune/tls-cert-dump/from-server", S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR);
             mkdir(dumpDir.slice.ptr, S_IFDIR | S_IRUSR | S_IWUSR | S_IXUSR);
         }
     }

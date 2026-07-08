@@ -334,9 +334,9 @@ struct HttpClient
         this._tlsReadStorage.length     = 1024 * 17;
 
         Array!ubyte tlsStagingStorage; // We only need the staging buffer during the handshake.
-        tlsStagingStorage.length  = 1024 * 32;
+        tlsStagingStorage.length = 1024 * 32;
         
-        this._tlsSocket = TlsTcpSocket(&this._socket, this._tlsReadStorage[], this._tlsWriteStorage[], tlsStagingStorage[], this._config.tls); // @suppress(dscanner.style.long_line)
+        this._tlsSocket = TlsTcpSocket(&this._socket, this._tlsReadStorage[], this._tlsWriteStorage[], this._config.tls); // @suppress(dscanner.style.long_line)
         this._https1 = Http1ClientImpl!TlsTcpSocket(this._config, &this._tlsSocket, this._writeBuffer, this._readBuffer); // @suppress(dscanner.style.long_line)
         this._isConnected = true;
         this._selectedVersion = HttpClientVersion.https1;
@@ -347,7 +347,7 @@ struct HttpClient
         TlsServerHelloInSettings serverHello;
         serverHello.certStore = x509GetPlatformDefaultStore();
 
-        result = this._tlsSocket.handshakeAsClient(clientHello, serverHello);
+        result = this._tlsSocket.handshakeAsClient(clientHello, serverHello, tlsStagingStorage[]);
         if(result.isError)
         {
             cast(void)this.close();
@@ -577,9 +577,9 @@ struct HttpClient
 
 private String setIpHostname(IpAddress ip, scope const(char)[] host = null) @nogc nothrow
 {
-    import juptune.core.ds : Array;
+    import juptune.core.ds : ArrayNonShrink;
 
-    Array!char hostName;
+    ArrayNonShrink!char hostName;
 
     if(host.length == 0)
     {

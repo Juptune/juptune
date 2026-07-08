@@ -25,6 +25,8 @@ struct TlsServerHelloInSettings
     X509CertificateStore.SecurityPolicy certPolicy;
 }
 
+// REALLY IMPORTANT TODO: Read and implement RFC9525 where possible (it introduces more to the verification process)
+// (also this is one struct that really needs docs written)
 struct TlsSocket(UnderlyingSocketT)
 {
     import juptune.core.ds     : Array;
@@ -41,7 +43,6 @@ struct TlsSocket(UnderlyingSocketT)
         ubyte[]      _readBuffer;
         MemoryReader _recordReader;
         MemoryWriter _recordWriter;
-        MemoryWriter _stagingBuffer;
 
         MemoryReader _leftoverReader; // If non-empty, then receive wasn't able to pass all the data back to the user, so this reader holds the remaining leftovers (subreader of _readBuffer)
 
@@ -53,18 +54,15 @@ struct TlsSocket(UnderlyingSocketT)
         UnderlyingSocketT* socket, 
         ubyte[] readBuffer,
         ubyte[] writeBuffer,
-        ubyte[] stagingBuffer,
         TlsConfig config,
     ) @nogc nothrow
     in(socket !is null, "socket is null")
     in(readBuffer.length > 0, "readBuffer is empty")
     in(writeBuffer.length > 0, "writeBuffer is empty")
-    in(stagingBuffer.length > 0, "stagingBuffer is empty")
     {
         this._socket = socket;
         this._readBuffer = readBuffer;
         this._recordWriter = MemoryWriter(writeBuffer);
-        this._stagingBuffer = MemoryWriter(stagingBuffer);
         this._config = config;
         this._state = TlsStateMachine(State.waitingToStart);
     }
@@ -72,7 +70,9 @@ struct TlsSocket(UnderlyingSocketT)
     Result handshakeAsClient(
         scope const ref TlsClientHelloOutSettings chSettings,
         scope ref TlsServerHelloInSettings shSettings,
+        scope ubyte[] stagingBuffer,
     ) @nogc nothrow
+    in(stagingBuffer.length > 0, "stagingBuffer is empty")
     {
         import juptune.http.tls.client_messages : 
             putClientHello, 
@@ -87,22 +87,24 @@ struct TlsSocket(UnderlyingSocketT)
             writeClientFinished
         ;
 
+        scope stagingWriter = MemoryWriter(stagingBuffer);
+
         // Send ClientHello (and add it into the transcript)
 
-        auto result = putClientHello(this._stagingBuffer, this._state,
+        auto result = putClientHello(stagingWriter, this._state,
             putExtensions: (){
-                auto result = putKeyShareExtension(this._stagingBuffer, this._state, this._encryptContext);
+                auto result = putKeyShareExtension(stagingWriter, this._state, this._encryptContext);
                 if(result.isError)
                     return result;
 
-                result = putSignatureAlgorithmsExtension(this._stagingBuffer, this._state);
+                result = putSignatureAlgorithmsExtension(stagingWriter, this._state);
                 if(result.isError)
                     return result;
 
                 if(chSettings.serverNameIndicator.length > 0)
                 {
                     result = putServerNameIndicatorExtension(
-                        this._stagingBuffer, 
+                        stagingWriter, 
                         this._state, 
                         chSettings.serverNameIndicator
                     );
@@ -116,17 +118,17 @@ struct TlsSocket(UnderlyingSocketT)
         if(result.isError)
             return result.wrapError("when putting ClientHello into staging buffer:");
 
-        result = this.sendAsPlaintextRecords(TlsPlaintext.ContentType.handshake, this._stagingBuffer.usedBuffer);
+        result = this.sendAsPlaintextRecords(TlsPlaintext.ContentType.handshake, stagingWriter.usedBuffer);
         if(result.isError)
             return result.wrapError("when sending ClientHello over socket:");
-        this._encryptContext.transcript.put(this._stagingBuffer.usedBuffer);
-        this._stagingBuffer.cursor = 0;
+        this._encryptContext.transcript.put(stagingWriter.usedBuffer);
+        stagingWriter.cursor = 0;
 
         // Read unencrypted ServerHello
 
         TlsHandshake serverHello;
-        MemoryReader serverHelloReader; // NOTE: Subset of _stagingBuffer
-        result = this.fetchPlaintextHandshakeRecordsIntoStaging(serverHello, serverHelloReader, allowCompaction: true);
+        MemoryReader serverHelloReader; // NOTE: Subset of stagingWriter
+        result = this.fetchPlaintextHandshakeRecordsIntoStaging(serverHello, serverHelloReader, stagingWriter, allowCompaction: true); // @suppress(dscanner.style.long_line)
         if(result.isError)
             return result.wrapError("when fetching unencrypted ServerHello over socket:");
         if(serverHello.messageType != TlsHandshake.Type.serverHello)
@@ -137,7 +139,7 @@ struct TlsSocket(UnderlyingSocketT)
             return result.wrapError("when parsing unencrypted serverHello:");
         if(serverHelloReader.bytesLeft != 0)
             return Result.make(TlsError.tooManyBytes, "when reading ServerHello, not all bytes needed to be read?");
-        this._stagingBuffer.cursor = 0;
+        stagingWriter.cursor = 0;
 
         // Setup encryption state
 
@@ -216,14 +218,14 @@ struct TlsSocket(UnderlyingSocketT)
                                 this._state,
                                 this._peerCert,
                                 verifyHash
-                            ).wrapError("when reading certificateVerify");
+                            ).wrapError("when reading certificateVerify:");
 
                         case finished:
                             return handleServerHelloFinished(
                                 messageReader,
                                 this._state,
                                 this._encryptContext
-                            ).wrapError("when reading finished");
+                            ).wrapError("when reading finished:");
 
                         default: break;
                     }
@@ -255,7 +257,6 @@ struct TlsSocket(UnderlyingSocketT)
         if(result.isError)
             return result;
 
-        this._stagingBuffer = MemoryWriter.init; // No longer needed ^_^
         return Result.noError;
     }
 
@@ -609,11 +610,12 @@ struct TlsSocket(UnderlyingSocketT)
     private Result fetchPlaintextHandshakeRecordsIntoStaging(
         scope out TlsHandshake record,
         scope out MemoryReader reader,
+        scope ref MemoryWriter stagingWriter,
         bool allowCompaction = false,
     ) @nogc nothrow
     {
         bool isFirst = true;
-        const stagingCursorStart = this._stagingBuffer.cursor;
+        const stagingCursorStart = stagingWriter.cursor;
         while(true) // Handshake records can still get fragmented, so we'll have to keep reading in records until we're done
         {
             // Ensure we have enough bytes for the header.
@@ -685,7 +687,7 @@ struct TlsSocket(UnderlyingSocketT)
                 success = MemoryReader(fragment[1..4]).readU24BE(record.length);
                 assert(success, "bug: how did success fail?");
 
-                success = this._stagingBuffer.tryBytes(fragment[4..$]);
+                success = stagingWriter.tryBytes(fragment[4..$]);
                 if(!success)
                     return Result.make(TlsError.dataExceedsBuffer, "not enough space in staging buffer to store record fragment"); // @suppress(dscanner.style.long_line)
 
@@ -693,16 +695,16 @@ struct TlsSocket(UnderlyingSocketT)
             }
             else
             {
-                success = this._stagingBuffer.tryBytes(fragment);
+                success = stagingWriter.tryBytes(fragment);
                 if(!success)
                     return Result.make(TlsError.dataExceedsBuffer, "not enough space in staging buffer to store record fragment"); // @suppress(dscanner.style.long_line)
             }
             
             // Once we've read in enough bytes, pass everything back to the caller.
-            const bytesInStaging = this._stagingBuffer.cursor - stagingCursorStart;
+            const bytesInStaging = stagingWriter.cursor - stagingCursorStart;
             if(bytesInStaging == record.length)
             {
-                reader = MemoryReader(this._stagingBuffer.usedBuffer[stagingCursorStart..$]);
+                reader = MemoryReader(stagingWriter.usedBuffer[stagingCursorStart..$]);
                 return Result.noError;
             }
         }
@@ -828,27 +830,27 @@ debug unittest
 
     auto loop = EventLoop(EventLoopConfig());
     loop.addGCThread((){
-        // import juptune.http;
+        import juptune.http;
 
-        // IpAddress ip;
-        // IpAddress.parse(ip, "45.84.74.9", 443).resultAssert;
+        IpAddress ip;
+        IpAddress.parse(ip, "95.216.24.116", 443).resultAssert;
 
-        // auto client = HttpClient(HttpClientConfig().withTlsConfig(
-        //     TlsConfig().withReadTimeout(2.seconds).withDumpCerts(true)
-        // ));
-        // client.connectTls(ip, "man7.org").resultAssert;
+        auto client = HttpClient(HttpClientConfig().withTlsConfig(
+            TlsConfig().withReadTimeout(2.seconds).withDumpCerts(true)
+        ));
+        client.connectTls(ip, "forum.dlang.org").resultAssert;
 
-        // HttpRequest req;
-        // req.withMethod("GET");
-        // req.withPath("/");
-        // req.setHeader("User-Agent", "curl/8.16.0");
-        // req.setHeader("Accept", "*/*");
+        HttpRequest req;
+        req.withMethod("GET");
+        req.withPath("/");
+        req.setHeader("User-Agent", "curl/8.16.0");
+        req.setHeader("Accept", "*/*");
         
-        // HttpResponse resp;
-        // client.request(req, resp).resultAssert;
+        HttpResponse resp;
+        client.request(req, resp).resultAssert;
 
-        // import std.file : write;
-        // debug write("test.html", cast(string)resp.body.slice);
+        import std.file : write;
+        debug write("test.html", cast(string)resp.body.slice);
     });
     loop.join();
 }

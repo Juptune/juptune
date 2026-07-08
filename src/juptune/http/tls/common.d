@@ -73,7 +73,7 @@ struct TlsConfig
 
     ubyte maxFragmentReadAttempts = ubyte.max; /// How many attempts are made to fully read in a record's fragment data before an error is thrown
 
-    bool dumpCerts = false; /// A debug-oriented flag to dump any certs encountered.
+    bool dumpCerts = false; /// A debug-oriented flag to dump any certs encountered. Mainly for internal use. Look for stuff under /tmp/juptune for raw DER bytes of certs in the cert chain.
 
     @safe @nogc nothrow pure:
 
