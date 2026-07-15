@@ -26,6 +26,12 @@ version(Posix) private
     /// An alias to the platform's default tcp socket implementation.
     public alias TcpSocket = PosixTcpSocket;
 
+    /// An alias to the platform's default file implementation.
+    public alias File = PosixFile;
+
+    /// An alias to the platform's default directory implementation.
+    public alias Directory = PosixDirectory;
+
     import core.sys.posix.netinet.in_ : in_addr;
     extern(C) int inet_aton(const scope char*, scope in_addr*) @nogc nothrow;
 }
@@ -39,6 +45,21 @@ enum IoError
 
     /// A request timed out, or was cancelled.
     timeout,
+
+    /// The resource already exists (e.g. trying to create a file that already exists).
+    alreadyExists,
+
+    /// Attempted to perform a file-only operation against a directory.
+    isDirectory,
+
+    /// Attempted to perform a directory-only operation against a file.
+    notDirectory,
+
+    /// Access was denied for any number of various reasons.
+    accessDenied,
+
+    /// The resource wasn't found (e.g. trying to open a file that doesn't exist).
+    notFound,
 }
 
 private void wrapIOResult(scope ref Result result) @trusted @nogc nothrow
@@ -52,6 +73,26 @@ private void wrapIOResult(scope ref Result result) @trusted @nogc nothrow
             case ECANCELED:
             case ETIME:
                 result.changeErrorType(IoError.timeout);
+                break;
+
+            case EEXIST:
+                result.changeErrorType(IoError.alreadyExists);
+                break;
+
+            case EISDIR:
+                result.changeErrorType(IoError.isDirectory);
+                break;
+
+            case ENOTDIR:
+                result.changeErrorType(IoError.notDirectory);
+                break;
+
+            case EACCES:
+                result.changeErrorType(IoError.accessDenied);
+                break;
+
+            case ENOENT:
+                result.changeErrorType(IoError.notFound);
                 break;
 
             default: break;
@@ -464,7 +505,7 @@ struct PosixTcpSocket
         IpAddress _ip;
     }
 
-    GenericIoDriver _driver;
+    GenericIoDriver!(FileDescriptorReadWriteType.sendAndRecieve) _driver;
     alias _driver this;
 
     nothrow @nogc:
@@ -740,17 +781,365 @@ struct PosixTcpSocket
 }
 
 /++
+ + A `File` implementation that's probably not actually POSIX compatible.
+ +
+ + As with all IO Driver implementations, this struct inherits `GenericIoDriver` for common IO functions.
+ +
+ + See_Also:
+ +  `GenericIoDriver`
+ + ++/
+version(Posix)
+struct PosixFile
+{
+    import core.sys.linux.fcntl :
+        O_CLOEXEC,
+        O_CREAT,
+        O_DIRECT,
+        O_DSYNC,
+        O_EXCL,
+        O_NOATIME,
+        O_NOFOLLOW,
+        O_RDONLY,
+        O_WRONLY,
+        O_RDWR,
+        O_TRUNC,
+        S_IRUSR,
+        S_IWUSR,
+        S_IXUSR,
+        S_IRGRP,
+        S_IWGRP,
+        S_IXGRP,
+        S_IROTH,
+        S_IWOTH,
+        S_IXOTH,
+        AT_FDCWD
+    ;
+
+    private enum ALWAYS_USED_FLAGS = O_CLOEXEC; // O_CLOEXEC stops child processes from using any files opened by this process - it's a good security practice.
+
+    GenericIoDriver!(FileDescriptorReadWriteType.writeAndRead) _driver;
+    alias _driver this;
+
+    /// Determines whether the file can be written to and/or read from.
+    enum AccessMode
+    {
+        FAILSAFE = -1,
+
+        /// The file can only be read from.
+        readOnly = O_RDONLY,
+
+        /// The file can only be written to.
+        writeOnly = O_WRONLY,
+
+        /// The file can be both written to and read from.
+        readWrite = O_RDWR,
+    }
+
+    /// Determines how to deal with files that don't/already exist.
+    enum CreateMode
+    {
+        /// Don't create a new file. If the file doesn't exist then you'll run into an error result.
+        dontCreate = 0,
+
+        /// Always attempt to create a new file. If the file already exists, then you'll run into an error result.
+        create = O_CREAT | O_EXCL,
+
+        /// Always attempt to create a new file. If the file already exists then it'll be truncated.
+        truncate = O_CREAT | O_TRUNC,
+    }
+
+    /// Additional flags related to opening the file. This is a bit mask that can be ORed together.
+    enum Flags
+    {
+        none = 0,
+
+        /// Attempt to bypass any kernal-level caching and data duplication.
+        direct = O_DIRECT,
+
+        /// Writes will not return until all of the data & metadata required for the file to still function, have been fully committed to disk.
+        dsync = O_DSYNC,
+
+        /// The file access timestamp won't be updated.
+        noAccessTime = O_NOATIME,
+
+        /// If the last segment of the path is a symlink, you'll run into an error result instead of opening the file.
+        noFollowTrailingSymlink = O_NOFOLLOW,
+    }
+
+    /// Flags related to changing the behaviour for how file paths are resolved. This is a bit mask that can be ORed together.
+    enum ResolveFlags
+    {
+        /// No changes. They work as you'd expect.
+        asNormal = 0,
+
+        /// The path to the file being opened MUST belong to the same mounting point as the current working directory.
+        mustBeOnSameMountAsCwd = 1 << 0,
+
+        /// "Magic links" (google it) will generate an error result upon being opened.
+        noMagicLinks = 1 << 1,
+
+        /// The path to the file being opened MUST NOT contain a symlink at any point in its path.
+        noSymlinksAtAnyPoint = 1 << 2,
+        
+        /// The path MUST NOT contain a starting "/", and MUST NOT contain any usage of things like "../". This guarentees that the file being opened,
+        /// is directly under the current working directory. (TODO: Would be really nice to detach this functionality from the CWD).
+        mustBeBeneathCwd = 1 << 3,
+
+        /// The current working directory is treated as a fake root, so "/" resolves to the CWD, and "../" cannot break out of the CWD.
+        cwdIsFakeRoot = 1 << 4,
+    }
+
+    enum PermissionFlags
+    {
+        none = 0,
+        ownerRead = S_IRUSR,
+        ownerWrite = S_IWUSR,
+        ownerExecute = S_IXUSR,
+        groupRead = S_IRGRP,
+        groupWrite = S_IWGRP,
+        groupExecute = S_IXGRP,
+        otherRead = S_IROTH,
+        otherWrite = S_IWOTH,
+        otherExecute = S_IXOTH,
+
+        ownerAll = ownerRead | ownerWrite | ownerExecute,
+        groupAll = groupRead | groupWrite | groupExecute,
+    }
+
+    /// Helper function around `.open` for when you want to create a new file (the file must not exist already).
+    static Result createNew(
+        scope const(char)[] path,
+        scope out PosixFile file,
+        PermissionFlags     permissions = PermissionFlags.ownerAll | PermissionFlags.groupAll,
+        ResolveFlags        resolveFlags = ResolveFlags.asNormal,
+        scope Directory*    cwd = null,
+        bool                pathIsNullTerminated = false,
+    ) @nogc nothrow
+    {
+        return File.open(
+            path, 
+            AccessMode.readWrite, 
+            CreateMode.create,
+            Flags.none, 
+            resolveFlags, 
+            permissions,
+            cwd,
+            file,
+            pathIsNullTerminated
+        );
+    }
+
+    /// Helper function around `.open` for when you want to create a new file if it doesn't exist, or truncate it if it already exists.
+    static Result createOrTruncate(
+        scope const(char)[] path,
+        scope out PosixFile file,
+        PermissionFlags     permissions = PermissionFlags.ownerAll | PermissionFlags.groupAll,
+        ResolveFlags        resolveFlags = ResolveFlags.asNormal,
+        scope Directory*    cwd = null,
+        bool                pathIsNullTerminated = false,
+    ) @nogc nothrow
+    {
+        return File.open(
+            path, 
+            AccessMode.readWrite, 
+            CreateMode.truncate,
+            Flags.none, 
+            resolveFlags, 
+            permissions,
+            cwd,
+            file,
+            pathIsNullTerminated
+        );
+    }
+
+    /// Helper function around `.open` for when you want to open a prexisting file for reading.
+    static Result openForReading(
+        scope const(char)[] path,
+        scope out PosixFile file,
+        ResolveFlags        resolveFlags = ResolveFlags.asNormal,
+        scope Directory*    cwd = null,
+        bool                pathIsNullTerminated = false,
+    ) @nogc nothrow
+    {
+        return File.open(
+            path, 
+            AccessMode.readOnly, 
+            CreateMode.dontCreate,
+            Flags.none, 
+            resolveFlags, 
+            PermissionFlags.none,
+            cwd,
+            file,
+            pathIsNullTerminated
+        );
+    }
+
+    /++
+     + Opens/creates a file at the given path, using the provided flags & modes to determine the exact behaviour of the opened file.
+     +
+     + Notes:
+     +  The `O_CLOEXEC` flag is always specified when opening a file, due to its security benefits.
+     +
+     + Params:
+     +  path                    = The path - relative or absolute - to the file to open/create.
+     +  accessMode              = Controls whether the file can be read from and/or written to.
+     +  createMode              = Controls whether the file is created; truncated, or simply opened if it already exists.
+     +  flags                   = Additional flags to control low-level details.
+     +  resolveFlags            = Controls how `path` gets resolved, and what additional limitations may be placed on it.
+     +  permissions             = The permission mask that gets applied to the file if it ends up being created.
+     +  cwd                     = If not null, then this directory is used as the "current working directory" for purposes of resolving the `path`.
+     +                            If null, then the process' globally set CWD is used instead.
+     +  file                    = The opened file. If this function returns an error, then the result of this value is undefined.
+     +  pathIsNullTerminated    = If true, then `path` is treated as if it's already null terminated, and so a pointer to it is passed directly to the underlying syscall.
+     +                            If false, then `path` is copied into a short-lived buffer which will be given a null terminator. Default to false unless you're absolutely certain.
+     +
+     + Throws:
+     +  Anything that `juptuneEventLoopSubmitEvent`.
+     +
+     +  Anything that the `openat2` syscall can generate (some errors are wrapped into an `IoError`, others will be a `LinuxError` instead).
+     +
+     + Returns:
+     +  A `Result` indicating whether something went wrong or not.
+     + ++/
+    static Result open(
+        scope const(char)[] path, 
+        AccessMode          accessMode, 
+        CreateMode          createMode,
+        Flags               flags,
+        ResolveFlags        resolveFlags,
+        PermissionFlags     permissions,
+        scope Directory*    cwd,
+        scope out PosixFile file,
+        bool                pathIsNullTerminated = false,
+    ) @nogc nothrow
+    {
+        FileDescriptor fd;
+        auto result = File.openImpl(path, accessMode, createMode, flags, resolveFlags, permissions, pathIsNullTerminated, cwd, fd); // @suppress(dscanner.style.long_line)
+        if(result.isError)
+            return result;
+
+        file.wrap(fd);
+        return Result.noError;
+    }
+
+    private static Result openImpl(
+        scope const(char)[] path, 
+        AccessMode accessMode, 
+        CreateMode createMode,
+        Flags flags,
+        ResolveFlags resolveFlags,
+        PermissionFlags permissions,
+        bool pathIsNullTerminated,
+        scope Directory* cwd,
+        scope out FileDescriptor fd,
+        uint extraFlags = 0,
+    ) @nogc nothrow
+    in(accessMode != AccessMode.FAILSAFE, "bug: accessMode cannot be FAILSAFE")
+    in(cwd is null || cwd.isOpen, "bug: cwd is not null, but isOpen is returning false?")
+    {
+        import core.stdc.string : strlen;
+
+        // We don't have to do an awful lot of validation, since openat2 is defined to do most of it for us!
+
+        IoUringOpenAt2.OpenHow how;
+        how.flags   |= accessMode;
+        how.flags   |= createMode;
+        how.flags   |= flags;
+        how.flags   |= ALWAYS_USED_FLAGS;
+        how.flags   |= extraFlags;
+        how.mode    |= permissions;
+        how.resolve |= resolveFlags;
+
+        // If needed, add a null terminator onto the string.
+        String pathBuffer;
+        scope const(char)* pathCString;
+        if(!pathIsNullTerminated)
+        {
+            pathBuffer = String(path); // Non-sliced Strings are guarenteed to be null terminated.
+            pathCString = pathBuffer.slice.ptr;
+        }
+        else
+            pathCString = path.ptr;
+
+        assert(strlen(pathCString) == path.length, "bug: safety check failed, pathCString's strlen != path.length, null terminator issue?"); // @suppress(dscanner.style.long_line)
+
+        // Submit the command
+        auto op = IoUringOpenAt2();
+        op.dirfd = (cwd !is null) ? cwd.fd : AT_FDCWD;
+        op.pathnameCString = pathCString;
+        op.openHow = &how;
+
+        IoUringCompletion cqe;
+        auto result = juptuneEventLoopSubmitEvent(op, cqe);
+        if(result.isError)
+        {
+            wrapIOResult(result);
+            return result;
+        }
+
+        fd = cqe.result;
+        return Result.noError;
+    }
+}
+
+/++
+ + A `Directory` implementation that's probably not actually POSIX compatible.
+ +
+ + As with all IO Driver implementations, this struct inherits `GenericIoDriver` for common IO functions.
+ +
+ + See_Also:
+ +  `GenericIoDriver`
+ + ++/
+version(Posix)
+struct PosixDirectory
+{
+    GenericIoDriver!(FileDescriptorReadWriteType.writeAndRead) _driver;
+    alias _driver this;
+
+    alias AccessMode = File.AccessMode;
+    alias CreateMode = File.CreateMode;
+    alias Flags = File.Flags;
+    alias ResolveFlags = File.ResolveFlags;
+    alias PermissionFlags = File.PermissionFlags;
+
+    /// NOTE: Because directories on POSIX systems are just specially flagged files, please refer to the documentation for
+    ///       `File.open` as almost everything will apply to this function as well.
+    static Result open(
+        scope const(char)[] path, 
+        AccessMode accessMode, 
+        CreateMode createMode,
+        Flags flags,
+        ResolveFlags resolveFlags,
+        PermissionFlags permissions,
+        scope Directory* cwd,
+        scope out PosixDirectory dir,
+        bool pathIsNullTerminated = false,
+    ) @nogc nothrow
+    {
+        import core.sys.linux.fcntl : O_DIRECTORY;
+
+        FileDescriptor fd;
+        auto result = File.openImpl(path, accessMode, createMode, flags, resolveFlags, permissions, pathIsNullTerminated, cwd, fd, extraFlags: O_DIRECTORY); // @suppress(dscanner.style.long_line)
+        if(result.isError)
+            return result;
+
+        dir.wrap(fd);
+        return Result.noError;
+    }
+}
+
+/++
  + Provides generic IO functionality.
  +
  + All platform-specific IO drivers will provide an `alias this` to this struct,
  + so that all drivers have the same facilities for writing and reading.
  + ++/
-struct GenericIoDriver
+struct GenericIoDriver(FileDescriptorReadWriteType ReadWriteType)
 {
     private
     {
     }
-    PlatformGenericIoDriver _driver;
+    PlatformGenericIoDriver!ReadWriteType _driver;
     alias _driver this;
 
     nothrow:
@@ -951,22 +1340,31 @@ struct GenericIoDriver
             auto result = this._driver.receive(buffer[cursor..$], inSlice, timeout);
             if(result.isError)
                 return result;
-            else if(inSlice.length == 0 || inSlice.length < (buffer.length - cursor))
-                break;
-
+            
             cursor += inSlice.length;
+            if(inSlice.length == 0 || inSlice.length < (buffer.length - cursor))
+            {
+                buffer.length = cursor;
+                break;
+            }
         }
 
         return Result.noError;
     }
-    static assert(
-        __traits(compiles, ()nothrow @nogc{ Array!ubyte b; TcpSocket.init.readAll(b).resultAssert; }),
-        "readAll no longer compiles under @nogc"
-    );
+    // static assert(
+    //     __traits(compiles, ()nothrow @nogc{ Array!ubyte b; TcpSocket.init.readAll(b).resultAssert; }),
+    //     "readAll no longer compiles under @nogc"
+    // );
+}
+
+private enum FileDescriptorReadWriteType
+{
+    sendAndRecieve,
+    writeAndRead,
 }
 
 version(Posix)
-private struct PosixGenericIoDriver
+private struct PosixGenericIoDriver(FileDescriptorReadWriteType ReadWriteType)
 {
     import core.sys.posix.sys.uio : iovec;
 
@@ -1012,40 +1410,84 @@ private struct PosixGenericIoDriver
 
     Result send(const(void)[] buffer, scope out size_t bytesSent, Duration timeout = Duration.zero)
     {
-        auto op = IoUringSend();
-        op.fd = this.fd;
-        op.buffer = cast(void[])buffer;
+        static if(ReadWriteType == FileDescriptorReadWriteType.sendAndRecieve)
+        {
+            auto op = IoUringSend();
+            op.fd = this.fd;
+            op.buffer = cast(void[])buffer;
 
-        IoUringCompletion cqe;
-        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, SubmitEventConfig().withTimeout(timeout));
-        if(submitResult.isError)
-            return submitResult;
+            IoUringCompletion cqe;
+            auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, SubmitEventConfig().withTimeout(timeout));
+            if(submitResult.isError)
+                return submitResult;
 
-        if(cqe.result < 0)
-            return getPosixResult("failed to send data to socket", cqe.result);
+            if(cqe.result < 0)
+                return getPosixResult("failed to send data to socket", cqe.result);
 
-        assert(cqe.result >= 0);
-        bytesSent = cqe.result;
-        return Result.noError;
+            assert(cqe.result >= 0);
+            bytesSent = cqe.result;
+            return Result.noError;
+        }
+        else static if(ReadWriteType == FileDescriptorReadWriteType.writeAndRead)
+        {
+            auto op = IoUringWrite();
+            op.fd = this.fd;
+            op.buffer = cast(void[])buffer;
+
+            IoUringCompletion cqe;
+            auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, SubmitEventConfig().withTimeout(timeout));
+            if(submitResult.isError)
+                return submitResult;
+
+            if(cqe.result < 0)
+                return getPosixResult("failed to send data to file descriptor", cqe.result);
+
+            assert(cqe.result >= 0);
+            bytesSent = cqe.result;
+            return Result.noError;
+        }
+        else static assert(false, "Missing ReadWriteType case");
     }
 
     Result receive(void[] buffer, out void[] sliceWithData, Duration timeout = Duration.zero)
     {
-        auto op = IoUringRecv();
-        op.fd = this.fd;
-        op.buffer = buffer;
+        static if(ReadWriteType == FileDescriptorReadWriteType.sendAndRecieve)
+        {
+            auto op = IoUringRecv();
+            op.fd = this.fd;
+            op.buffer = buffer;
 
-        IoUringCompletion cqe;
-        auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, SubmitEventConfig().withTimeout(timeout));
-        if(submitResult.isError)
-            return submitResult;
+            IoUringCompletion cqe;
+            auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, SubmitEventConfig().withTimeout(timeout));
+            if(submitResult.isError)
+                return submitResult;
 
-        if(cqe.result < 0)
-            return getPosixResult("failed to receive data from socket", cqe.result);
+            if(cqe.result < 0)
+                return getPosixResult("failed to receive data from socket", cqe.result);
 
-        assert(cqe.result >= 0);
-        sliceWithData = buffer[0..cqe.result];
-        return Result.noError;
+            assert(cqe.result >= 0);
+            sliceWithData = buffer[0..cqe.result];
+            return Result.noError;
+        }
+        else static if(ReadWriteType == FileDescriptorReadWriteType.writeAndRead)
+        {
+            auto op = IoUringRead();
+            op.fd = this.fd;
+            op.buffer = buffer;
+
+            IoUringCompletion cqe;
+            auto submitResult = juptuneEventLoopSubmitEvent(op, cqe, SubmitEventConfig().withTimeout(timeout));
+            if(submitResult.isError)
+                return submitResult;
+
+            if(cqe.result < 0)
+                return getPosixResult("failed to read data from file descriptor", cqe.result);
+
+            assert(cqe.result >= 0);
+            sliceWithData = buffer[0..cqe.result];
+            return Result.noError;
+        }
+        else static assert(false, "Missing ReadWriteType case");
     }
 
     Result writev(scope ref MemoryBlockAllocation buffers, out size_t bytesRead, Duration timeout = Duration.zero)

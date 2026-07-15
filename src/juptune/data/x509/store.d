@@ -8,18 +8,20 @@ module juptune.data.x509.store;
 
 import juptune.core.util : Result;
 import juptune.data.x509.asn1convert : X509Certificate, X509Extension;
+import juptune.event.loop : Mutex;
 
 /// A `Result` error enum
 enum X509StoreError
 {
     none,
     
-    extensionAlreadySet,    /// An Extension of a certain type has already been set within an `X509ExtensionStore`
+    extensionAlreadySet,            /// An Extension of a certain type has already been set within an `X509ExtensionStore`
 
-    duplicateSubjectKeyId,  /// A certificate with the given subjectKeyIdentifier has already been loaded into an `X509CertificateStore`
-    trustAnchorNotFound,    /// A certificate's trust anchor could not be found during validation within an `X509CertificateStore`
-    wrongPemLabel,          /// A certificate within a PEM encoded file contains the wrong label.
-    noCertificates,         /// Edge case error when no certificates are provided for an operation where at least one certificate is required.
+    duplicateSubjectKeyId,          /// A certificate with the given subjectKeyIdentifier has already been loaded into an `X509CertificateStore`
+    trustAnchorNotFound,            /// A certificate's trust anchor could not be found during validation within an `X509CertificateStore`
+    wrongPemLabel,                  /// A certificate within a PEM encoded file contains the wrong label.
+    noCertificates,                 /// Edge case error when no certificates are provided for an operation where at least one certificate is required.
+    noDefaultCertificatesFound,     /// An attempt to read the platform's default certificates was made, and no certificates were able to be found.
 }
 
 /++
@@ -793,34 +795,66 @@ struct X509CertificateStore
 }
 
 private __gshared X509CertificateStore g_platformDefaultStore;
-shared static this()
+private __gshared bool g_platformDefaultStoreHasBeenCreated;
+private X509CertificateStore* g_platformDefaultStoreThreadLocalPointer;
+private shared Mutex g_platformDefaultStoreMutex;
+
+Result x509LoadDefaultCertificates(scope ref X509CertificateStore store) @nogc nothrow
 {
-    import std.file : readText, exists;
-    import juptune.core.util : resultAssert;
+    import juptune.core.ds  : Array;
+    import juptune.event.io : File, IoError;
 
     version(linux)
     {
-        auto bundlePath = "/etc/ssl/ca-bundle.pem";
-        if(!exists(bundlePath))
-            bundlePath = "/etc/ssl/certs/ca-certificates.crt";
+        static __gshared immutable KNOWN_PATHS = [
+            "/etc/ssl/ca-bundle.pem",
+            "/etc/ssl/certs/ca-certificates.crt"
+        ];
 
-        if(exists(bundlePath))
+        foreach(path; KNOWN_PATHS)
         {
-            const pem = readText(bundlePath);
-            g_platformDefaultStore.loadBundleFromPem(pem, ignoreAsn1DecodingErrors: true, hasImplicitTrust: true).resultAssert; // @suppress(dscanner.style.long_line)
+            File file;
+            
+            auto result = File.openForReading(path, file, pathIsNullTerminated: true);
+            if(result.isError)
+            {
+                // Return errors we don't expect.
+                if(!result.isError(IoError.notFound))
+                    return result;
+
+                // If the file wasn't found, just try the next one.
+                continue;
+            }
+
+            // File was found, so read it in and parse it.
+            Array!ubyte buffer;
+            result = file.readAll(buffer);
+            if(result.isError)
+                return result;
+
+            scope bytesAsAscii = cast(const(char)[])buffer.slice;
+            result = store.loadBundleFromPem(
+                bytesAsAscii, 
+                ignoreAsn1DecodingErrors: true, // Unfortunately there's some root certs out in the wild that we can't parse yet (_probably_ because they're partially BER encoded rather than DER encoded)
+                hasImplicitTrust: true, // Root certs always have implicit trust
+            );
+            return result;
         }
     }
     else static assert(false, "TODO: add platform");
+
+    // No files were found, so signal this as an error.
+    return Result.make(X509StoreError.noDefaultCertificatesFound, "Could not find any CA PEM bundle for this platform");
 }
 
 /++
  + Retrieves the default certificate store for the host platform.
  +
  + Notes:
- +  This store is actually loaded during application startup, so this function is very cheap to call.
+ +  If the global certificate store hasn't been loaded in yet, this function can cause the current fiber to yield while it loads.
  +
  +  While the return value isn't marked as const (since D's const is a massive PITA to get correct), please
- +  note that **the return value must never have new certificates loaded into it** as this instance is shared
+ +  note that **the return value must never have new certificates loaded into it or be modified** as this instance is shared
  +  across all threads... and well, X509CertificateStore currently isn't thread-safe.
  +
  +  _Only_ stick to using this for the validateChain functionality.
@@ -830,6 +864,40 @@ shared static this()
  + ++/
 X509CertificateStore* x509GetPlatformDefaultStore() @nogc nothrow
 {
+    import core.atomic : atomicLoad, atomicStore, MemoryOrder;
+    import juptune.core.util : resultAssert;
+
+    // If we've already cached a pointer for this thread (indicating it's been created), just return that (fast path)
+    if(g_platformDefaultStoreThreadLocalPointer !is null)
+        return g_platformDefaultStoreThreadLocalPointer;
+
+    // Otherwise we can use an atomic to check if the store has been previously marked as created (relatively fast path)
+    if(atomicLoad!(MemoryOrder.acq)(g_platformDefaultStoreHasBeenCreated))
+    {
+        g_platformDefaultStoreThreadLocalPointer = &g_platformDefaultStore;
+        return g_platformDefaultStoreThreadLocalPointer;
+    }
+
+    // Otherwise try to obtain the Mutex; do a safety check to make sure it still hasn't been created, and then create the store in this thread (slow path).
+    g_platformDefaultStoreMutex.lock().resultAssert;
+    scope(exit) g_platformDefaultStoreMutex.unlock().resultAssert;
+
+    if(atomicLoad!(MemoryOrder.acq)(g_platformDefaultStoreHasBeenCreated)) // Multiple threads may be waiting on the mutex, so double check that none of the previous threads have ran first.
+    {
+        g_platformDefaultStoreThreadLocalPointer = &g_platformDefaultStore;
+        return g_platformDefaultStoreThreadLocalPointer;
+    }
+
+    auto result = x509LoadDefaultCertificates(g_platformDefaultStore);
+    if(result.isError)
+    {
+        // It's safe to ignore `noDefaultCertificatesFound`, though I wish I had a better way to signal this to the user without having to return a result.
+        if(!result.isError(X509StoreError.noDefaultCertificatesFound))
+            resultAssert(result);
+    }
+    
+    g_platformDefaultStoreThreadLocalPointer = &g_platformDefaultStore;
+    atomicStore!(MemoryOrder.rel)(g_platformDefaultStoreHasBeenCreated, true);
     return &g_platformDefaultStore;
 }
 

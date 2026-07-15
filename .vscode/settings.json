@@ -3,6 +3,7 @@
     "d.projectImportPaths": [
         "src/",
         "tools/dasn1/src/",
-        "tools/dx509/src/"
+        "tools/dx509/src/",
+        "/usr/lib64/ldc/x86_64-suse-linux/include/d"
     ]
 }

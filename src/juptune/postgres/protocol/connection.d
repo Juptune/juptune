@@ -1306,9 +1306,4 @@ struct PostgresProtocol
     {
         return this._cursor;
     }
-
-    package bool mustBeBindingParams() @nogc nothrow
-    {
-        return this._state.mustBeIn(State.bindingParams);
-    }
 }

@@ -669,6 +669,45 @@ struct IoUringFutexWake
     @MapField("fd") int flags;
 }
 
+struct IoUringOpenAt2
+{
+    mixin GenerateDriverFuncs!(IORING_OP_OPENAT2);
+
+    static struct OpenHow
+    {
+        ulong flags;
+        ulong mode;
+        ulong resolve;
+    }
+
+    FileDescriptor dirfd;
+    @MapField("addr") const(char)* pathnameCString;
+    @MapField("len") uint sizeofOpenHow = OpenHow.sizeof;
+    @MapField("off") OpenHow* openHow;
+}
+
+struct IoUringWrite
+{
+    mixin GenerateDriverFuncs!(IORING_OP_WRITE);
+
+    enum USE_KERNAL_MANAGED_OFFSET = -1UL;
+
+    FileDescriptor fd;
+    @MapBuffer void[] buffer;
+    @MapField("off") ulong offset = USE_KERNAL_MANAGED_OFFSET;
+}
+
+struct IoUringRead
+{
+    mixin GenerateDriverFuncs!(IORING_OP_READ);
+
+    enum USE_KERNAL_MANAGED_OFFSET = -1UL;
+
+    FileDescriptor fd;
+    @MapBuffer void[] buffer;
+    @MapField("off") ulong offset = USE_KERNAL_MANAGED_OFFSET;
+}
+
 package struct IoUringTimeoutUserData
 {
     timespec64 timeout;
