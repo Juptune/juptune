@@ -123,6 +123,7 @@ private void schedulerOnCqe(IoUringCompletion cqe, size_t fibersWaiting) nothrow
 private void schedulerWakeUpFibers(scope LoopThread* loopThread) @nogc nothrow
 {
     // TODO: This is poorly coded jank, make it better
+    // TODO: I need a resizable circular buffer type
     void handleFibers(bool ShrinkArray, alias ShouldCircuitBreak)(
         scope ref ArrayNonShrink!(JuptuneFiber*) array, 
     )
