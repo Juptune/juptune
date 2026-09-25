@@ -794,11 +794,26 @@ struct X509CertificateStore
     }
 }
 
-private __gshared X509CertificateStore g_platformDefaultStore;
-private __gshared bool g_platformDefaultStoreHasBeenCreated;
-private X509CertificateStore* g_platformDefaultStoreThreadLocalPointer;
-private shared Mutex g_platformDefaultStoreMutex;
-
+/++
+ + Loads the platform's default certificates into the given `store`.
+ +
+ + Notes:
+ +  If this function throws `X509StoreError.noDefaultCertificatesFound`, it's safe to ignore this result and continue using
+ +  the provided `store`, as effectively nothing happened.
+ +
+ + Params:
+ +  store = The store to load the certificates into.
+ +
+ + Throws:
+ +  Anything that `File.openForReading` can.
+ +
+ +  Anything that `X509CertificateStore.loadBundleFromPem` can.
+ +
+ +  `X509StoreError.noDefaultCertificatesFound` if no default certificates could be found.
+ +
+ + Returns:
+ +  A `Result` indicating if an error occurred or not.
+ + ++/
 Result x509LoadDefaultCertificates(scope ref X509CertificateStore store) @nogc nothrow
 {
     import juptune.core.ds  : Array;
@@ -818,12 +833,12 @@ Result x509LoadDefaultCertificates(scope ref X509CertificateStore store) @nogc n
             auto result = File.openForReading(path, file, pathIsNullTerminated: true);
             if(result.isError)
             {
-                // Return errors we don't expect.
-                if(!result.isError(IoError.notFound))
-                    return result;
-
                 // If the file wasn't found, just try the next one.
-                continue;
+                if(result.isError(IoError.notFound))
+                    continue;
+
+                // Return errors we don't expect.
+                return result;
             }
 
             // File was found, so read it in and parse it.
@@ -846,6 +861,11 @@ Result x509LoadDefaultCertificates(scope ref X509CertificateStore store) @nogc n
     // No files were found, so signal this as an error.
     return Result.make(X509StoreError.noDefaultCertificatesFound, "Could not find any CA PEM bundle for this platform");
 }
+
+private __gshared X509CertificateStore g_platformDefaultStore;
+private __gshared bool g_platformDefaultStoreHasBeenCreated;
+private X509CertificateStore* g_platformDefaultStoreThreadLocalPointer;
+private shared Mutex g_platformDefaultStoreMutex;
 
 /++
  + Retrieves the default certificate store for the host platform.
