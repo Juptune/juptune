@@ -708,6 +708,15 @@ struct IoUringRead
     @MapField("off") ulong offset = USE_KERNAL_MANAGED_OFFSET;
 }
 
+struct IoUringSocket
+{
+    mixin GenerateDriverFuncs!(IORING_OP_SOCKET);
+
+    @MapField("fd") int domain; // Not an actual FD
+    @MapField("off") ulong type;
+    @MapField("len") uint protocol;
+}
+
 package struct IoUringTimeoutUserData
 {
     timespec64 timeout;

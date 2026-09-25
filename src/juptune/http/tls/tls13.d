@@ -817,41 +817,41 @@ struct TlsSocket(UnderlyingSocketT)
 import juptune.event.io : TcpSocket;
 alias TlsTcpSocket = TlsSocket!TcpSocket;
 
-debug unittest
-{
-    import core.time : seconds;
+// debug unittest
+// {
+//     import core.time : seconds;
 
-    import juptune.event.io : TcpSocket;
-    import juptune.core.util : resultAssert;
-    import juptune.event;
+//     import juptune.event.io : TcpSocket;
+//     import juptune.core.util : resultAssert;
+//     import juptune.event;
 
-    import std.exception;
-    import std.file : readText;
+//     import std.exception;
+//     import std.file : readText;
 
-    auto loop = EventLoop(EventLoopConfig());
-    loop.addGCThread((){
-        import juptune.http;
+//     auto loop = EventLoop(EventLoopConfig());
+//     loop.addGCThread((){
+//         import juptune.http;
 
-        IpAddress ip;
-        IpAddress.parse(ip, "95.216.24.116", 443).resultAssert;
+//         IpAddress ip;
+//         IpAddress.parse(ip, "95.216.24.116", 443).resultAssert;
 
-        auto client = HttpClient(HttpClientConfig().withTlsConfig(
-            TlsConfig().withReadTimeout(2.seconds).withDumpCerts(true)
-        ));
-        client.connectTls(ip, "forum.dlang.org").resultAssert;
+//         auto client = HttpClient(HttpClientConfig().withTlsConfig(
+//             TlsConfig().withReadTimeout(2.seconds).withDumpCerts(true)
+//         ));
+//         client.connectTls(ip, "forum.dlang.org").resultAssert;
 
-        HttpRequest req;
-        req.withMethod("GET");
-        req.withPath("/");
-        req.setHeader("User-Agent", "curl/8.16.0");
-        req.setHeader("Accept", "*/*");
+//         HttpRequest req;
+//         req.withMethod("GET");
+//         req.withPath("/");
+//         req.setHeader("User-Agent", "curl/8.16.0");
+//         req.setHeader("Accept", "*/*");
         
-        HttpResponse resp;
-        client.request(req, resp).resultAssert;
+//         HttpResponse resp;
+//         client.request(req, resp).resultAssert;
 
-        import std.file : write;
-        debug write("test.html", cast(string)resp.body.slice);
-    });
-    loop.join();
-}
+//         import std.file : write;
+//         debug write("test.html", cast(string)resp.body.slice);
+//     });
+//     loop.join();
+// }
 

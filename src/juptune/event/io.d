@@ -530,15 +530,30 @@ struct PosixTcpSocket
     Result open()
     in(!this._driver.isOpen, "This socket is already open, please call close() first.")
     {
-        version(linux)
+        int fd = -1;
+
+        // version(linux)
         if(g_linuxKernal.major > 5 || (g_linuxKernal.major == 5 && g_linuxKernal.minor >= 19))
         {
             // TODO: This version of linux supports socket() in io_uring, so use that instead.
-        }
+            IoUringSocket op;
+            op.domain = AF_INET6;
+            op.type = SOCK_STREAM;
+            op.protocol = 0;
 
-        int fd = socket(AF_INET6, SOCK_STREAM, 0);
-        if(fd == -1)
-            return getPosixResult("failed to open socket", errno());
+            IoUringCompletion cqe;
+            auto result = juptuneEventLoopSubmitEvent(op, cqe);
+            if(result.isError)
+                return result;
+
+            fd = cqe.result;
+        }
+        else
+        {
+            fd = socket(AF_INET6, SOCK_STREAM, 0);
+            if(fd == -1)
+                return getPosixResult("failed to open socket", errno());
+        }
 
         int enable = 1;
         int disable = 0;
