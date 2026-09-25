@@ -127,28 +127,31 @@ private void schedulerWakeUpFibers(scope LoopThread* loopThread) @nogc nothrow
         scope ref ArrayNonShrink!(JuptuneFiber*) array, 
     )
     {
-        const yieldedFiberCount = array.length;
-        foreach(i; 0..yieldedFiberCount)
+        size_t nextFiberIndex = 0;
+
+        while(nextFiberIndex < array.length)
         {
             if(ShouldCircuitBreak())
                 break;
 
-            scope fiber = array[i];
+            scope fiber = array[nextFiberIndex];
             fiber.state = JuptuneFiber.State.running;
             juptuneFiberSwap(fiber);
             loopThreadOnAfterFiberSwap(fiber);
-            array[i] = null;
+            array[nextFiberIndex] = null;
+
+            nextFiberIndex++;
         }
 
         static if(ShrinkArray)
         {
-            const yieldedFiberDiff = array.length - yieldedFiberCount;
-            if(yieldedFiberDiff == 0)
+            if(nextFiberIndex >= array.length)
                 array.length = 0;
             else
             {
-                array[0..yieldedFiberDiff] = array[yieldedFiberCount..$];
-                array.length = yieldedFiberDiff;
+                const fibersLeft = array.length - nextFiberIndex;
+                array[0..fibersLeft] = array[fibersLeft..$];
+                array.length = fibersLeft;
             }
         }
     }
