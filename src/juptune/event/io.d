@@ -308,6 +308,35 @@ struct IpAddress
     }
 
     version(Posix)
+    static IpAddress fromSocketAddr(scope const sockaddr* addr)
+    in(addr !is null, "bug: addr is null, please add a null check")
+    in(addr.sa_family == AF_INET || addr.sa_family == AF_INET6, "addr is not IPv4 or IPv4, please check .sa_family first")
+    {
+        IpAddress result;
+
+        if(addr.sa_family == AF_INET)
+        {
+            const addr4 = cast(sockaddr_in*)addr;
+
+            result._kind = Kind.ipv4;
+            result._ipv4 = addr4.sin_addr.s_addr;
+            result.port  = addr4.sin_port;
+            return result;
+        }
+        else if(addr.sa_family == AF_INET6)
+        {
+            const addr6 = cast(sockaddr_in6*)addr;
+
+            result._kind = Kind.ipv6;
+            result._ipv6 = addr6.sin6_addr.s6_addr;
+            result.port  = addr6.sin6_port;
+            return result;
+        }
+
+        assert(false, "(why didn't the contract trigger?)");
+    }
+
+    version(Posix)
     void toString(Sink)(scope auto ref Sink sink, bool withPort = true) const
     {
         import juptune.core.util.conv : toStringSink;
@@ -532,10 +561,8 @@ struct PosixTcpSocket
     {
         int fd = -1;
 
-        // version(linux)
         if(g_linuxKernal.major > 5 || (g_linuxKernal.major == 5 && g_linuxKernal.minor >= 19))
         {
-            // TODO: This version of linux supports socket() in io_uring, so use that instead.
             IoUringSocket op;
             op.domain = AF_INET6;
             op.type = SOCK_STREAM;
@@ -777,6 +804,217 @@ struct PosixTcpSocket
 
         sockets[0]._driver.wrap(fds[0]);
         sockets[1]._driver.wrap(fds[1]);
+
+        return Result.noError;
+    }
+
+    /++
+     + The IP address of this socket.
+     +
+     + Note that this can sometimes be `IpAddress.init`, even for open sockets.
+     +
+     + Returns:
+     +  This socket's `IpAddress`.
+     + ++/
+    IpAddress ip() const
+    {
+        return this._ip;
+    }
+}
+
+/++
+ + A `UdpSocket` implementation that uses the standard POSIX socket functions
+ + for when io_uring doesn't provide a native opcode.
+ +
+ + When a function has to use a standard POSIX function instead of io_uring, *it may block* the thread.
+ +
+ + Due to the nature of UDP, `GenericIoDriver` isn't used and so a bit of a different interface is 
+ + provided.
+ +
+ + See_Also:
+ +  `GenericIoDriver`
+ + ++/
+version(Posix)
+struct PosixUdpSocket
+{
+    import core.sys.posix.sys.socket 
+        : socket, clisten = listen, bind, setsockopt, SO_REUSEADDR, SO_REUSEPORT, SOL_SOCKET,
+            SO_KEEPALIVE, socklen_t, getsockname, caccept = accept, cconnect = connect,
+            socketpair;
+    import core.sys.posix.arpa.inet 
+        : AF_INET6, AF_UNIX, SOCK_DGRAM, ntohs;
+    import core.sys.posix.netinet.in_ 
+        : sockaddr, sockaddr_in, sockaddr_in6, IPPROTO_IPV6, IPV6_V6ONLY;
+
+    private
+    {
+        IpAddress _ip;
+        int _fd;
+    }
+
+    nothrow @nogc:
+
+    void wrap(int fd) pure
+    in(fd != 0, "File descriptor is 0, did you forget to check for failure?")
+    in(this._fd == 0, "This PosixGenericIoDriver hasn't been closed yet. Please call .close")
+    {
+        this._fd = fd;
+    }
+
+    ~this()
+    {
+        if(this._fd)
+            this.close().resultAssert;
+    }
+
+    bool isOpen() => this._fd != 0;
+
+    Result close()
+    in(_fd != 0, "File descriptor is 0, did you forget to check isOpen?")
+    {
+        auto op = IoUringClose();
+        op.fd = this._fd;
+        juptuneEventLoopSubmitEvent(
+            op,
+            IoUringCompletion.ignore,
+            SubmitEventConfig().shouldYieldUntilCompletion(false)
+        ).resultAssert;
+        this._fd = 0;
+
+        return Result.noError;
+    }
+
+    /++
+     + Creates the underlying socket.
+     +
+     + The following options are enabled: `REUSEPORT`; `REUSEADDR`.
+     +
+     + The socket is created a dual-stack IPv4-IPv6 socket.
+     +
+     + Throws:
+     +  Asserts that the socket isn't already open.
+     +
+     +  Any `LinuxError` reported by the `socket` syscall.
+     +
+     +  Anything thrown by `yield`.
+     +
+     + Returns:
+     +  A `Result`
+     + ++/
+    Result open()
+    in(!this.isOpen, "This socket is already open, please call close() first.")
+    {
+        int fd = -1;
+
+        if(g_linuxKernal.major > 5 || (g_linuxKernal.major == 5 && g_linuxKernal.minor >= 19))
+        {
+            IoUringSocket op;
+            op.domain = AF_INET6;
+            op.type = SOCK_DGRAM;
+            op.protocol = 0;
+
+            IoUringCompletion cqe;
+            auto result = juptuneEventLoopSubmitEvent(op, cqe);
+            if(result.isError)
+                return result;
+
+            fd = cqe.result;
+        }
+        else
+        {
+            fd = socket(AF_INET6, SOCK_DGRAM, 0);
+            if(fd == -1)
+                return getPosixResult("failed to open socket", errno());
+        }
+
+        int enable = 1;
+        int disable = 0;
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &enable, int.sizeof);
+        setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &enable, int.sizeof);
+        setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &disable, int.sizeof);
+        this.wrap(fd);
+        
+        auto yieldResult = yield(); // Emulate using io_uring for the socket call.
+        if(yieldResult.isError)
+            return yieldResult;
+
+        return Result.noError;
+    }
+
+    /++
+     + Connects to the target address.
+     +
+     + This overload is for convenience as it will call `IpAddress.parse` on `address`.
+     +
+     + Params:
+     +  address     = The IPv4 or IPv6 address to parse, and attempt to connect to.
+     +  defaultPort = The default port used to connect to the address, if `address` does not specify one.
+     +
+     + Throws:
+     +  Asserts that `open` has been called first.
+     +
+     +  Anything thrown by `IpAddress.parse`.
+     +
+     +  Anything thrown by the main overload.
+     +
+     + Returns:
+     +  A `Result`
+     + ++/
+    Result connect(scope const char[] address, ushort defaultPort = 0)
+    in(this.isOpen, "Cannot connect using a closed socket. Did you forget to call open() first?")
+    {
+        IpAddress addr;
+        auto result = IpAddress.parse(addr, address, defaultPort);
+        if(result.isError)
+            return result;
+
+        return this.connect(addr);
+    }
+
+    /++
+     + Connects to the target address.
+     +
+     + The `address` is converted into an IPv6 address before the connection is attempted.
+     +
+     + Params:
+     +  address = The address to attempt to connect to.
+     +
+     + Throws:
+     +  Asserts that `open` has been called first.
+     +
+     +  Any `LinuxError` thrown by libc's `connect` syscall.
+     +
+     + Returns:
+     +  A `Result`
+     + ++/
+    Result connect(IpAddress address)
+    in(this.isOpen, "Cannot connect using a closed socket. Did you forget to call open() first?")
+    {
+        sockaddr_in ip4;
+        sockaddr_in6 ip6;
+        sockaddr* used;
+        size_t usedLength;
+
+        address = address.toIpv6();
+        address.asSocketAddr(used, usedLength, ip4, ip6);
+
+        const result = cconnect(this._fd, used, cast(socklen_t)usedLength);
+        if(result < 0)
+            return getPosixResult("failed to connect to server", errno());
+
+        return Result.noError;
+    }
+
+    static Result makePair(out PosixTcpSocket[2] sockets)
+    {
+        int[2] fds;
+
+        const result = socketpair(AF_UNIX, SOCK_DGRAM, 0, fds);
+        if(result < 0)
+            return getPosixResult("failed to create socket pairs", result);
+
+        sockets[0].wrap(fds[0]);
+        sockets[1].wrap(fds[1]);
 
         return Result.noError;
     }
