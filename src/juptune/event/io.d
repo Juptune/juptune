@@ -23,17 +23,23 @@ version(Posix) private
 {
     alias PlatformGenericIoDriver = PosixGenericIoDriver;
 
-    /// An alias to the platform's default tcp socket implementation.
-    public alias TcpSocket = PosixTcpSocket;
-
-    /// An alias to the platform's default file implementation.
-    public alias File = PosixFile;
-
-    /// An alias to the platform's default directory implementation.
-    public alias Directory = PosixDirectory;
-
     import core.sys.posix.netinet.in_ : in_addr;
     extern(C) int inet_aton(const scope char*, scope in_addr*) @nogc nothrow;
+}
+
+version(Posix)
+{
+    /// An alias to the platform's default TCP socket implementation.
+    alias TcpSocket = PosixTcpSocket;
+
+    /// An alias to the platform's default UDP socket implementation.
+    alias UdpSocket = PosixUdpSocket;
+
+    /// An alias to the platform's default file implementation.
+    alias File = PosixFile;
+
+    /// An alias to the platform's default directory implementation.
+    alias Directory = PosixDirectory;
 }
 
 /++++ Error helpers ++++/
@@ -60,6 +66,12 @@ enum IoError
 
     /// The resource wasn't found (e.g. trying to open a file that doesn't exist).
     notFound,
+
+    /// An incoming UDP packet was larger than the provided buffer. The extra bytes have been lost. This error is safe to recover from.
+    udpTruncated,
+
+    /// An outgoing (usually UDP) packet was larger than is supported by the protocol/active MDU. This error is safe to recover from.
+    messageTooLarge,
 }
 
 private void wrapIOResult(scope ref Result result) @trusted @nogc nothrow
@@ -93,6 +105,10 @@ private void wrapIOResult(scope ref Result result) @trusted @nogc nothrow
 
             case ENOENT:
                 result.changeErrorType(IoError.notFound);
+                break;
+
+            case EMSGSIZE:
+                result.changeErrorType(IoError.messageTooLarge);
                 break;
 
             default: break;
@@ -580,6 +596,10 @@ struct PosixTcpSocket
             fd = socket(AF_INET6, SOCK_STREAM, 0);
             if(fd == -1)
                 return getPosixResult("failed to open socket", errno());
+        
+            auto yieldResult = yield(); // Emulate using io_uring for the socket call.
+            if(yieldResult.isError)
+                return yieldResult;
         }
 
         int enable = 1;
@@ -589,10 +609,6 @@ struct PosixTcpSocket
         setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &enable, int.sizeof);
         setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &disable, int.sizeof);
         this._driver.wrap(fd);
-        
-        auto yieldResult = yield(); // Emulate using io_uring for the socket call.
-        if(yieldResult.isError)
-            return yieldResult;
 
         return Result.noError;
     }
@@ -837,12 +853,16 @@ struct PosixTcpSocket
 version(Posix)
 struct PosixUdpSocket
 {
+    import std.typecons : Nullable;
+
+    enum MAX_SCATTERED_ARRAYS = 8;
+
     import core.sys.posix.sys.socket 
         : socket, clisten = listen, bind, setsockopt, SO_REUSEADDR, SO_REUSEPORT, SOL_SOCKET,
             SO_KEEPALIVE, socklen_t, getsockname, caccept = accept, cconnect = connect,
-            socketpair;
+            socketpair, msghdr;
     import core.sys.posix.arpa.inet 
-        : AF_INET6, AF_UNIX, SOCK_DGRAM, ntohs;
+        : AF_INET, AF_INET6, AF_UNIX, SOCK_DGRAM, ntohs;
     import core.sys.posix.netinet.in_ 
         : sockaddr, sockaddr_in, sockaddr_in6, IPPROTO_IPV6, IPV6_V6ONLY;
 
@@ -925,6 +945,10 @@ struct PosixUdpSocket
             fd = socket(AF_INET6, SOCK_DGRAM, 0);
             if(fd == -1)
                 return getPosixResult("failed to open socket", errno());
+        
+            auto yieldResult = yield(); // Emulate using io_uring for the socket call.
+            if(yieldResult.isError)
+                return yieldResult;
         }
 
         int enable = 1;
@@ -933,10 +957,6 @@ struct PosixUdpSocket
         setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &enable, int.sizeof);
         setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &disable, int.sizeof);
         this.wrap(fd);
-        
-        auto yieldResult = yield(); // Emulate using io_uring for the socket call.
-        if(yieldResult.isError)
-            return yieldResult;
 
         return Result.noError;
     }
@@ -1001,6 +1021,141 @@ struct PosixUdpSocket
         const result = cconnect(this._fd, used, cast(socklen_t)usedLength);
         if(result < 0)
             return getPosixResult("failed to connect to server", errno());
+
+        return Result.noError;
+    }
+
+    /++
+     + Sends a single datagram either to the "connected" host, or to a specific host if there's no active "connection".
+     +
+     + The `address` is converted into an IPv6 address before the send is attempted.
+     +
+     + Params:
+     +  target              = The target address to send the datagram to. This can be null if this socket is "connected".
+     +  scatteredDataToSend = An array of bytes to concatenate and send as a single datagram. Length must be <= `MAX_SCATTERED_ARRAYS`.
+     +                        (Reminder: `scope` allows array syntax to become stack allocated! `[array1, array2]` is still @nogc!)
+     +
+     + Throws:
+     +  Asserts that `open` has been called first.
+     +
+     +  Any `LinuxError` (potentially converted to an `IoError`) thrown by the `sendmsg` syscall.
+     +
+     + Returns:
+     +  A `Result`
+     + ++/
+    Result sendmsg(
+        Nullable!IpAddress     target,
+        scope const void[][]   scatteredDataToSend,
+    )
+    in(this.isOpen, "Cannot connect using a closed socket. Did you forget to call open() first?")
+    in(scatteredDataToSend.length <= MAX_SCATTERED_ARRAYS, "scatteredDataToSend has more entries than MAX_SCATTERED_ARRAYS allows for") // @suppress(dscanner.style.long_line)
+    {
+        import core.sys.posix.sys.uio : iovec;
+
+        /++++ If we have a specific target, then convert the IP into a sockaddr ++++/
+        sockaddr_in ip4;
+        sockaddr_in6 ip6;
+        sockaddr* usedTargetPtr;
+        size_t usedLength;
+
+        if(!target.isNull)
+            target.get().asSocketAddr(usedTargetPtr, usedLength, ip4, ip6);
+
+        /++++ Setup iovecs for the outgoing data ++++/
+        iovec[MAX_SCATTERED_ARRAYS] input;
+        foreach(i, array; scatteredDataToSend)
+            input[i] = iovec(cast(void*)array.ptr, array.length);
+
+        /++++ Send everything to io_uring ++++/
+        const message = msghdr(
+            msg_name: usedTargetPtr,
+            msg_namelen: cast(uint)usedLength,
+            msg_iov: input.ptr,
+            msg_iovlen: scatteredDataToSend.length,
+            msg_control: null,
+            msg_controllen: 0,
+            msg_flags: 0
+        );
+
+        IoUringSendMsg op;
+        op.fd = this._fd;
+        op.msghdrPtr = &message;
+
+        IoUringCompletion cqe;
+        auto result = juptuneEventLoopSubmitEvent(op, cqe);
+        if(result.isError)
+            return result;
+
+        return Result.noError;
+    }
+
+    /++
+     + Receives a single datagram, potentially from the "connected" host, or from any clients on the port
+     + this socket is listening to.
+     +
+     + Params:
+     +  senderIp               = If possible, the sender's IP will be stored inside of this IpAddress.
+     +  scatteredDataToReceive = An array of bytes to fill with data from the received datagram. Length must be <= `MAX_SCATTERED_ARRAYS`.
+     +                           (Reminder: `scope` allows array syntax to become stack allocated! `[array1, array2]` is still @nogc!)
+     +
+     + Throws:
+     +  Asserts that `open` has been called first.
+     +
+     +  `IoError.udpTruncated` if the datagram wasn't able to fit into the provided buffers, causing data to be dropped (but still read into the buffers).
+     +
+     +  Any `LinuxError` (potentially converted to an `IoError`) thrown by the `recvmsg` syscall.
+     +
+     + Returns:
+     +  A `Result`
+     + ++/
+    Result recvmsg(
+        scope out Nullable!IpAddress senderIp,
+        scope void[][]               scatteredDataToReceive,
+    )
+    in(this.isOpen, "Cannot connect using a closed socket. Did you forget to call open() first?")
+    in(scatteredDataToReceive.length <= MAX_SCATTERED_ARRAYS, "scatteredDataToReceive has more entries than MAX_SCATTERED_ARRAYS allows for") // @suppress(dscanner.style.long_line)
+    {
+        import std.algorithm : map, sum;
+
+        import core.sys.posix.sys.socket : sockaddr_storage;
+        import core.sys.posix.sys.uio    : iovec;
+
+        /++++ Setup buffer for storing the sender's IP ++++/
+        sockaddr_storage senderIpBuffer;
+
+        /++++ Setup iovecs for the incoming data ++++/
+        iovec[MAX_SCATTERED_ARRAYS] input;
+        foreach(i, array; scatteredDataToReceive)
+            input[i] = iovec(cast(void*)array.ptr, array.length);
+
+        /++++ Send everything to io_uring ++++/
+        const message = msghdr(
+            msg_name: &senderIpBuffer,
+            msg_namelen: cast(uint)sockaddr_storage.sizeof,
+            msg_iov: input.ptr,
+            msg_iovlen: scatteredDataToReceive.length,
+            msg_control: null,
+            msg_controllen: 0,
+            msg_flags: 0
+        );
+
+        IoUringRecvMsg op;
+        op.fd = this._fd;
+        op.msghdrPtr = &message;
+
+        IoUringCompletion cqe;
+        auto result = juptuneEventLoopSubmitEvent(op, cqe);
+        if(result.isError)
+            return result;
+
+        /++++ Try to convert the sender's address ++++/
+        if(senderIpBuffer.ss_family == AF_INET || senderIpBuffer.ss_family == AF_INET6)
+            senderIp = IpAddress.fromSocketAddr(cast(sockaddr*)&senderIpBuffer);
+
+        /++++ See if we failed to read all the data ++++/
+        const maxDataAccepted = scatteredDataToReceive.map!(buffer => buffer.length).sum;
+        if(maxDataAccepted < cqe.result)
+            return Result.make(IoError.udpTruncated, "when reading a UDP datagram, some of the bytes were dropped due to the buffer(s) being too small"); // @suppress(dscanner.style.long_line)
 
         return Result.noError;
     }

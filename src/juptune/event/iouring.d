@@ -717,6 +717,32 @@ struct IoUringSocket
     @MapField("len") uint protocol;
 }
 
+struct IoUringSendMsg
+{
+    version(Posix)
+    {
+        import core.sys.posix.sys.socket : msghdr;
+    }
+
+    mixin GenerateDriverFuncs!(IORING_OP_SENDMSG);
+
+    FileDescriptor fd;
+    @MapField("addr") const(msghdr)* msghdrPtr;
+}
+
+struct IoUringRecvMsg
+{
+    version(Posix)
+    {
+        import core.sys.posix.sys.socket : msghdr;
+    }
+
+    mixin GenerateDriverFuncs!(IORING_OP_RECVMSG);
+
+    FileDescriptor fd;
+    @MapField("addr") const(msghdr)* msghdrPtr;
+}
+
 package struct IoUringTimeoutUserData
 {
     timespec64 timeout;
