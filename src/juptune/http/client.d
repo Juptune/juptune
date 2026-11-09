@@ -34,7 +34,7 @@ struct HttpClientConfig
     Http1Config http1 = Http1Config().withReadTimeout(30.seconds).withWriteTimeout(30.seconds);
 
     /// Configuration for TLS sockets - this defaults to a 30 second timeout for both reading and writing.
-    TlsConfig tls = TlsConfig().withWriteTimeout(30.seconds).withReadTimeout(30.seconds).withMaxFragmentReadAttempts(2);
+    TlsConfig tls = TlsConfig().withWriteTimeout(30.seconds).withReadTimeout(30.seconds);
 
     /// Which version of HTTP to use when connecting to a server.
     HttpClientVersion httpVersion = HttpClientVersion.automatic;
@@ -316,6 +316,9 @@ struct HttpClient
     {
         import juptune.data.x509 : x509GetPlatformDefaultStore;
         import juptune.http.tls  : TlsClientHelloOutSettings, TlsServerHelloInSettings;
+
+        if(ip.port == 0)
+            ip.port = 443;
 
         this._hostName = setIpHostname(ip, host);
 

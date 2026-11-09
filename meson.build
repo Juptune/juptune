@@ -134,6 +134,7 @@ dns_srcs = files(
 
     './src/juptune/dns/encoding.d',
     './src/juptune/dns/package.d',
+    './src/juptune/dns/resolver.d',
     './src/juptune/dns/types.d',
 )
 

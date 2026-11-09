@@ -300,32 +300,6 @@ in(putAdditionalRecords !is null, "bug: putAdditionalRecords is null")
     return Result.noError;
 }
 
-// unittest
-// {
-//     import juptune.event.io : UdpSocket;
-//     import juptune.core.util : resultAssert;
-//     import juptune.event;
-
-//     import std.exception;
-//     import std.typecons;
-//     import std.file : readText;
-
-//     auto loop = EventLoop(EventLoopConfig());
-//     loop.addGCThread((){
-//         import juptune.http;
-
-//         IpAddress ip;
-//         IpAddress.parse(ip, "1.1.1.1", 53).resultAssert;
-
-//         import juptune.dns.clients.rfc1035 : dnsQueryRfc1035, DnsRfc1035QueryConfig;
-//         import juptune.dns.types : DnsQuery;
-
-//         size_t used;
-//         dnsQueryRfc1035(ip, DnsQuery("google.com", DnsRecordType.a), new ubyte[5000], used).resultAssert;
-//     });
-//     loop.join();
-// }
-
 /++++ Decoders ++++/
 
 struct DnsDecodedHeader

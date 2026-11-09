@@ -34,6 +34,7 @@ enum DnsHeaderOpcode : ubyte
 /++
  + Specs:
  +   RFC1035 3.2.2
+ +   RFC3596 2
  +   RFC6891 6.1.1
  + ++/
 enum DnsRecordType : ushort
@@ -55,6 +56,7 @@ enum DnsRecordType : ushort
     minfo   = 14,
     mx      = 15,
     txt     = 16,
+    aaaa    = 28,
 
     // Pseudo
     opt     = 41,
