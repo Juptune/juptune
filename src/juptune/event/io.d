@@ -1031,9 +1031,10 @@ struct PosixUdpSocket
      + The `address` is converted into an IPv6 address before the send is attempted.
      +
      + Params:
-     +  target              = The target address to send the datagram to. This can be null if this socket is "connected".
      +  scatteredDataToSend = An array of bytes to concatenate and send as a single datagram. Length must be <= `MAX_SCATTERED_ARRAYS`.
      +                        (Reminder: `scope` allows array syntax to become stack allocated! `[array1, array2]` is still @nogc!)
+     +  target              = The target address to send the datagram to. This can be null if this socket is "connected".
+     +  timeout             = Timeout for the I/O operation. Defaults to no timeout.
      +
      + Throws:
      +  Asserts that `open` has been called first.
@@ -1044,8 +1045,9 @@ struct PosixUdpSocket
      +  A `Result`
      + ++/
     Result sendmsg(
-        Nullable!IpAddress     target,
         scope const void[][]   scatteredDataToSend,
+        Nullable!IpAddress     target = Nullable!IpAddress.init,
+        Duration               timeout = Duration.zero,
     )
     in(this.isOpen, "Cannot connect using a closed socket. Did you forget to call open() first?")
     in(scatteredDataToSend.length <= MAX_SCATTERED_ARRAYS, "scatteredDataToSend has more entries than MAX_SCATTERED_ARRAYS allows for") // @suppress(dscanner.style.long_line)
@@ -1082,7 +1084,7 @@ struct PosixUdpSocket
         op.msghdrPtr = &message;
 
         IoUringCompletion cqe;
-        auto result = juptuneEventLoopSubmitEvent(op, cqe);
+        auto result = juptuneEventLoopSubmitEvent(op, cqe, SubmitEventConfig(timeout: timeout));
         if(result.isError)
             return result;
 
@@ -1094,9 +1096,11 @@ struct PosixUdpSocket
      + this socket is listening to.
      +
      + Params:
-     +  senderIp               = If possible, the sender's IP will be stored inside of this IpAddress.
      +  scatteredDataToReceive = An array of bytes to fill with data from the received datagram. Length must be <= `MAX_SCATTERED_ARRAYS`.
      +                           (Reminder: `scope` allows array syntax to become stack allocated! `[array1, array2]` is still @nogc!)
+     +  bytesRead              = Set to how many bytes were received.
+     +  senderIp               = If possible, the sender's IP will be stored inside of this IpAddress.
+     +  timeout                = Timeout for the I/O operation. Defaults to no timeout.
      +
      + Throws:
      +  Asserts that `open` has been called first.
@@ -1109,8 +1113,10 @@ struct PosixUdpSocket
      +  A `Result`
      + ++/
     Result recvmsg(
-        scope out Nullable!IpAddress senderIp,
         scope void[][]               scatteredDataToReceive,
+        scope out size_t             bytesRead,
+        scope out Nullable!IpAddress senderIp,
+        Duration                     timeout = Duration.zero,
     )
     in(this.isOpen, "Cannot connect using a closed socket. Did you forget to call open() first?")
     in(scatteredDataToReceive.length <= MAX_SCATTERED_ARRAYS, "scatteredDataToReceive has more entries than MAX_SCATTERED_ARRAYS allows for") // @suppress(dscanner.style.long_line)
@@ -1144,7 +1150,7 @@ struct PosixUdpSocket
         op.msghdrPtr = &message;
 
         IoUringCompletion cqe;
-        auto result = juptuneEventLoopSubmitEvent(op, cqe);
+        auto result = juptuneEventLoopSubmitEvent(op, cqe, SubmitEventConfig(timeout: timeout));
         if(result.isError)
             return result;
 
@@ -1156,6 +1162,7 @@ struct PosixUdpSocket
         const maxDataAccepted = scatteredDataToReceive.map!(buffer => buffer.length).sum;
         if(maxDataAccepted < cqe.result)
             return Result.make(IoError.udpTruncated, "when reading a UDP datagram, some of the bytes were dropped due to the buffer(s) being too small"); // @suppress(dscanner.style.long_line)
+        bytesRead = cqe.result;
 
         return Result.noError;
     }

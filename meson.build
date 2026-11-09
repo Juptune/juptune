@@ -128,6 +128,15 @@ data_srcs = files(
     './src/juptune/data/x509/validation.d',
 )
 
+dns_srcs = files(
+    './src/juptune/dns/clients/rfc1035.d',
+    './src/juptune/dns/clients/package.d',
+
+    './src/juptune/dns/encoding.d',
+    './src/juptune/dns/package.d',
+    './src/juptune/dns/types.d',
+)
+
 event_srcs = files(
     './src/juptune/event/channel.d',
     './src/juptune/event/fiber.d',
@@ -210,8 +219,22 @@ juptune_postgres_dep = declare_dependency(
     dependencies: [juptune_core_dep, juptune_crypto_dep, juptune_data_dep, juptune_event_dep],
 )
 
+juptune_dns_dep = declare_dependency(
+    sources: dns_srcs,
+    dependencies: [juptune_core_dep, juptune_data_dep, juptune_event_dep]
+)
+
 juptune_all_dep = declare_dependency(
-    dependencies: [juptune_asn1_dep, juptune_core_dep, juptune_crypto_dep, juptune_data_dep, juptune_event_dep, juptune_http_dep, juptune_postgres_dep],
+    dependencies: [
+        juptune_asn1_dep, 
+        juptune_core_dep, 
+        juptune_crypto_dep, 
+        juptune_data_dep, 
+        juptune_dns_dep, 
+        juptune_event_dep, 
+        juptune_http_dep, 
+        juptune_postgres_dep
+    ],
 )
 
 juptune_test_dep = declare_dependency(

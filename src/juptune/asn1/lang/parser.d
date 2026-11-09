@@ -10,8 +10,8 @@ module juptune.asn1.lang.parser;
 
 import std.typecons : Nullable;
 
-import juptune.core.ds               : String;
-import juptune.core.util             : Result, resultAssert;
+import juptune.core.ds          : String;
+import juptune.core.util        : Result, resultAssert;
 import juptune.asn1.lang.common : Asn1ParserContext, Asn1Location, Asn1ErrorHandler, Asn1NullErrorHandler;
 import juptune.asn1.lang.lexer  : Asn1Lexer, Asn1Token;
 import juptune.asn1.lang.ast; // Intentionally everything

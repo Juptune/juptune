@@ -73,7 +73,7 @@ struct PostgresProtocolConfig
     size_t minBufferSpace = 1024 * 8;
 
     /++
-     + The maximum amount of buffer space (for reading an writing) that's allowed to be dynamically allocated
+     + The maximum amount of buffer space (for reading and writing) that's allowed to be dynamically allocated
      + when sending/reading messages.
      +
      + If this limit is exceeded then `PostgresProtocolError.bufferTooSmall` will be thrown by most `PostgresProtocol` functions.
