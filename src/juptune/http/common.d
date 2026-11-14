@@ -81,10 +81,10 @@ private mixin template HttpMessageNoGCCommon()
 
     /// The headers of the message.
     /// Note: The return type is unstable - I'm doubt it'll stay as an `Array` in the long term.
-    ref const(Array!HttpHeader) headers() scope return const @safe @nogc nothrow => this._headers;
+    ref Array!HttpHeader headers() scope return @safe @nogc nothrow => this._headers;
 
     /// The body of the message.
-    ref const(Array!ubyte) body() scope return const @safe @nogc nothrow => this._body;
+    ref const(Array!ubyte) body() scope return @safe @nogc nothrow => this._body;
 }
 
 /++
@@ -140,10 +140,10 @@ struct HttpHeader
     }
 
     /// The name of the header.
-    ref const(String) name() scope return const @safe @nogc nothrow => this._name;
+    ref String name() scope return @safe @nogc nothrow => this._name;
 
     /// The value of the header.
-    ref const(String) value() scope return const @safe @nogc nothrow => this._value;
+    ref String value() scope return @safe @nogc nothrow => this._value;
 }
 
 /++
@@ -199,10 +199,10 @@ struct HttpRequest
     }
 
     /// The method of the request.
-    ref const(String) method() scope return const @safe @nogc nothrow => this._method;
+    ref String method() scope return @safe @nogc nothrow => this._method;
 
     /// The path of the request.
-    ref const(String) path() scope return const @safe @nogc nothrow => this._path;
+    ref String path() scope return @safe @nogc nothrow => this._path;
 }
 
 /++
@@ -255,7 +255,7 @@ struct HttpResponse
     }
 
     /// The status of the response.
-    ref const(String) reason() scope return const @safe @nogc nothrow => this._reason;
+    ref String reason() scope return @safe @nogc nothrow => this._reason;
 
     /// The reason of the response.
     uint status() const @safe @nogc nothrow => this._status;

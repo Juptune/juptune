@@ -1,0 +1,26 @@
+name: Unittests
+
+on:
+  pull_request: 
+  push:
+
+jobs:
+  linux_test:
+    name: Build via Dub (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Dlang
+        uses: dlang-community/setup-dlang@v1
+        with:
+          compiler: ldc-latest
+
+      - name: Dub build
+        run: dub build
+
+      - name: Dub run example
+        run: 
+          cd examples/basic-dub-project
+          dub build
+          dub run || false # Since it reaches out to the internet it's not worth expecting it to always work.

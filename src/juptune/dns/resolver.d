@@ -92,11 +92,7 @@ Result dnsLookupIp(
 
                 result = dnsDecodePayload(reader,
                     onHeader: (header) {
-                        if(header.rcode != DnsResponseCode.none)
-                        {
-                            rcode = header.rcode;
-                            return Result.noError;
-                        }
+                        rcode = header.rcode;
                         return Result.noError;
                     },
                     onAnswer: (record) {

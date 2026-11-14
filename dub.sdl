@@ -1,0 +1,16 @@
+name "juptune"
+description "@nogc-first asynchronous library for Linux"
+authors "Bradley Chatha"
+copyright "Copyright © 2026, Bradley Chatha"
+license "MPL-2.0"
+
+toolchainRequirements dmd="no" gdc="no" ldc=">=1.43.0"
+systemDependencies "OpenSSL (3.5.0 or later), libsodium (1.0.20 or later)"
+targetType "library"
+buildRequirements "requireContracts"
+
+sourcePaths "src"
+importPaths "src"
+libs "sodium" "crypto"
+excludedSourceFiles "src/dummy_main.d"
+versions "Juptune_OpenSSL" "Juptune_LibSodium"

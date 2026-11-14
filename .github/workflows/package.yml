@@ -25,3 +25,9 @@ jobs:
           name: dasn1-amd64-linux
           path: ./build/tools/dasn1/dasn1
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dx509-amd64-linux
+          path: ./build/tools/dx509/dx509
+          if-no-files-found: error

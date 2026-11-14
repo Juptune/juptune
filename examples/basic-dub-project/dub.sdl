@@ -1,0 +1,5 @@
+name "juptune-dub"
+targetType "executable"
+dependency "juptune" path="../../"
+
+sourceFiles "main.d"

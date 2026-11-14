@@ -70,9 +70,9 @@ interface IHttpClient
 
     nothrow:
 
-    Result request(scope ref const HttpRequest request, scope out HttpResponse response);
+    Result request(scope ref HttpRequest request, scope out HttpResponse response);
     Result streamRequest(
-        scope ref const HttpRequest request,
+        scope ref HttpRequest request,
         scope out HttpResponse response,
         scope HttpClient.StreamRequestFuncGC bodyPutter, 
         scope HttpClient.StreamResponseFuncGC bodyReader,
@@ -102,11 +102,11 @@ final class HttpClientAdapter : IHttpClient
 
     nothrow:
 
-    Result request(scope ref const HttpRequest request, scope out HttpResponse response)
+    Result request(scope ref HttpRequest request, scope out HttpResponse response)
         => this._client.request(request, response);
 
     Result streamRequest(
-        scope ref const HttpRequest request,
+        scope ref HttpRequest request,
         scope out HttpResponse response,
         scope HttpClient.StreamRequestFuncGC bodyPutter, 
         scope HttpClient.StreamResponseFuncGC bodyReader,
@@ -441,7 +441,7 @@ struct HttpClient
      + Returns:
      +  A `Result` indicating whether the request was successful or not.
      + ++/
-    Result request(scope ref const HttpRequest request, scope out HttpResponse response) @nogc nothrow
+    Result request(scope ref HttpRequest request, scope out HttpResponse response) @nogc nothrow
     in(this._isConnected, "This client is not connected")
     {
         bool closeConnection;
@@ -504,7 +504,7 @@ struct HttpClient
      +  A `Result` indicating whether the request was successful or not.
      + ++/
     Result streamRequest(
-        scope ref const HttpRequest request,
+        scope ref HttpRequest request,
         scope out HttpResponse response,
         scope StreamRequestFunc bodyPutter, 
         scope StreamResponseFunc bodyReader,
@@ -534,7 +534,7 @@ struct HttpClient
 
     /// ditto
     Result streamRequestGC(
-        scope ref const HttpRequest request,
+        scope ref HttpRequest request,
         scope out HttpResponse response,
         scope StreamRequestFuncGC bodyPutter, 
         scope StreamResponseFuncGC bodyReader,
@@ -630,7 +630,7 @@ private struct Http1ClientImpl(SocketT)
     Result close() @nogc => Result.noError;
 
     Result request(
-        scope ref const HttpRequest request, 
+        scope ref HttpRequest request, 
         scope ref HttpResponse response,
         scope ref const String defaultHost,
         scope out bool closeConnection,
@@ -666,7 +666,7 @@ private struct Http1ClientImpl(SocketT)
     }
 
     Result streamRequest(RequestFuncT, ResponseFuncT)(
-        scope ref const HttpRequest request,
+        scope ref HttpRequest request,
         scope out HttpResponse response,
         scope RequestFuncT bodyPutter, 
         scope ResponseFuncT bodyReader,
@@ -704,7 +704,7 @@ private struct Http1ClientImpl(SocketT)
     }
 
     Result sendHead(
-        scope ref const HttpRequest request,
+        scope ref HttpRequest request,
         scope ref const String defaultHost,
         bool assumeHasBody,
     ) @nogc
@@ -756,7 +756,7 @@ private struct Http1ClientImpl(SocketT)
     }
 
     Result sendBody(
-        scope ref const HttpRequest request,
+        scope ref HttpRequest request,
         scope out bool closeConnection,
     ) @nogc
     {
@@ -781,7 +781,7 @@ private struct Http1ClientImpl(SocketT)
     }
 
     Result streamSendBody(RequestFuncT)(
-        scope ref const HttpRequest request,
+        scope ref HttpRequest request,
         scope RequestFuncT bodyPutter,
         scope out bool closeConnection,
     )
