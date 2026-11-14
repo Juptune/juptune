@@ -20,7 +20,7 @@ jobs:
         run: dub build
 
       - name: Dub run example
-        run: 
+        run: |
           cd examples/basic-dub-project
           dub build
           dub run || false # Since it reaches out to the internet it's not worth expecting it to always work.
