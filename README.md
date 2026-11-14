@@ -96,3 +96,23 @@ The main development project on OBS (Open Build Service) is [home:bchatha:juptun
 OBS' Github webhook integration is enabled, and the uses the common Juptune org-wide [workflow](https://github.com/Juptune/distribution/blob/master/open-build-service/workflows.yml). Please review the distribution repo's README for more information on how the workflow... works.
 
 Juptune is not currently part of the core distribution project.
+
+# AI
+
+Back when Copilot was just a fancy autocomplete plugin in VSCode, I gave it a try since I thought it was an interesting tool to try out.
+
+I used it mainly when working on the initial parts of the HTTP library (`v1.d` and `uri.d` in particular), however I worked under the following restrictions:
+
+* I only ever accepted its output if it essentially ended up generating the exact code I was going to write... which wasn't too often lol.
+
+* I let it write entire documentation comments, but only after hand writing comments for it to essentially "copy and paste" for me.
+
+* I let it fully generate a few test cases... thoguh unfortunately I'm not able to remember which ones.
+
+* I used it for some formatting related refactoring - the only thing I'll ever give it actual praise for being fast enough at.
+
+Even under these conditions I was able to physically feel the effects of Cognitive Surrender, and I could actively feel my ability to reason about my own codebase dwindle.
+
+I have since sworn off GenAI, and I'm actively hostile to any attempts to bring it into this project.
+
+To that end I will **outright refuse PRs** from people who I don't trust as being anti-GenAI. Should I be coaxed into accepting a Clanker-ridden PR, the code will be reverted/rewritten to whatever extent possible, and the contributor of course blocked.
