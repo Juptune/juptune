@@ -503,7 +503,7 @@ struct TlsSocket(UnderlyingSocketT)
         // Check whether we have enough buffer space left.
         const startCursor = this._recordWriter.cursor;
         const overhead = TlsCiphertext.HEADER_SIZE + crypto_aead_chacha20poly1305_ietf_abytes() + 1; // + 1 for the content type byte we have to append.
-        const bytesPerRecord = this._recordReader.bytesLeft - overhead;
+        const bytesPerRecord = this._recordWriter.bytesLeft - overhead;
 
         if(overhead >= this._recordWriter.bytesLeft)
             return Result.make(TlsError.dataExceedsBuffer, "ran out of buffer space when fragmenting data into TlsCiphertext records"); // @suppress(dscanner.style.long_line)

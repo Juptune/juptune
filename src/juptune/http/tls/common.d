@@ -479,7 +479,7 @@ struct EncryptionContext
         if(encryptedWriter.bytesLeft < crypto_aead_chacha20poly1305_ietf_abytes)
             return Result.make(TlsError.dataExceedsBuffer, "ran out of space in buffer (for additional data) when preparing to encrypt data"); // @suppress(dscanner.style.long_line)
 
-        ulong length = startCursor;
+        ulong length = 0;
         const ret = crypto_aead_chacha20poly1305_ietf_encrypt(
             cast(ubyte*)&encryptedWriter.buffer[startCursor],
             &length, // NOTE: value gets overwritten

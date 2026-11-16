@@ -251,6 +251,18 @@ struct MemoryReader
     alias readI64BE = tryIntegral!(long, Endian.bigEndian, true);
     /// ditto
     alias readU64BE = tryIntegral!(ulong, Endian.bigEndian, true);
+    /// ditto
+    alias readI16LE = tryIntegral!(short, Endian.littleEndian, true);
+    /// ditto
+    alias readU16LE = tryIntegral!(ushort, Endian.littleEndian, true);
+    /// ditto
+    alias readI32LE = tryIntegral!(int, Endian.littleEndian, true);
+    /// ditto
+    alias readU32LE = tryIntegral!(uint, Endian.littleEndian, true);
+    /// ditto
+    alias readI64LE = tryIntegral!(long, Endian.littleEndian, true);
+    /// ditto
+    alias readU64LE = tryIntegral!(ulong, Endian.littleEndian, true);
 
     /// ditto
     alias peekI8 = tryIntegral!(byte, Endian.littleEndian, false);
@@ -268,6 +280,30 @@ struct MemoryReader
     alias peekI64(Endian endian) = tryIntegral!(long, endian, false);
     /// ditto
     alias peekU64(Endian endian) = tryIntegral!(ulong, endian, false);
+    /// ditto
+    alias peekI16BE = tryIntegral!(short, Endian.bigEndian, false);
+    /// ditto
+    alias peekU16BE = tryIntegral!(ushort, Endian.bigEndian, false);
+    /// ditto
+    alias peekI32BE = tryIntegral!(int, Endian.bigEndian, false);
+    /// ditto
+    alias peekU32BE = tryIntegral!(uint, Endian.bigEndian, false);
+    /// ditto
+    alias peekI64BE = tryIntegral!(long, Endian.bigEndian, false);
+    /// ditto
+    alias peekU64BE = tryIntegral!(ulong, Endian.bigEndian, false);
+    /// ditto
+    alias peekI16LE = tryIntegral!(short, Endian.littleEndian, false);
+    /// ditto
+    alias peekU16LE = tryIntegral!(ushort, Endian.littleEndian, false);
+    /// ditto
+    alias peekI32LE = tryIntegral!(int, Endian.littleEndian, false);
+    /// ditto
+    alias peekU32LE = tryIntegral!(uint, Endian.littleEndian, false);
+    /// ditto
+    alias peekI64LE = tryIntegral!(long, Endian.littleEndian, false);
+    /// ditto
+    alias peekU64LE = tryIntegral!(ulong, Endian.littleEndian, false);
 
     /// The same thing as `tryIntegral`, but throws an `Exception` if there's not enough bytes to read,
     /// which allows the function to return the value directly and rely on try-catch for error handling.
@@ -296,6 +332,31 @@ struct MemoryReader
     /// ditto
     alias enforceReadU64(Endian endian) = enforceIntegral!(ulong, endian, true);
     /// ditto
+    alias enforceReadI16BE = enforceIntegral!(short, Endian.bigEndian, true);
+    /// ditto
+    alias enforceReadU16BE = enforceIntegral!(ushort, Endian.bigEndian, true);
+    /// ditto
+    alias enforceReadI32BE = enforceIntegral!(int, Endian.bigEndian, true);
+    /// ditto
+    alias enforceReadU32BE = enforceIntegral!(uint, Endian.bigEndian, true);
+    /// ditto
+    alias enforceReadI64BE = enforceIntegral!(long, Endian.bigEndian, true);
+    /// ditto
+    alias enforceReadU64BE = enforceIntegral!(ulong, Endian.bigEndian, true);
+    /// ditto
+    alias enforceReadI16LE = enforceIntegral!(short, Endian.littleEndian, true);
+    /// ditto
+    alias enforceReadU16LE = enforceIntegral!(ushort, Endian.littleEndian, true);
+    /// ditto
+    alias enforceReadI32LE = enforceIntegral!(int, Endian.littleEndian, true);
+    /// ditto
+    alias enforceReadU32LE = enforceIntegral!(uint, Endian.littleEndian, true);
+    /// ditto
+    alias enforceReadI64LE = enforceIntegral!(long, Endian.littleEndian, true);
+    /// ditto
+    alias enforceReadU64LE = enforceIntegral!(ulong, Endian.littleEndian, true);
+
+    /// ditto
     alias enforcePeekI8 = enforceIntegral!(byte, Endian.littleEndian, false);
     /// ditto
     alias enforcePeekU8 = enforceIntegral!(ubyte, Endian.littleEndian, false);
@@ -311,6 +372,30 @@ struct MemoryReader
     alias enforcePeekI64(Endian endian) = enforceIntegral!(long, endian, false);
     /// ditto
     alias enforcePeekU64(Endian endian) = enforceIntegral!(ulong, endian, false);
+    /// ditto
+    alias enforcePeekI16BE = enforceIntegral!(short, Endian.bigEndian, false);
+    /// ditto
+    alias enforcePeekU16BE = enforceIntegral!(ushort, Endian.bigEndian, false);
+    /// ditto
+    alias enforcePeekI32BE = enforceIntegral!(int, Endian.bigEndian, false);
+    /// ditto
+    alias enforcePeekU32BE = enforceIntegral!(uint, Endian.bigEndian, false);
+    /// ditto
+    alias enforcePeekI64BE = enforceIntegral!(long, Endian.bigEndian, false);
+    /// ditto
+    alias enforcePeekU64BE = enforceIntegral!(ulong, Endian.bigEndian, false);
+    /// ditto
+    alias enforcePeekI16LE = enforceIntegral!(short, Endian.littleEndian, false);
+    /// ditto
+    alias enforcePeekU16LE = enforceIntegral!(ushort, Endian.littleEndian, false);
+    /// ditto
+    alias enforcePeekI32LE = enforceIntegral!(int, Endian.littleEndian, false);
+    /// ditto
+    alias enforcePeekU32LE = enforceIntegral!(uint, Endian.littleEndian, false);
+    /// ditto
+    alias enforcePeekI64LE = enforceIntegral!(long, Endian.littleEndian, false);
+    /// ditto
+    alias enforcePeekU64LE = enforceIntegral!(ulong, Endian.littleEndian, false);
 
     /// Returns: The underlying buffer passed to the constructor.
     const(ubyte)[] buffer() const @safe @nogc nothrow pure => this._buffer;

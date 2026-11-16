@@ -1,3 +1,10 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ * Author: Bradley Chatha
+ */
+
 module juptune.dns.resolver;
 
 import juptune.core.ds      : Array;
@@ -12,6 +19,7 @@ enum DnsResolverError
     noNameservers,
     notFound,
     badResponse,
+    noResponse,
 }
 
 /++++ Easy to use public API ++++/
@@ -159,7 +167,7 @@ Result dnsLookupIp(
                 }
 
                 if(ipToUse == IpAddress.init)
-                    break;
+                    break; // Move onto the next nameserver
 
                 ip = ipToUse;
                 return Result.noError;
@@ -168,7 +176,7 @@ Result dnsLookupIp(
         }
     }
 
-    assert(false, "bug: Why didn't we return?");
+    return Result.make(DnsResolverError.noResponse, "when looking up IP for domain, no nameservers responded at all");
 }
 
 /++++ Nameserver store & functions for loading common DNS config ++++/
